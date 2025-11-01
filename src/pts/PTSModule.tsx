@@ -1,125 +1,132 @@
 import React, { useState } from "react";
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Dashboard from "./Dashboard";
 import AssessmentCreation from "./AssessmentCreation";
 import AssessmentScheduling from "./AssessmentScheduling";
 import StudentStats from "./StudentStats";
+import Profile from "./Profile";
+import './styles/PTSDashboard.css';
 
 const PTSModule: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  //Color Palette
-  const colors = {
-    background: "#FBFAFB",
-    primary: "#9768E1",
-    lightLavender: "#E4D5F8",
-    neutral: "#A4878D",
-    deepPlum: "#523C48",
-    pastelLavender: "#D0BFE7",
+  // Navigation items
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', path: '/pts' },
+    { id: 'create', label: 'Create Assessment', path: '/pts/create' },
+    { id: 'schedule', label: 'Assessment Scheduling', path: '/pts/schedule' },
+    { id: 'stats', label: 'Student Analytics', path: '/pts/stats' },
+    { id: 'profile', label: 'Profile Settings', path: '/pts/profile' },
+  ];
+
+  // Update active tab based on current location
+  React.useEffect(() => {
+    const currentPath = location.pathname;
+    
+    // Find exact match first
+    const exactMatch = navItems.find(item => item.path === currentPath);
+    if (exactMatch) {
+      setActiveTab(exactMatch.id);
+      return;
+    }
+    
+    // Special cases for root paths
+    if (currentPath === '/pts' || currentPath === '/pts/') {
+      setActiveTab('dashboard');
+      return;
+    }
+    
+    // Default to dashboard if no match
+    setActiveTab('dashboard');
+  }, [location]);
+
+  const handleLogout = () => {
+    navigate('/');
   };
 
-  // 🧭 Layout Styles
-  const layoutStyle: React.CSSProperties = {
-    display: "flex",
-    height: "100vh",
-    backgroundColor: colors.background,
-    fontFamily: "Inter, Arial, sans-serif",
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
   };
 
-  // Sidebar
-  const sidebarStyle: React.CSSProperties = {
-    width: "240px",
-    backgroundColor: colors.primary,
-    color: "white",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    paddingTop: "30px",
-    boxShadow: "2px 0 10px rgba(0, 0, 0, 0.1)",
-  };
-
-  const sidebarItemStyle = (tab: string): React.CSSProperties => ({
-    width: "80%",
-    padding: "12px 16px",
-    margin: "6px 0",
-    borderRadius: "8px",
-    textAlign: "center",
-    cursor: "pointer",
-    backgroundColor: activeTab === tab ? colors.lightLavender : "transparent",
-    color: activeTab === tab ? colors.deepPlum : "white",
-    fontWeight: activeTab === tab ? "bold" : "normal",
-    transition: "all 0.3s ease",
-  });
-
-  // Header
-  const headerStyle: React.CSSProperties = {
-    backgroundColor: colors.background,
-    padding: "20px 30px",
-    borderBottom: `1px solid ${colors.pastelLavender}`,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    position: "sticky",
-    top: 0,
-  };
-
-  const userInfoStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    color: colors.deepPlum,
-  };
-
-  const contentStyle: React.CSSProperties = {
-    flex: 1,
-    overflowY: "auto",
-    padding: "25px",
-    backgroundColor: colors.background,
+  const handleNavigation = (path: string, id: string) => {
+    setActiveTab(id);
+    navigate(path);
+    setSidebarOpen(false);
   };
 
   return (
-    <div style={layoutStyle}>
-      {/* Sidebar */}
-      <div style={sidebarStyle}>
-        <h2 style={{ marginBottom: "30px", fontWeight: 700 }}>PlaciPy PTS</h2>
-        <div style={sidebarItemStyle("dashboard")} onClick={() => setActiveTab("dashboard")}>
-          Dashboard
-        </div>
-        <div style={sidebarItemStyle("create")} onClick={() => setActiveTab("create")}>
-          Create Assessment
-        </div>
-        <div style={sidebarItemStyle("schedule")} onClick={() => setActiveTab("schedule")}>
-          Scheduling
-        </div>
-        <div style={sidebarItemStyle("stats")} onClick={() => setActiveTab("stats")}>
-          Student Stats
-        </div>
-      </div>
+    <div className="pts-dashboard">
+      {/* Hamburger Menu Button */}
+      <button className="pts-hamburger-menu" onClick={toggleSidebar}>
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
 
-      {/* Main Content */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      {/* Sidebar Navigation */}
+      <nav className={`pts-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="pts-sidebar-header">
+          <h2>PTS Portal</h2>
+        </div>
+        <ul className="pts-sidebar-menu">
+          {navItems.map((item) => (
+            <li key={item.id}>
+              <div
+                className={`pts-sidebar-link ${activeTab === item.id ? 'active' : ''}`}
+                onClick={() => handleNavigation(item.path, item.id)}
+              >
+                {item.label}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="pts-logout-section">
+          <button className="pts-logout-btn" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+      </nav>
+
+      {/* Main Content Area */}
+      <div className="pts-main-content">
         {/* Header */}
-        <div style={headerStyle}>
-          <h3 style={{ color: colors.deepPlum }}>Welcome back, John!</h3>
-          <div style={userInfoStyle}>
+        <header className="pts-header">
+          <h1 className="pts-header-title">
+            {navItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+          </h1>
+          <div 
+            className="pts-user-info"
+            onClick={() => handleNavigation('/pts/profile', 'profile')}
+            style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            title="Go to Profile Settings"
+          >
             <img
-              src="https://via.placeholder.com/40"
-              alt="profile"
-              style={{ borderRadius: "50%", border: `2px solid ${colors.primary}` }}
+              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face"
+              alt="Profile"
+              className="pts-user-avatar"
             />
-            <div>
-              <div style={{ fontWeight: 600 }}>John Doe</div>
-              <div style={{ fontSize: "13px", color: colors.neutral }}>3rd Year</div>
+            <div className="pts-user-details">
+              <p className="name">Dr. Sarah Wilson</p>
+              <p className="role">PTS Administrator</p>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Page Content */}
-        <div style={contentStyle}>
-          {activeTab === "dashboard" && <Dashboard />}
-          {activeTab === "create" && <AssessmentCreation />}
-          {activeTab === "schedule" && <AssessmentScheduling />}
-          {activeTab === "stats" && <StudentStats />}
-        </div>
+        {/* Content Container */}
+        <main className="pts-content">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/create" element={<AssessmentCreation />} />
+            <Route path="/schedule" element={<AssessmentScheduling />} />
+            <Route path="/stats" element={<StudentStats />} />
+            <Route path="/profile" element={<Profile />} />
+          </Routes>
+        </main>
       </div>
     </div>
   );
