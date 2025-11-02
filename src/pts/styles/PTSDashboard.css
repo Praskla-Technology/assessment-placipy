@@ -388,6 +388,8 @@
   border: 1px solid #d1d5db;
   border-radius: 8px;
   font-size: 1rem;
+  background-color: white;
+  color: #ffffffff;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -719,4 +721,34 @@ input:checked + .pts-toggle-slider:before {
   justify-content: center;
   font-size: 0.8rem;
   border-radius: 50%;
+}
+
+/* Ensure all input elements in PTS module have white background */
+.pts-dashboard input[type="text"],
+.pts-dashboard input[type="email"],
+.pts-dashboard input[type="password"],
+.pts-dashboard input[type="number"],
+.pts-dashboard input[type="tel"],
+.pts-dashboard input[type="url"],
+.pts-dashboard input[type="search"],
+.pts-dashboard input[type="date"],
+.pts-dashboard input[type="time"],
+.pts-dashboard input[type="datetime-local"],
+.pts-dashboard select,
+.pts-dashboard textarea {
+  background-color: white !important;
+  color: #333 !important;
+}
+
+/* Override any system dark mode preferences for PTS forms */
+@media (prefers-color-scheme: dark) {
+  .pts-dashboard .pts-form-input,
+  .pts-dashboard .pts-form-select,
+  .pts-dashboard .pts-form-textarea,
+  .pts-dashboard input,
+  .pts-dashboard select,
+  .pts-dashboard textarea {
+    background-color: white !important;
+    color: #333 !important;
+  }
 }
