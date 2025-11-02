@@ -1,11 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Dashboard from "./Dashboard";
 import AssessmentCreation from "./AssessmentCreation";
 import AssessmentScheduling from "./AssessmentScheduling";
 import StudentStats from "./StudentStats";
+import { useNavigate } from "react-router-dom";
+import AuthService from "../services/auth.service";
 
 const PTSModule: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [isLoading, setIsLoading] = useState(true);
 
   //Color Palette
   const colors = {
@@ -16,6 +20,37 @@ const PTSModule: React.FC = () => {
     deepPlum: "#523C48",
     pastelLavender: "#D0BFE7",
   };
+
+  // Verify user role on component mount
+  useEffect(() => {
+    const verifyRole = async () => {
+      try {
+        if (!AuthService.isAuthenticated()) {
+          navigate('/');
+          return;
+        }
+
+        const token = AuthService.getAccessToken();
+        if (!token) {
+          navigate('/');
+          return;
+        }
+
+        const userRole = await AuthService.getUserRole(token);
+        if (userRole !== 'PTS') {
+          navigate('/unauthorized');
+          return;
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Role verification failed:', error);
+        navigate('/');
+      }
+    };
+
+    verifyRole();
+  }, [navigate]);
 
   // 🧭 Layout Styles
   const layoutStyle: React.CSSProperties = {
@@ -76,6 +111,15 @@ const PTSModule: React.FC = () => {
     backgroundColor: colors.background,
   };
 
+  const handleLogout = () => {
+    AuthService.logout();
+    navigate('/');
+  };
+
+  if (isLoading) {
+    return <div className="loading">Verifying access...</div>;
+  }
+
   return (
     <div style={layoutStyle}>
       {/* Sidebar */}
@@ -92,6 +136,9 @@ const PTSModule: React.FC = () => {
         </div>
         <div style={sidebarItemStyle("stats")} onClick={() => setActiveTab("stats")}>
           Student Stats
+        </div>
+        <div style={sidebarItemStyle("logout")} onClick={handleLogout}>
+          Logout
         </div>
       </div>
 
