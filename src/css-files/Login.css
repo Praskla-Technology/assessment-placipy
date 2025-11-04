@@ -233,6 +233,62 @@
   transform: translateY(0);
 }
 
+.login-button:disabled {
+  background-color: #bdc3c7;
+  cursor: not-allowed;
+}
+
+.login-button.secondary {
+  background: linear-gradient(135deg, #e1e8ed 0%, #bdc3c7 100%);
+  color: #523C48;
+  margin-top: 0.5rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #7f8c8d;
+}
+
+.login-error {
+  color: #e74c3c;
+  text-align: center;
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fadbd8;
+  border-radius: 4px;
+  border: 1px solid #e74c3c;
+}
+
+.new-password-form {
+  width: 100%;
+}
+
+.new-password-form h3 {
+  color: #523C48;
+  text-align: center;
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.new-password-form p {
+  color: #523C48;
+  text-align: center;
+  margin: 0 0 1.5rem 0;
+  font-size: 1rem;
+}
+
+.error-message {
+  color: #e74c3c;
+  text-align: center;
+  margin: 1rem 0;
+  padding: 10px;
+  background-color: #fadbd8;
+  border-radius: 4px;
+  border: 1px solid #e74c3c;
+}
+
 /* --- Inner hover shine --- */
 .login-button::before {
   content: '';
@@ -296,6 +352,10 @@
   transform: translate(-50%, -50%) scale(1);
   opacity: 1;
   animation: ripple 420ms ease-out forwards;
+}
+
+.login-button-secondary{
+  margin-left: 55px;
 }
 
 @keyframes ripple {

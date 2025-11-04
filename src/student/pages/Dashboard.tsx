@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import DashboardHome from '../components/DashboardHome';
 import Assessments from '../components/Assessments';
@@ -7,6 +7,7 @@ import Profile from '../components/Profile';
 import Notifications from '../components/Notifications';
 import { ProfileDropdown } from '../components/Profile';
 import '../styles/Dashboard.css';
+import AuthService from '../../services/auth.service';
 
 // Student Dashboard Component
 const StudentDashboard: React.FC = () => {
@@ -14,6 +15,7 @@ const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Navigation items (removed profile)
   const navItems = [
@@ -23,32 +25,63 @@ const StudentDashboard: React.FC = () => {
     { id: 'notifications', label: 'Notifications', path: '/student/notifications' },
   ];
 
+  // Verify user role on component mount
+  useEffect(() => {
+    const verifyRole = async () => {
+      try {
+        if (!AuthService.isAuthenticated()) {
+          navigate('/');
+          return;
+        }
+
+        const token = AuthService.getAccessToken();
+        if (!token) {
+          navigate('/');
+          return;
+        }
+
+        const userRole = await AuthService.getUserRole(token);
+        if (userRole !== 'Student') {
+          navigate('/unauthorized');
+          return;
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Role verification failed:', error);
+        navigate('/');
+      }
+    };
+
+    verifyRole();
+  }, [navigate]);
+
   // Update active tab based on current location
-  React.useEffect(() => {
+  useEffect(() => {
     const currentPath = location.pathname;
-    
+
     // Handle both /student and /dashboard paths
     const normalizedPath = currentPath.replace('/dashboard', '/student');
-    
+
     // Find exact match first
     const exactMatch = navItems.find(item => item.path === normalizedPath);
     if (exactMatch) {
       setActiveTab(exactMatch.id);
       return;
     }
-    
+
     // Special cases for root paths
     if (normalizedPath === '/student' || normalizedPath === '/student/') {
       setActiveTab('dashboard');
       return;
     }
-    
+
     // Default to dashboard if no match
     setActiveTab('dashboard');
   }, [location]);
 
   const handleLogout = () => {
-    // In a real app, you would clear user session here
+    AuthService.logout();
     navigate('/');
   };
 
@@ -59,6 +92,10 @@ const StudentDashboard: React.FC = () => {
   const closeSidebar = () => {
     setSidebarOpen(false);
   };
+
+  if (isLoading) {
+    return <div className="loading">Verifying access...</div>;
+  }
 
   return (
     <div className="student-dashboard">
