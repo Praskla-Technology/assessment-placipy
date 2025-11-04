@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
+import {
   FaTachometerAlt,
   FaBuilding,
   FaUser,
@@ -19,46 +19,18 @@ import StudentManagement from '../components/StudentManagement';
 import ReportsAnalytics from '../components/ReportsAnalytics';
 import Profile from '../components/Profile';
 import '../styles/Dashboard.css';
-
-type NotificationItem = {
-  id: number;
-  title: string;
-  detail?: string;
-  timestamp: string; // e.g., '2m ago'
-  read: boolean;
-};
-
-type UserProfile = {
-  name: string;
-  role: string;
-  avatarUrl?: string;
-};
+import { useUser } from '../../contexts/UserContext';
 
 const PTODashboard: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading } = useUser();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement | null>(null);
-  const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const [notificationsCount] = useState(3);
 
-  const [user] = useState<UserProfile>({
-    name: 'John Smith',
-    role: 'Placement Training Officer',
-    avatarUrl: undefined
-  });
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 1, title: 'Assessment Deadline', detail: 'Complete November assessments by 30th.', timestamp: '2h ago', read: false },
-    { id: 2, title: 'New Assessment Format', detail: 'Review updated guidelines in Assessments.', timestamp: '1d ago', read: false },
-    { id: 3, title: 'System Update', detail: 'Dashboard performance improvements deployed.', timestamp: '3d ago', read: true }
-  ]);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  const navItems = [
+  const navItems = useMemo(() => [
     { id: 'dashboard', label: 'Dashboard', path: '/pto', icon: FaTachometerAlt },
     { id: 'departments', label: 'Departments', path: '/pto/departments', icon: FaBuilding },
     { id: 'staff', label: 'Staff Management', path: '/pto/staff', icon: FaUser },
@@ -66,7 +38,7 @@ const PTODashboard: React.FC = () => {
     { id: 'students', label: 'Students', path: '/pto/students', icon: FaUserGraduate },
     { id: 'reports', label: 'Reports & Analytics', path: '/pto/reports', icon: FaChartBar },
     { id: 'profile', label: 'Profile', path: '/pto/profile', icon: FaUserCircle },
-  ];
+  ], []);
 
   useEffect(() => {
     const currentPath = location.pathname;
@@ -87,7 +59,7 @@ const PTODashboard: React.FC = () => {
     } else {
       setActiveTab('dashboard');
     }
-  }, [location, navigate]);
+  }, [location, navItems]);
 
   const handleLogout = () => {
     navigate('/');
@@ -101,49 +73,38 @@ const PTODashboard: React.FC = () => {
     setSidebarOpen(false);
   };
 
-  const toggleNotifications = () => {
-    setProfileDropdownOpen(false);
-    setNotificationsOpen(open => {
-      const next = !open;
-      if (next) {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      }
-      return next;
-    });
-  };
+  // Profile dropdown content with loading state
+  const profileDropdownContent = useMemo(() => {
+    if (loading) {
+      return (
+        <div className="profile-header">
+          <h3>Loading...</h3>
+          <p>Placement Training Officer</p>
+        </div>
+      );
+    }
 
-  const markAllNotificationsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
-  const dismissNotification = (id: number) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  // Close dropdowns on outside click or ESC
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      const clickedProfile = profileRef.current?.contains(target);
-      const clickedNotif = notificationsRef.current?.contains(target);
-      if (!clickedProfile && !clickedNotif) {
-        setProfileDropdownOpen(false);
-        setNotificationsOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setProfileDropdownOpen(false);
-        setNotificationsOpen(false);
-      }
-    };
-    document.addEventListener('click', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('click', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, []);
+    return (
+      <>
+        <div className="profile-header">
+          <h3>{user?.name || 'John Smith'}</h3>
+          <p>{user?.role || 'Placement Training Officer'}</p>
+        </div>
+        <div className="profile-content">
+          <Link
+            to="/pto/profile"
+            className="profile-link"
+            onClick={() => setProfileDropdownOpen(false)}
+          >
+            View Profile
+          </Link>
+          <button className="logout-btn-small" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+      </>
+    );
+  }, [user, loading, handleLogout]);
 
   return (
     <div className="pto-dashboard">
@@ -237,13 +198,10 @@ const PTODashboard: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="profile-dropdown-container" ref={profileRef}>
-              <div 
-                className="user-avatar" 
-                onClick={() => {
-                  setNotificationsOpen(false);
-                  setProfileDropdownOpen(open => !open);
-                }}
+            <div className="profile-dropdown-container">
+              <div
+                className="user-avatar"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
                 {user.avatarUrl ? (
                   <img src={user.avatarUrl} alt={user.name} style={{ width: 32, height: 32, borderRadius: '50%' }} />
@@ -255,31 +213,7 @@ const PTODashboard: React.FC = () => {
               </div>
               {profileDropdownOpen && (
                 <div className="profile-dropdown">
-                  <div className="profile-header">
-                    <h3>{user.name}</h3>
-                    <p>{user.role}</p>
-                  </div>
-                  <div className="profile-content">
-                    <Link 
-                      to="/pto/profile" 
-                      className="profile-link"
-                      onClick={() => setProfileDropdownOpen(false)}
-                    >
-                      View Profile
-                    </Link>
-                    <button 
-                      className="logout-btn-small" 
-                      onClick={() => {
-                        setProfileDropdownOpen(false);
-                        navigate('/');
-                      }}
-                    >
-                      Switch Role
-                    </button>
-                    <button className="logout-btn-small" onClick={handleLogout}>
-                      Logout
-                    </button>
-                  </div>
+                  {profileDropdownContent}
                 </div>
               )}
             </div>
@@ -302,5 +236,4 @@ const PTODashboard: React.FC = () => {
   );
 };
 
-export default PTODashboard;
-
+export default memo(PTODashboard);
