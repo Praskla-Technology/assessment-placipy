@@ -107,7 +107,7 @@ const Reports: React.FC = () => {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                label={(entry: any) => `${entry.name}: ${((entry.value / statusData.reduce((sum, item) => sum + item.value, 0)) * 100).toFixed(0)}%`}
                 outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"
@@ -121,8 +121,8 @@ const Reports: React.FC = () => {
           </ResponsiveContainer>
         </div>
 
-        {/* Performance Table */}
-        <div className="admin-chart-card">
+        {/* Performance Table - Spans 2 columns */}
+        <div className="admin-chart-card admin-chart-card-wide">
           <h3 className="admin-chart-title">College Completion Rates</h3>
           <div className="admin-table-container">
             <table className="admin-table">
@@ -155,6 +155,28 @@ const Reports: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Top Performing Officers */}
+        <div className="admin-chart-card">
+          <h3 className="admin-chart-title">Top Performing Officers</h3>
+          <div className="admin-top-performers">
+            {[
+              { name: 'John Doe', college: 'KSR College', score: 95 },
+              { name: 'Jane Smith', college: 'SNS College', score: 92 },
+              { name: 'Robert Johnson', college: 'PSG College', score: 90 },
+              { name: 'Emily Davis', college: 'KCT College', score: 88 },
+            ].map((officer, index) => (
+              <div key={index} className="admin-performer-item">
+                <div className="admin-performer-rank">#{index + 1}</div>
+                <div className="admin-performer-info">
+                  <div className="admin-performer-name">{officer.name}</div>
+                  <div className="admin-performer-college">{officer.college}</div>
+                </div>
+                <div className="admin-performer-score">{officer.score}%</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

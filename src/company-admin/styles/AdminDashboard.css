@@ -238,6 +238,11 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* Wide chart card that spans 2 columns */
+.admin-chart-card-wide {
+  grid-column: span 2;
+}
+
 .admin-section-title {
   margin: 0 0 20px 0;
   font-size: 1.5rem;
@@ -443,6 +448,12 @@
   background-color: #FBFAFB;
 }
 
+/* Align Actions column to the right */
+.admin-table th:last-child,
+.admin-table td:last-child {
+  text-align: center;
+}
+
 .admin-status-badge {
   display: inline-block;
   padding: 6px 12px;
@@ -465,6 +476,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-left: 100px;
 }
 
 /* Modal Styles */
@@ -561,6 +573,7 @@
   border-radius: 8px;
   font-size: 0.95rem;
   color: #523C48;
+  background-color: white;
   transition: all 0.3s ease;
   box-sizing: border-box;
 }
@@ -836,5 +849,132 @@
     width: 100%;
     margin-right: 0;
   }
+}
+
+/* Ensure all input fields have white background (override any system dark mode) */
+.admin-dashboard input[type="text"],
+.admin-dashboard input[type="email"],
+.admin-dashboard input[type="password"],
+.admin-dashboard input[type="number"],
+.admin-dashboard input[type="tel"],
+.admin-dashboard input[type="url"],
+.admin-dashboard input[type="search"],
+.admin-dashboard select,
+.admin-dashboard textarea {
+  background-color: white !important;
+  color: #523C48 !important;
+}
+
+/* College Completion Rates table - improved column sizing */
+.admin-reports-grid .admin-chart-card .admin-table th:nth-child(1) {
+  width: 30%; /* College Name */
+  min-width: 180px;
+}
+
+.admin-reports-grid .admin-chart-card .admin-table th:nth-child(2) {
+  width: 20%; /* Students */
+  min-width: 100px;
+  text-align: center;
+}
+
+.admin-reports-grid .admin-chart-card .admin-table th:nth-child(3) {
+  width: 20%; /* Assessments */
+  min-width: 120px;
+  text-align: center;
+}
+
+.admin-reports-grid .admin-chart-card .admin-table th:nth-child(4) {
+  width: 30%; /* Completion % */
+  min-width: 150px;
+  text-align: center;
+}
+
+.admin-reports-grid .admin-chart-card .admin-table td:nth-child(1) {
+  width: 30%;
+  min-width: 180px;
+  font-weight: 600;
+}
+
+.admin-reports-grid .admin-chart-card .admin-table td:nth-child(2),
+.admin-reports-grid .admin-chart-card .admin-table td:nth-child(3),
+.admin-reports-grid .admin-chart-card .admin-table td:nth-child(4) {
+  text-align: center;
+}
+
+/* Progress bar container improvements */
+.admin-progress-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.admin-progress-bar {
+  flex: 1;
+  min-width: 80px;
+}
+
+.admin-progress-container span {
+  font-weight: 600;
+  color: #523C48;
+  min-width: 40px;
+}
+
+/* Top Performers Component */
+.admin-top-performers {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.admin-performer-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background-color: #FBFAFB;
+  border-radius: 10px;
+  border-left: 4px solid #9768E1;
+  transition: all 0.3s ease;
+}
+
+.admin-performer-item:hover {
+  background-color: #E4D5F8;
+  transform: translateX(5px);
+}
+
+.admin-performer-rank {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #9768E1;
+  min-width: 40px;
+  text-align: center;
+}
+
+.admin-performer-info {
+  flex: 1;
+}
+
+.admin-performer-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #523C48;
+  margin-bottom: 4px;
+}
+
+.admin-performer-college {
+  font-size: 0.85rem;
+  color: #A4878D;
+}
+
+.admin-performer-score {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #28a745;
+  background-color: #e8f5e9;
+  padding: 8px 12px;
+  border-radius: 20px;
+  min-width: 60px;
+  text-align: center;
 }
 
