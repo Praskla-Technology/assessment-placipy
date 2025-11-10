@@ -129,7 +129,7 @@ const PTODashboard: React.FC = () => {
       {/* ✅ Overlay */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar}></div>}
 
-      {/* ✅ MAIN - Matching PTS Structure Exactly */}
+      {/* ✅ MAIN - Matching  Structure Exactly */}
       <div className="pto-main-content">
         {/* Header - Full Width, No Padding on Parent */}
         <header className="pto-header">
