@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 // Import routes
 const userRoutes = require('./routes/user.routes');
 const assessmentRoutes = require('./routes/assessment.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
 
 // Import middleware
 const { authenticateToken, authorizeRole } = require('./auth/auth.middleware');
@@ -43,6 +44,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/assessments', assessmentRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

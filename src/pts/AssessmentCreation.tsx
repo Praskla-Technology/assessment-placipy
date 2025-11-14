@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import AssessmentService from "../services/assessment.service";
 
 interface Question {
   id: number;
@@ -114,16 +115,21 @@ const AssessmentCreation: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('=== CREATE ASSESSMENT CLICKED ===');
+    console.log('Questions count:', assessmentData.questions.length);
+    console.log('Assessment data:', assessmentData);
+    
     if (assessmentData.questions.length === 0) {
       alert("Please add at least one question");
       return;
     }
 
     setIsSubmitting(true);
+    console.log('Calling backend API...');
     
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Assessment Created:", assessmentData);
+    try {
+      const response = await AssessmentService.createAssessment(assessmentData);
+      console.log("✅ Assessment Created:", response);
       setSuccessMessage("Assessment created successfully!");
       
       // Reset form
@@ -139,11 +145,14 @@ const AssessmentCreation: React.FC = () => {
         questions: []
       });
       
+      setTimeout(() => setSuccessMessage(""), 5000);
+    } catch (error: any) {
+      console.error("❌ Failed to create assessment:", error);
+      alert(`Failed to create assessment: ${error.message}`);
+    } finally {
       setIsSubmitting(false);
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(""), 3000);
-    }, 1500);
+      console.log('=== SUBMISSION COMPLETE ===');
+    }
   };
 
   const calculateTotalMarks = () => {
