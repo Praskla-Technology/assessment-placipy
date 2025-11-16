@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 
 const Settings: React.FC = () => {
-  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [emailTemplate, setEmailTemplate] = useState(`Dear Student,
@@ -20,7 +19,6 @@ Placement Training Team`);
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setLogoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setLogoPreview(reader.result as string);
@@ -55,7 +53,6 @@ Placement Training Team`);
                   className="admin-btn-remove"
                   onClick={() => {
                     setLogoPreview('');
-                    setLogoFile(null);
                   }}
                 >
                   Remove
