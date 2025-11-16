@@ -410,6 +410,25 @@
   background-color: #ffcdd2;
 }
 
+.admin-btn-delete {
+  background-color: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: 5px;
+}
+
+.admin-btn-delete:hover {
+  background-color: #d32f2f;
+  color: white;
+  border-color: #d32f2f;
+}
+
 /* Table Styles */
 .admin-table-container {
   background: white;

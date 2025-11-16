@@ -77,6 +77,12 @@ const Colleges: React.FC = () => {
     ));
   };
 
+  const handleDelete = (id: number, collegeName: string) => {
+    if (window.confirm(`Are you sure you want to delete "${collegeName}"? This action cannot be undone.`)) {
+      setColleges(colleges.filter(col => col.id !== id));
+    }
+  };
+
   return (
     <div className="admin-page-container">
       <div className="admin-page-header">
@@ -127,6 +133,13 @@ const Colleges: React.FC = () => {
                       onClick={() => handleToggleStatus(college.id)}
                     >
                       {college.active ? 'Disable' : 'Enable'}
+                    </button>
+                    <button
+                      className="admin-btn-delete"
+                      onClick={() => handleDelete(college.id, college.name)}
+                      title="Delete College"
+                    >
+                      Delete
                     </button>
                   </div>
                 </td>
