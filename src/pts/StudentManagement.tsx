@@ -1,25 +1,28 @@
-import React, { useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Filter, X, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, Filter, X, Save } from 'lucide-react';
+import {
+  getAllStudents,
+  upsertStudent,
+  updateStudentStatus,
+  deleteStudent,
+  type Student
+} from '../services/student.service';
+import * as XLSX from 'xlsx';
 
-interface Student {
-  email: string;                 // Primary identifier - college email (@ksrce.ac.in)
-  name: string;                  // Full name
-  rollNumber: string;            // Roll number
-  department: string;            // Department
-  phone?: string;                // Phone number (optional)
-  status: 'Active' | 'Inactive'; // Student status
-  createdAt: string;             // When student was added
-  createdBy?: string;            // PTS user who added this student
-}
+// Student interface is imported from student.service
 
 const StudentManagement: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editEmail, setEditEmail] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -32,78 +35,66 @@ const StudentManagement: React.FC = () => {
 
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology'];
 
-  const handleAddStudent = () => {
+  // Keep original add-only function (will not be called when editing modal is used)
+  const handleAddStudent = async () => {
     // Validate email domain
     if (!formData.email.endsWith('@ksrce.ac.in')) {
       alert('Email must be from @ksrce.ac.in domain');
       return;
     }
 
-    // Check if email already exists
-    if (students.some(s => s.email === formData.email)) {
-      alert('A student with this email already exists');
-      return;
-    }
-
-    // Check if roll number already exists
-    if (students.some(s => s.rollNumber === formData.rollNumber)) {
-      alert('A student with this roll number already exists');
-      return;
-    }
-
-    const newStudent: Student = {
-      ...formData,
-      createdAt: new Date().toISOString(),
-      createdBy: 'Current PTS User' // Will be replaced with actual user from context
-    };
-    setStudents([...students, newStudent]);
-    resetForm();
-    setShowAddModal(false);
-    alert('Student added successfully!');
-  };
-
-  const handleEditStudent = () => {
-    if (selectedStudent) {
-      // Check if roll number changed and if new roll number already exists
-      if (formData.rollNumber !== selectedStudent.rollNumber) {
-        if (students.some(s => s.email !== selectedStudent.email && s.rollNumber === formData.rollNumber)) {
-          alert('A student with this roll number already exists');
-          return;
-        }
-      }
-
-      setStudents(students.map(s => 
-        s.email === selectedStudent.email 
-          ? { ...s, ...formData }
-          : s
-      ));
+    try {
+      setLoading(true);
+      setError(null);
+      await upsertStudent(formData);
+      await loadStudents();
       resetForm();
-      setShowEditModal(false);
-      setSelectedStudent(null);
-      alert('Student updated successfully!');
+      setShowAddModal(false);
+      alert('Student added successfully!');
+    } catch (err: any) {
+      alert('Failed to add student: ' + err.message);
+      console.error('Failed to add student:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteStudent = (email: string) => {
-    const student = students.find(s => s.email === email);
-    if (window.confirm(`Are you sure you want to delete ${student?.name}?`)) {
-      setStudents(students.filter(s => s.email !== email));
-      alert('Student deleted successfully!');
+  // Unified save handler: used for both Add and Edit flows
+  const handleSaveStudent = async () => {
+    // Validate email domain
+    if (!formData.email.endsWith('@ksrce.ac.in')) {
+      alert('Email must be from @ksrce.ac.in domain');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // upsertStudent works for both create and update
+      await upsertStudent(formData);
+
+      // Reload list
+      await loadStudents();
+
+      resetForm();
+      setShowAddModal(false);
+      setIsEditing(false);
+      setEditEmail(null);
+
+      alert(isEditing ? 'Student updated successfully!' : 'Student added successfully!');
+    } catch (err: any) {
+      alert('Failed to save student: ' + err.message);
+      console.error('Failed to save student:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const toggleStudentStatus = (email: string) => {
-    setStudents(prev =>
-      prev.map(student =>
-        student.email === email
-          ? { ...student, status: student.status === 'Active' ? 'Inactive' : 'Active' }
-          : student
-      )
-    );
-  };
-
+  // Open modal for editing (Option A: email not editable)
   const openEditModal = (student: Student) => {
-    setSelectedStudent(student);
+    setIsEditing(true);
+    setEditEmail(student.email);
     setFormData({
       email: student.email,
       name: student.name,
@@ -112,7 +103,58 @@ const StudentManagement: React.FC = () => {
       phone: student.phone || '',
       status: student.status
     });
-    setShowEditModal(true);
+    setShowAddModal(true);
+  };
+
+  const handleDeleteStudent = async (email: string) => {
+    const confirmDelete = window.confirm('Are you sure you want to delete this student?');
+    if (!confirmDelete) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      await deleteStudent(email);
+      await loadStudents();
+
+      alert('Student deleted successfully');
+    } catch (err: any) {
+      alert('Failed to delete student: ' + err.message);
+      console.error('Failed to delete student:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleStudentStatus = async (email: string) => {
+    console.log('Toggle status called for email:', email);
+    const student = students.find(s => s.email === email);
+    if (!student) {
+      console.log('Student not found for email:', email);
+      return;
+    }
+
+    console.log('Current student status:', student.status);
+    const newStatus = student.status === 'Active' ? 'Inactive' : 'Active';
+    console.log('New status will be:', newStatus);
+
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('Calling updateStudentStatus with:', { email, newStatus });
+      const result = await updateStudentStatus(email, newStatus);
+      console.log('Update result:', result);
+
+      // Update local state (better UX) and reset filter if needed
+      setStudents(prev => prev.map(s => (s.email === email ? { ...s, status: newStatus } : s)));
+      setFilterStatus('all'); // keep this to ensure visibility if user had a status filter
+    } catch (err: any) {
+      console.error('Failed to update status:', err);
+      alert('Failed to update status: ' + err.message);
+      console.error('Failed to update status:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -124,6 +166,8 @@ const StudentManagement: React.FC = () => {
       phone: '',
       status: 'Active'
     });
+    setIsEditing(false);
+    setEditEmail(null);
   };
 
   const handleFormChange = (field: string, value: string) => {
@@ -141,7 +185,7 @@ const StudentManagement: React.FC = () => {
   const handleEmailChange = (value: string) => {
     // Auto-add domain if user types just the username
     let email = value.toLowerCase();
-    
+
     // If email doesn't contain @ and user is typing, just update
     if (!email.includes('@')) {
       setFormData(prev => ({ ...prev, email }));
@@ -154,22 +198,92 @@ const StudentManagement: React.FC = () => {
     }
   };
 
+  // Load students on component mount
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getAllStudents();
+      setStudents(data);
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Failed to load students:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredStudents = students.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = filterDepartment === 'all' || student.department === filterDepartment;
     const matchesStatus = filterStatus === 'all' || student.status === filterStatus;
-    
+
     return matchesSearch && matchesDepartment && matchesStatus;
   });
 
+  // Export to Excel function
+  const exportToExcel = () => {
+    // Define the columns we want to export
+    const exportData = filteredStudents.map(student => ({
+      Name: student.name,
+      'Roll Number': student.rollNumber,
+      Email: student.email,
+      Department: student.department,
+      Phone: student.phone || '',
+      Status: student.status,
+      CreatedAt: student.createdAt || '',
+      UpdatedAt: student.updatedAt || ''
+    }));
+
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+
+    // Export to file
+    XLSX.writeFile(wb, 'students-export.xlsx');
+  };
+
   return (
     <div className="pts-fade-in">
+      {/* Error Message */}
+      {error && (
+        <div
+          style={{
+            padding: '15px',
+            marginBottom: '20px',
+            background: '#f8d7da',
+            color: '#721c24',
+            borderRadius: '8px',
+            border: '1px solid #f5c6cb'
+          }}
+        >
+          Error: {error}
+        </div>
+      )}
+
       {/* Header Actions */}
       <div className="action-buttons-section" style={{ marginBottom: '20px' }}>
-        <button className="pts-btn-primary" onClick={() => setShowAddModal(true)}>
+        <button
+          className="pts-btn-primary"
+          onClick={() => {
+            resetForm();
+            setShowAddModal(true);
+          }}
+        >
           <Plus size={18} /> Add New Student
+        </button>
+        <button className="pts-btn-secondary" onClick={exportToExcel} style={{ marginLeft: '10px' }}>
+          Export as Excel
         </button>
       </div>
 
@@ -185,33 +299,27 @@ const StudentManagement: React.FC = () => {
               className="pts-form-input"
               placeholder="Search by name, roll number, or email"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
-          
+
           <div className="pts-form-group">
             <label className="pts-form-label">
               <Filter size={16} /> Department
             </label>
-            <select
-              className="pts-form-select"
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-            >
+            <select className="pts-form-select" value={filterDepartment} onChange={e => setFilterDepartment(e.target.value)}>
               <option value="all">All Departments</option>
               {departments.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="pts-form-group">
             <label className="pts-form-label">Status</label>
-            <select
-              className="pts-form-select"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
+            <select className="pts-form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="all">All Status</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
@@ -239,18 +347,24 @@ const StudentManagement: React.FC = () => {
                 <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Department</th>
                 <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Phone</th>
                 <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Status</th>
-                <th style={{ padding: '12px', textAlign: 'center', color: '#523C48' }}>Actions</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#A4878D' }}>
+                    Loading students...
+                  </td>
+                </tr>
+              ) : filteredStudents.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#A4878D' }}>
                     No students found
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((student) => (
+                filteredStudents.map(student => (
                   <tr key={student.email} style={{ borderBottom: '1px solid #e9ecef' }}>
                     <td style={{ padding: '12px', color: '#A4878D', fontSize: '0.9rem' }}>{student.email}</td>
                     <td style={{ padding: '12px', color: '#523C48', fontWeight: '500' }}>{student.rollNumber}</td>
@@ -269,58 +383,54 @@ const StudentManagement: React.FC = () => {
                           color: student.status === 'Active' ? '#155724' : '#721c24',
                           border: 'none',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease'
+                          transition: 'all 0.2s ease',
+                          opacity: 1
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.opacity = '0.8';
+                          e.currentTarget.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.opacity = '1';
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
                         title="Click to toggle status"
                       >
                         {student.status}
                       </button>
                     </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
+
+                    <td style={{ padding: '12px', display: 'flex', gap: '8px' }}>
+                      {/* Edit Button */}
                       <button
-                        className="pts-btn-secondary"
-                        style={{ 
-                          padding: '6px 12px', 
-                          marginRight: '5px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
                         onClick={() => openEditModal(student)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '0.7';
-                          e.currentTarget.style.transform = 'scale(1.05)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = '1';
-                          e.currentTarget.style.transform = 'scale(1)';
+                        style={{
+                          padding: '6px 10px',
+                          background: '#cce5ff',
+                          color: '#004085',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer'
                         }}
                         title="Edit student"
                       >
-                        <Edit2 size={14} />
+                        Edit
                       </button>
+
+                      {/* Delete Button */}
                       <button
-                        className="pts-btn-secondary"
-                        style={{ 
-                          padding: '6px 12px', 
-                          background: '#f8d7da', 
-                          color: '#721c24',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
                         onClick={() => handleDeleteStudent(student.email)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '0.7';
-                          e.currentTarget.style.transform = 'scale(1.05)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = '1';
-                          e.currentTarget.style.transform = 'scale(1)';
+                        style={{
+                          padding: '6px 10px',
+                          background: '#f8d7da',
+                          color: '#721c24',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer'
                         }}
                         title="Delete student"
                       >
-                        <Trash2 size={14} />
+                        Delete
                       </button>
                     </td>
                   </tr>
@@ -331,33 +441,40 @@ const StudentManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Add Student Modal */}
+      {/* Add / Edit Student Modal */}
       {showAddModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '30px',
-            maxWidth: '600px',
-            width: '90%',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '30px',
+              maxWidth: '600px',
+              width: '90%',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 className="pts-form-title">Add New Student</h3>
+              <h3 className="pts-form-title">{isEditing ? 'Edit Student' : 'Add New Student'}</h3>
               <button
-                onClick={() => { setShowAddModal(false); resetForm(); }}
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetForm();
+                }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A4878D' }}
               >
                 <X size={24} />
@@ -371,14 +488,16 @@ const StudentManagement: React.FC = () => {
                   type="email"
                   className="pts-form-input"
                   value={formData.email}
-                  onChange={(e) => handleEmailChange(e.target.value)}
+                  onChange={e => handleEmailChange(e.target.value)}
                   placeholder="john.doe@ksrce.ac.in"
-                  onBlur={(e) => {
+                  onBlur={e => {
                     // Auto-complete domain on blur if not present
                     if (e.target.value && !e.target.value.includes('@')) {
                       handleEmailChange(`${e.target.value}@ksrce.ac.in`);
                     }
                   }}
+                  disabled={Boolean(isEditing)} // Option A: email not editable when editing
+                  style={isEditing ? { backgroundColor: '#f5f5f5' } : {}}
                 />
                 <small style={{ color: '#6c757d', fontSize: '0.85rem' }}>Must end with @ksrce.ac.in</small>
               </div>
@@ -389,7 +508,7 @@ const StudentManagement: React.FC = () => {
                   type="text"
                   className="pts-form-input"
                   value={formData.rollNumber}
-                  onChange={(e) => handleFormChange('rollNumber', e.target.value)}
+                  onChange={e => handleFormChange('rollNumber', e.target.value)}
                   placeholder="CS2024001"
                 />
               </div>
@@ -400,20 +519,18 @@ const StudentManagement: React.FC = () => {
                   type="text"
                   className="pts-form-input"
                   value={formData.name}
-                  onChange={(e) => handleFormChange('name', e.target.value)}
+                  onChange={e => handleFormChange('name', e.target.value)}
                   placeholder="John Doe"
                 />
               </div>
 
               <div className="pts-form-group">
                 <label className="pts-form-label">Department *</label>
-                <select
-                  className="pts-form-select"
-                  value={formData.department}
-                  onChange={(e) => handleFormChange('department', e.target.value)}
-                >
+                <select className="pts-form-select" value={formData.department} onChange={e => handleFormChange('department', e.target.value)}>
                   {departments.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -424,7 +541,7 @@ const StudentManagement: React.FC = () => {
                   type="tel"
                   className="pts-form-input"
                   value={formData.phone}
-                  onChange={(e) => handlePhoneChange(e.target.value)}
+                  onChange={e => handlePhoneChange(e.target.value)}
                   placeholder="+91 1234567890"
                   maxLength={15}
                 />
@@ -433,11 +550,7 @@ const StudentManagement: React.FC = () => {
 
               <div className="pts-form-group">
                 <label className="pts-form-label">Status</label>
-                <select
-                  className="pts-form-select"
-                  value={formData.status}
-                  onChange={(e) => handleFormChange('status', e.target.value as 'Active' | 'Inactive')}
-                >
+                <select className="pts-form-select" value={formData.status} onChange={e => handleFormChange('status', e.target.value as 'Active' | 'Inactive')}>
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
@@ -447,140 +560,19 @@ const StudentManagement: React.FC = () => {
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
               <button
                 className="pts-btn-secondary"
-                onClick={() => { setShowAddModal(false); resetForm(); }}
+                onClick={() => {
+                  setShowAddModal(false);
+                  resetForm();
+                }}
               >
                 Cancel
               </button>
               <button
                 className="pts-btn-primary"
-                onClick={handleAddStudent}
-                disabled={!formData.email || !formData.name || !formData.rollNumber}
+                onClick={handleSaveStudent}
+                disabled={!formData.email || !formData.name || !formData.rollNumber || loading}
               >
-                <Save size={16} /> Add Student
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Student Modal */}
-      {showEditModal && selectedStudent && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '30px',
-            maxWidth: '600px',
-            width: '90%',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 className="pts-form-title">Edit Student</h3>
-              <button
-                onClick={() => { setShowEditModal(false); setSelectedStudent(null); resetForm(); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A4878D' }}
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="pts-form-grid">
-              <div className="pts-form-group">
-                <label className="pts-form-label">Email (College ID) *</label>
-                <input
-                  type="email"
-                  className="pts-form-input"
-                  value={formData.email}
-                  disabled
-                  style={{ background: '#f8f9fa', cursor: 'not-allowed', color: '#6c757d' }}
-                />
-                <small style={{ color: '#6c757d', fontSize: '0.85rem' }}>Email cannot be changed</small>
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Roll Number *</label>
-                <input
-                  type="text"
-                  className="pts-form-input"
-                  value={formData.rollNumber}
-                  onChange={(e) => handleFormChange('rollNumber', e.target.value)}
-                />
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Full Name *</label>
-                <input
-                  type="text"
-                  className="pts-form-input"
-                  value={formData.name}
-                  onChange={(e) => handleFormChange('name', e.target.value)}
-                />
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Department *</label>
-                <select
-                  className="pts-form-select"
-                  value={formData.department}
-                  onChange={(e) => handleFormChange('department', e.target.value)}
-                >
-                  {departments.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Phone</label>
-                <input
-                  type="tel"
-                  className="pts-form-input"
-                  value={formData.phone}
-                  onChange={(e) => handlePhoneChange(e.target.value)}
-                  placeholder="+91 1234567890"
-                  maxLength={15}
-                />
-                <small style={{ color: '#6c757d', fontSize: '0.85rem' }}>Numbers, +, -, spaces, () only</small>
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Status</label>
-                <select
-                  className="pts-form-select"
-                  value={formData.status}
-                  onChange={(e) => handleFormChange('status', e.target.value as 'Active' | 'Inactive')}
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
-              <button
-                className="pts-btn-secondary"
-                onClick={() => { setShowEditModal(false); setSelectedStudent(null); resetForm(); }}
-              >
-                Cancel
-              </button>
-              <button
-                className="pts-btn-primary"
-                onClick={handleEditStudent}
-                disabled={!formData.email || !formData.name || !formData.rollNumber}
-              >
-                <Save size={16} /> Save Changes
+                <Save size={16} /> {loading ? 'Saving...' : isEditing ? 'Update Student' : 'Add Student'}
               </button>
             </div>
           </div>
