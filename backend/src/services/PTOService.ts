@@ -152,7 +152,11 @@ class PTOService {
   async createStaff(email, data) {
     const pk = this.clientPkFromEmail(email);
     const now = new Date().toISOString();
-    const id = `PTS#${uuidv4().substring(0,8)}`;
+    const clientDomain = (email || '').split('@')[1] || '';
+    const provided = String(data.email || '').trim();
+    const localPart = provided.includes('@') ? provided.split('@')[0] : provided;
+    const finalEmail = `${localPart}@${clientDomain}`.toLowerCase();
+    const id = `PTS#${finalEmail}`;
     const fullName = data.name || [data.firstName, data.lastName].filter(Boolean).join(' ').trim();
     const item = {
       PK: pk,
@@ -160,13 +164,15 @@ class PTOService {
       name: fullName,
       firstName: data.firstName || (fullName ? fullName.split(' ')[0] : ''),
       lastName: data.lastName || (fullName ? fullName.split(' ').slice(1).join(' ') : ''),
-      email: data.email,
+      email: finalEmail,
       phone: data.phone || '',
-      designation: data.designation || '',
+      designation: data.designation || 'PTS',
+      role: 'Placement Training Staff',
+      status: 'ACTIVE',
+      joiningDate: data.joiningDate || '',
       department: data.department || '',
       permissions: data.permissions || [],
-      defaultPassword: (String(data.email).toLowerCase().endsWith('@pts.in') ? 'Staff@123' : undefined),
-      createdAt: now,
+      createdAssessments: [],
       updatedAt: now
     };
     await this.dynamoService.putItem(item);

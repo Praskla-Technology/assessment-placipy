@@ -294,7 +294,7 @@ const StaffManagement: React.FC = () => {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@PTS.in"
+                placeholder="user@ksrce.ac.in"
               />
             </div>
             <div className="form-group">
