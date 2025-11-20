@@ -144,7 +144,6 @@ async function loginUser(username, password, newPassword = null, session = null)
 
             return {
                 accessToken: result.AuthenticationResult?.AccessToken,
-                idToken: result.AuthenticationResult?.IdToken,
                 refreshToken: result.AuthenticationResult?.RefreshToken,
                 expiresIn: result.AuthenticationResult?.ExpiresIn,
                 tokenType: result.AuthenticationResult?.TokenType,
@@ -173,7 +172,6 @@ async function loginUser(username, password, newPassword = null, session = null)
 
             return {
                 accessToken: result.AuthenticationResult?.AccessToken,
-                idToken: result.AuthenticationResult?.IdToken,
                 refreshToken: result.AuthenticationResult?.RefreshToken,
                 expiresIn: result.AuthenticationResult?.ExpiresIn,
                 tokenType: result.AuthenticationResult?.TokenType,
