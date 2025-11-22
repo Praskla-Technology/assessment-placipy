@@ -15,55 +15,99 @@ router.post('/reset-password', userController.resetPassword);
 // Protected routes
 router.get('/profile', authMiddleware.authenticateToken, userController.getProfile);
 
+// Ensure DynamoDB service and Cognito helper are available for profile updates
+const dynamoDBService = require('../services/DynamoDBService');
+const { getUserAttributes } = require('../auth/cognito');
+
 // Profile Management Endpoints
 router.put('/profile', authMiddleware.authenticateToken, async (req, res) => {
     try {
-        const userId = req.user.userId;
-        const {
-            firstName,
-            lastName,
-            phone,
-            designation,
-            department,
-            bio,
-            address,
-            city,
-            state,
-            zipCode,
-            country
-        } = req.body;
+        // Derive email similarly to auth.controller.getProfile
+        let email = null;
+        let userId = null;
 
-        // Update user profile in DynamoDB
-        const updatedProfile = {
-            userId,
-            firstName,
-            lastName,
-            phone,
-            designation,
-            department,
-            bio,
-            address,
-            city,
-            state,
-            zipCode,
-            country,
-            updatedAt: new Date().toISOString()
-        };
+        if (req.user && req.user.email) {
+            email = req.user.email;
+        } else if (req.user && req.user['cognito:username'] && req.user['cognito:username'].includes('@')) {
+            email = req.user['cognito:username'];
+        } else if (req.user && req.user.username && req.user.username.includes('@')) {
+            email = req.user.username;
+        } else if (req.user && req.user.sub && req.user.sub.includes('@')) {
+            email = req.user.sub;
+        } else {
+            userId = req.user && (req.user['cognito:username'] || req.user.username || req.user.sub);
+        }
 
-        // In real implementation, update DynamoDB here
-        // await dynamoDBService.updateUser(userId, updatedProfile);
+        // If we only have a userId, try to resolve email via Cognito
+        if (!email && userId) {
+            try {
+                const userInfo = await getUserAttributes(userId);
+                if (userInfo && userInfo.attributes && userInfo.attributes.email) {
+                    email = userInfo.attributes.email;
+                }
+            } catch (cognitoErr) {
+                // continue - we'll return a helpful error below
+            }
+        }
 
-        res.json({
-            success: true,
-            message: 'Profile updated successfully',
-            profile: updatedProfile
-        });
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email not found in token or Cognito. Cannot update profile.'
+            });
+        }
+
+        // Build an updates object only with allowed/profile fields coming from client
+        const allowedFields = [
+            'name', 'firstName', 'lastName', 'phone', 'designation', 'department',
+            'regNo', 'registrationNumber', 'collegeName', 'college', 'year', 'yearOfStudy', 'section', 'enrollmentDate'
+        ];
+
+        const updates = {};
+        for (const key of Object.keys(req.body || {})) {
+            if (allowedFields.includes(key)) {
+                updates[key] = req.body[key];
+            }
+        }
+
+        // If client sent firstName/lastName, consolidate into name
+        if (!updates.name && (req.body.firstName || req.body.lastName)) {
+            updates.name = `${req.body.firstName || ''} ${req.body.lastName || ''}`.trim();
+        }
+
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({ success: false, message: 'No updatable profile fields provided' });
+        }
+
+        // Use DynamoDB service to update existing item (will throw if not found)
+        try {
+            // Dev-only debug: show which email and which fields we will update
+            if (process.env.NODE_ENV !== 'production') {
+                try {
+                    const safePreview = Object.keys(updates).reduce((acc, k) => {
+                        // redact long values
+                        const v = updates[k];
+                        acc[k] = (typeof v === 'string' && v.length > 100) ? v.slice(0, 100) + '... (truncated)' : v;
+                        return acc;
+                    }, {});
+                    console.debug('[dev] profile update target:', { email, updates: safePreview });
+                } catch (dbg) {
+                    console.debug('[dev] profile update preview failed', dbg.message || dbg);
+                }
+            }
+
+            const updated = await dynamoDBService.updateUserByEmail(email, updates);
+            return res.json({ success: true, message: 'Profile updated successfully', profile: updated });
+        } catch (dbErr) {
+            console.error('DynamoDB update error:', dbErr && dbErr.message ? dbErr.message : dbErr);
+            if (dbErr && (dbErr.message || '').toLowerCase().includes('user not found')) {
+                return res.status(404).json({ success: false, message: 'User not found in database. Cannot update.' });
+            }
+            return res.status(500).json({ success: false, message: 'Failed to persist profile update', error: dbErr && dbErr.message ? dbErr.message : String(dbErr) });
+        }
     } catch (error) {
         console.error('Profile update error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update profile'
-        });
+        res.status(500).json({ success: false, message: 'Failed to update profile' });
     }
 });
 
@@ -254,3 +298,21 @@ router.put('/profile/picture', authMiddleware.authenticateToken, async (req, res
 });
 
 module.exports = router;
+
+// Development-only debug routes
+if (process.env.NODE_ENV !== 'production') {
+    router.get('/debug/user-by-email', authMiddleware.authenticateToken, async (req, res) => {
+        try {
+            const email = req.query.email || req.user && (req.user.email || req.user.username || req.user['cognito:username']);
+            if (!email) {
+                return res.status(400).json({ success: false, message: 'email query param or token-derived email required' });
+            }
+
+            const item = await dynamoDBService.getUserDataByEmail(String(email));
+            return res.json({ success: true, item });
+        } catch (err) {
+            console.error('Debug route error:', err);
+            res.status(500).json({ success: false, message: 'Debug lookup failed', error: err.message });
+        }
+    });
+}
