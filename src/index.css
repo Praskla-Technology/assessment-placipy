@@ -127,3 +127,23 @@ body {
 .dashboard-content p {
   color: #6c757d;
 }
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  background-color: #ffffff !important;
+  border: 2px solid #000000 !important;
+  border-radius: 4px;
+  accent-color: #9768E1;
+}
+
+select {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+  border-radius: 6px !important;
+}
+
+option {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}

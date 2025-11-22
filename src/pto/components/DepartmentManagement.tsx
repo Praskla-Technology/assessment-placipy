@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { FaBuilding, FaCog, FaTrash, FaUserPlus, FaChartBar } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FaBuilding, FaTrash, FaUserPlus, FaChartBar } from 'react-icons/fa';
+import PTOService, { type Department as Dept, type StaffMember as StaffDto } from '../../services/pto.service';
 
 interface Department {
   id: number;
@@ -12,31 +13,74 @@ interface Department {
 }
 
 const DepartmentManagement: React.FC = () => {
-  const [departments, setDepartments] = useState<Department[]>([
-    { id: 1, name: 'Computer Science', code: 'CS', students: 450, staff: 3, assessments: 5, staffMembers: ['John Doe', 'Jane Smith', 'Bob Johnson'] },
-    { id: 2, name: 'Electronics', code: 'ECE', students: 380, staff: 2, assessments: 3, staffMembers: ['Alice Brown', 'Charlie Wilson'] },
-    { id: 3, name: 'Mechanical', code: 'ME', students: 420, staff: 2, assessments: 4, staffMembers: ['David Lee', 'Emily Davis'] },
-    { id: 4, name: 'Civil', code: 'CE', students: 310, staff: 2, assessments: 2, staffMembers: ['Frank Miller', 'Grace White'] },
-  ]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await PTOService.getDepartments();
+        const mapped: Department[] = data.map((d: Dept, idx) => ({
+          id: idx + 1,
+          name: d.name,
+          code: d.code,
+          students: d.students,
+          staff: d.staff,
+          assessments: d.assessments,
+          staffMembers: d.staffMembers || []
+        }));
+        setDepartments(mapped);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load departments');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState<Department | null>(null);
   const [formData, setFormData] = useState({ name: '', code: '' });
+  const [staffList, setStaffList] = useState<Array<{ id: string; name: string; department?: string }>>([]);
+  const [catalog, setCatalog] = useState<string[]>([]);
 
-  const handleAddDepartment = () => {
+  useEffect(() => {
+    const loadStaff = async () => {
+      try {
+        const staff = await PTOService.getStaff();
+        setStaffList(staff.map((s: StaffDto) => ({ id: s.id, name: s.name, department: s.department })));
+      } catch {}
+    };
+    const loadCatalog = async () => {
+      try {
+        const codes = await PTOService.getDepartmentCatalog();
+        setCatalog(codes);
+      } catch {}
+    };
+    loadStaff();
+    loadCatalog();
+  }, []);
+
+  const handleAddDepartment = async () => {
     if (formData.name && formData.code) {
-      const newDept: Department = {
-        id: departments.length + 1,
-        name: formData.name,
-        code: formData.code,
-        students: 0,
-        staff: 0,
-        assessments: 0,
-        staffMembers: []
-      };
-      setDepartments([...departments, newDept]);
+      await PTOService.createDepartment({ name: formData.name, code: formData.code });
+      const refreshed = await PTOService.getDepartments();
+      const mapped: Department[] = refreshed.map((d: Dept, idx) => ({
+        id: idx + 1,
+        name: d.name,
+        code: d.code,
+        students: d.students,
+        staff: d.staff,
+        assessments: d.assessments,
+        staffMembers: d.staffMembers || []
+      }));
+      setDepartments(mapped);
       setFormData({ name: '', code: '' });
       setIsAddModalOpen(false);
     }
@@ -48,22 +92,41 @@ const DepartmentManagement: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateDepartment = () => {
+  const handleUpdateDepartment = async () => {
     if (selectedDept && formData.name && formData.code) {
-      setDepartments(departments.map(dept =>
-        dept.id === selectedDept.id
-          ? { ...dept, name: formData.name, code: formData.code }
-          : dept
-      ));
+      await PTOService.updateDepartment(selectedDept.code, { name: formData.name, code: formData.code });
+      const refreshed = await PTOService.getDepartments();
+      const mapped: Department[] = refreshed.map((d: Dept, idx) => ({
+        id: idx + 1,
+        name: d.name,
+        code: d.code,
+        students: d.students,
+        staff: d.staff,
+        assessments: d.assessments,
+        staffMembers: d.staffMembers || []
+      }));
+      setDepartments(mapped);
       setIsEditModalOpen(false);
       setSelectedDept(null);
       setFormData({ name: '', code: '' });
     }
   };
 
-  const handleDeleteDepartment = (id: number) => {
+  const handleDeleteDepartment = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this department?')) {
-      setDepartments(departments.filter(dept => dept.id !== id));
+      const dept = departments.find(d => d.id === id);
+      if (dept) await PTOService.deleteDepartment(dept.code);
+      const refreshed = await PTOService.getDepartments();
+      const mapped: Department[] = refreshed.map((d: Dept, idx) => ({
+        id: idx + 1,
+        name: d.name,
+        code: d.code,
+        students: d.students,
+        staff: d.staff,
+        assessments: d.assessments,
+        staffMembers: d.staffMembers || []
+      }));
+      setDepartments(mapped);
     }
   };
 
@@ -72,12 +135,14 @@ const DepartmentManagement: React.FC = () => {
     setIsAssignModalOpen(true);
   };
 
-  const allStaff = ['John Doe', 'Jane Smith', 'Bob Johnson', 'Alice Brown', 'Charlie Wilson', 'David Lee', 'Emily Davis', 'Frank Miller', 'Grace White', 'Sarah Taylor', 'Michael Chen'];
+  // no-op resolveName removed; names used directly from staffList
 
   return (
     <div className="pto-component-page">
       {/* Statistics Cards */}
       <div className="stats-grid">
+        {error && (<div className="admin-error"><p>{error}</p></div>)}
+        {loading && (<div className="admin-loading"><div className="spinner"></div><p>Loading departments...</p></div>)}
         <div className="stat-card">
           <FaBuilding size={24} color="#9768E1" />
           <div className="stat-content">
@@ -171,6 +236,23 @@ const DepartmentManagement: React.FC = () => {
         <div className="modal-overlay" onClick={() => setIsAddModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Add New Department</h3>
+            {catalog.length > 0 && (
+              <div className="form-group">
+                <label>Select from Catalog</label>
+                <select
+                  value={formData.code}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setFormData(prev => ({ ...prev, code, name: prev.name || code }));
+                  }}
+                >
+                  <option value="">Choose department code</option>
+                  {catalog.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label>Department Name</label>
               <input
@@ -237,24 +319,21 @@ const DepartmentManagement: React.FC = () => {
               <div className="available-staff">
                 <h4>Available Staff</h4>
                 <div className="staff-list">
-                  {allStaff
-                    .filter(staff => !selectedDept.staffMembers.includes(staff))
-                    .map((staff, idx) => (
-                      <div key={idx} className="staff-item">
-                        <span>{staff}</span>
+                  {staffList
+                    .filter(s => (s.department || '') !== selectedDept.code)
+                    .map((s) => (
+                      <div key={s.id} className="staff-item">
+                        <span>{s.name}</span>
                         <button 
                           className="icon-btn assign-btn"
-                          onClick={() => {
-                            const updatedDept = {
-                              ...selectedDept,
-                              staffMembers: [...selectedDept.staffMembers, staff],
-                              staff: selectedDept.staff + 1
-                            };
-                            setDepartments(departments.map(dept => 
-                              dept.id === selectedDept.id ? updatedDept : dept
-                            ));
-                            setSelectedDept(updatedDept);
-                          }}
+                          onClick={async () => {
+                          await PTOService.assignStaffToDepartment(selectedDept.code, s.id);
+                          const refreshedStaff = await PTOService.getStaff();
+                          setStaffList(refreshedStaff.map((st: StaffDto) => ({ id: st.id, name: st.name, department: st.department })));
+                          const refreshedDepts = await PTOService.getDepartments();
+                          const mappedDepts: Department[] = refreshedDepts.map((d: Dept, idx) => ({ id: idx + 1, name: d.name, code: d.code, students: d.students, staff: d.staff, assessments: d.assessments, staffMembers: d.staffMembers || [] }));
+                          setDepartments(mappedDepts);
+                        }}
                         >
                           <FaUserPlus />
                         </button>
@@ -265,21 +344,18 @@ const DepartmentManagement: React.FC = () => {
               <div className="assigned-staff">
                 <h4>Assigned Staff</h4>
                 <div className="staff-list">
-                  {selectedDept.staffMembers.map((staff, idx) => (
-                    <div key={idx} className="staff-item">
-                      <span>{staff}</span>
+                  {staffList.filter(s => (s.department || '') === selectedDept.code).map((s) => (
+                    <div key={s.id} className="staff-item">
+                      <span>{s.name}</span>
                       <button 
                         className="icon-btn delete-btn"
-                        onClick={() => {
-                          const updatedDept = {
-                            ...selectedDept,
-                            staffMembers: selectedDept.staffMembers.filter(s => s !== staff),
-                            staff: selectedDept.staff - 1
-                          };
-                          setDepartments(departments.map(dept => 
-                            dept.id === selectedDept.id ? updatedDept : dept
-                          ));
-                          setSelectedDept(updatedDept);
+                        onClick={async () => {
+                          await PTOService.unassignStaffFromDepartment(selectedDept.code, s.id);
+                          const refreshedStaff = await PTOService.getStaff();
+                          setStaffList(refreshedStaff.map((st: StaffDto) => ({ id: st.id, name: st.name, department: st.department })));
+                          const refreshedDepts = await PTOService.getDepartments();
+                          const mappedDepts: Department[] = refreshedDepts.map((d: Dept, idx) => ({ id: idx + 1, name: d.name, code: d.code, students: d.students, staff: d.staff, assessments: d.assessments, staffMembers: d.staffMembers || [] }));
+                          setDepartments(mappedDepts);
                         }}
                       >
                         <FaTrash />

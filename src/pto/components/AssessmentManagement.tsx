@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { FaClipboardList, FaPlus, FaCog, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaUpload, FaFileExcel } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FaClipboardList, FaPlus, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaUpload, FaFileExcel } from 'react-icons/fa';
+import PTOService, { type Assessment as AssessDto } from '../../services/pto.service';
 
 interface Assessment {
-  id: number;
+  id: string;
   name: string;
   department: string;
   type: 'department-wise' | 'college-wide';
@@ -15,44 +16,37 @@ interface Assessment {
 }
 
 const AssessmentManagement: React.FC = () => {
-  const [assessments, setAssessments] = useState<Assessment[]>([
-    {
-      id: 1,
-      name: 'Programming Aptitude Test',
-      department: 'Computer Science',
-      type: 'department-wise',
-      duration: 120,
-      date: '2025-11-15',
-      timeWindow: { start: '09:00', end: '18:00' },
-      attempts: 2,
-      questions: 30,
-      status: 'active'
-    },
-    {
-      id: 2,
-      name: 'Technical Assessment - ECE',
-      department: 'Electronics',
-      type: 'department-wise',
-      duration: 90,
-      date: '2025-11-18',
-      timeWindow: { start: '10:00', end: '16:00' },
-      attempts: 1,
-      questions: 25,
-      status: 'active'
-    },
-    {
-      id: 3,
-      name: 'Mock Interview Preparation',
-      department: 'All Departments',
-      type: 'college-wide',
-      duration: 60,
-      date: '2025-11-20',
-      timeWindow: { start: '09:00', end: '17:00' },
-      attempts: 3,
-      questions: 20,
-      status: 'inactive'
-    },
-  ]);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await PTOService.getAssessments();
+        const mapped: Assessment[] = data.map((a: AssessDto) => ({
+          id: (a as any).id,
+          name: a.name,
+          department: a.department,
+          type: a.type,
+          duration: a.duration,
+          date: a.date,
+          timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
+          attempts: a.attempts,
+          questions: a.questions,
+          status: a.status === 'active' ? 'active' : 'inactive'
+        }));
+        setAssessments(mapped);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load assessments');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -71,14 +65,31 @@ const AssessmentManagement: React.FC = () => {
 
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'All Departments'];
 
-  const handleAddAssessment = () => {
+  const handleAddAssessment = async () => {
     if (formData.name && formData.department) {
+      const created = await PTOService.createAssessment({
+        name: formData.name,
+        department: formData.department,
+        type: formData.type,
+        duration: formData.duration,
+        date: formData.date,
+        timeWindow: formData.timeWindow,
+        attempts: formData.attempts,
+        questions: []
+      });
       const newAssessment: Assessment = {
-        id: assessments.length + 1,
-        ...formData,
+        id: (created as any).id,
+        name: formData.name,
+        department: formData.department,
+        type: formData.type,
+        duration: formData.duration,
+        date: formData.date,
+        timeWindow: formData.timeWindow,
+        attempts: formData.attempts,
+        questions: 0,
         status: 'inactive'
       };
-      setAssessments([...assessments, newAssessment]);
+      setAssessments(prev => [...prev, newAssessment]);
       resetForm();
       setIsAddModalOpen(false);
     }
@@ -99,8 +110,17 @@ const AssessmentManagement: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateAssessment = () => {
+  const handleUpdateAssessment = async () => {
     if (selectedAssessment) {
+      await PTOService.updateAssessment(selectedAssessment.id, {
+        name: formData.name,
+        department: formData.department,
+        type: formData.type,
+        duration: formData.duration,
+        date: formData.date,
+        timeWindow: formData.timeWindow,
+        attempts: formData.attempts
+      });
       setAssessments(assessments.map(assessment =>
         assessment.id === selectedAssessment.id
           ? { ...selectedAssessment, ...formData }
@@ -112,17 +132,20 @@ const AssessmentManagement: React.FC = () => {
     }
   };
 
-  const handleDeleteAssessment = (id: number) => {
+  const handleDeleteAssessment = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this assessment?')) {
+      await PTOService.deleteAssessment(id);
       setAssessments(assessments.filter(assessment => assessment.id !== id));
     }
   };
 
-  const toggleAssessmentStatus = (id: number) => {
+  const toggleAssessmentStatus = async (id: string) => {
+    const current = assessments.find(a => a.id === id);
+    if (!current) return;
+    const nextStatus = current.status === 'active' ? 'inactive' : 'active';
+    await PTOService.updateAssessment(id, { status: nextStatus });
     setAssessments(assessments.map(assessment =>
-      assessment.id === id
-        ? { ...assessment, status: assessment.status === 'active' ? 'inactive' : 'active' }
-        : assessment
+      assessment.id === id ? { ...assessment, status: nextStatus } : assessment
     ));
   };
 
@@ -148,6 +171,8 @@ const AssessmentManagement: React.FC = () => {
     <div className="pto-component-page">
       {/* Statistics */}
       <div className="stats-grid">
+        {error && (<div className="admin-error"><p>{error}</p></div>)}
+        {loading && (<div className="admin-loading"><div className="spinner"></div><p>Loading assessments...</p></div>)}
         <div className="stat-card">
           <FaClipboardList size={24} color="#9768E1" />
           <div className="stat-content">
@@ -507,4 +532,3 @@ const AssessmentManagement: React.FC = () => {
 };
 
 export default AssessmentManagement;
-

@@ -1,83 +1,56 @@
-import React, { useState } from 'react';
-
-interface Officer {
-  id: string;
-  name: string;
-  email: string;
-  collegeId: string;
-  collegeName?: string;
-  role: 'PTO' | 'ADMIN' | 'COORDINATOR';
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-  permissions?: string[];
-  phone?: string;
-  department?: string;
-  lastLogin?: string;
-  createdAt?: string;
-}
-
-interface College {
-  id: string;
-  name: string;
-}
+import React, { useState, useEffect } from 'react';
+import AdminService, { type Officer, type College } from '../../services/admin.service';
 
 const Officers: React.FC = () => {
-  // Mock data with new structure
-  const [officers, setOfficers] = useState<Officer[]>([
-    { 
-      id: '1', 
-      name: 'John Doe', 
-      email: 'john.doe@ksrit.edu.in', 
-      collegeId: '1',
-      collegeName: 'KSR College',
-      role: 'PTO',
-      status: 'ACTIVE',
-      permissions: ['MANAGE_STUDENTS', 'CREATE_ASSESSMENTS'],
-      phone: '+91 98765 43210',
-      department: 'Computer Science'
-    },
-    { 
-      id: '2', 
-      name: 'Jane Smith', 
-      email: 'jane.smith@snsct.org', 
-      collegeId: '2',
-      collegeName: 'SNS College',
-      role: 'ADMIN',
-      status: 'ACTIVE',
-      permissions: ['MANAGE_STUDENTS', 'CREATE_ASSESSMENTS', 'MANAGE_OFFICERS'],
-      phone: '+91 98765 43211',
-      department: 'Information Technology'
-    },
-    { 
-      id: '3', 
-      name: 'Robert Johnson', 
-      email: 'robert.j@psgtech.ac.in', 
-      collegeId: '3',
-      collegeName: 'PSG College',
-      role: 'COORDINATOR',
-      status: 'INACTIVE',
-      permissions: ['CREATE_ASSESSMENTS'],
-      phone: '+91 98765 43212',
-      department: 'Mechanical Engineering'
-    },
-  ]);
-
-  // Mock colleges for dropdown
-  const [colleges] = useState<College[]>([
-    { id: '1', name: 'KSR College' },
-    { id: '2', name: 'SNS College' },
-    { id: '3', name: 'PSG College' },
-  ]);
+  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOfficer, setEditingOfficer] = useState<Officer | null>(null);
+  const [authInfo, setAuthInfo] = useState<{
+    email: string;
+    defaultPassword: string;
+    instructions: string;
+    note: string;
+    cognitoStatus?: boolean;
+  } | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     collegeId: '',
-    role: 'PTO' as Officer['role'],
+    role: 'Placement Training Officer' as Officer['role'],
     phone: '',
     department: '',
   });
+  const [nameError, setNameError] = useState<string>('');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const [officersData, collegesData] = await Promise.all([
+        AdminService.getOfficers(),
+        AdminService.getColleges()
+      ]);
+      
+      setOfficers(officersData);
+      setColleges(collegesData);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load data');
+      console.error('Error loading officers data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreate = () => {
     setEditingOfficer(null);
@@ -85,11 +58,119 @@ const Officers: React.FC = () => {
       name: '',
       email: '',
       collegeId: '',
-      role: 'PTO',
+      role: 'Placement Training Officer',
+      phone: '',
+      department: '',
+  });
+  setIsModalOpen(true);
+};
+
+const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      
+      // Validate form before submission
+      if (!editingOfficer) {
+        const nameValidationError = validateName(formData.name);
+        if (nameValidationError) {
+          setNameError(nameValidationError);
+          setError('Please fix the validation errors before submitting');
+          return;
+        }
+        
+        // Additional validation
+        if (!formData.name || !formData.email || !formData.collegeId || !formData.role) {
+          setError('Please fill in all required fields');
+          return;
+        }
+      }
+      
+      if (editingOfficer) {
+        // Update existing officer
+        await AdminService.updateOfficer(editingOfficer.id, formData);
+        
+        // Reload officers data
+        await loadData();
+        setIsModalOpen(false);
+        resetForm();
+      } else {
+        // Create new officer - this will also create Cognito user
+        const response = await AdminService.createOfficer(formData);
+        console.log('Officer creation response:', response);
+        console.log('Response keys:', Object.keys(response));
+        console.log('AuthInfo in response:', response.authInfo);
+        
+        // Check if authentication info was returned
+        if (response.authInfo) {
+          console.log('Auth info received:', {
+            email: formData.email,
+            password: response.authInfo.defaultPassword,
+            hasPassword: !!response.authInfo.defaultPassword,
+            cognitoStatus: response.authInfo.cognitoStatus
+          });
+          
+          // Show modal regardless of Cognito success/failure
+          setAuthInfo({
+            email: formData.email,
+            defaultPassword: response.authInfo.defaultPassword || 'Not created - see instructions',
+            instructions: response.authInfo.instructions || '',
+            note: response.authInfo.note || '',
+            cognitoStatus: response.authInfo.cognitoStatus
+          });
+          setShowAuthModal(true);
+        } else {
+          console.warn('No auth info in response:', response.authInfo);
+          // Show a basic success message even if no auth info
+          alert('Officer created successfully in database!');
+        }
+        
+        // Reload officers data
+        await loadData();
+        setIsModalOpen(false);
+        resetForm();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to save officer');
+      console.error('Error saving officer:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      collegeId: '',
+      role: 'Placement Training Officer' as Officer['role'],
       phone: '',
       department: '',
     });
-    setIsModalOpen(true);
+    setNameError('');
+  };
+
+  // Validate name - first character must be uppercase
+  const validateName = (name: string): string => {
+    if (!name) return '';
+    if (name.length > 0 && name[0] !== name[0].toUpperCase()) {
+      return 'First character must be uppercase';
+    }
+    if (!/^[a-zA-Z\s]+$/.test(name)) {
+      return 'Name must contain only letters and spaces';
+    }
+    return '';
+  };
+
+  // Handle name input change with validation
+  const handleNameChange = (value: string) => {
+    setFormData({ ...formData, name: value });
+    setNameError(validateName(value));
+  };
+
+  const getCollegeName = (collegeId: string): string => {
+    const college = colleges.find(c => c.id === collegeId);
+    return college ? college.name : 'Unknown College';
   };
 
   const handleEdit = (officer: Officer) => {
@@ -105,51 +186,50 @@ const Officers: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-    if (editingOfficer) {
-      // Update existing officer
-      setOfficers(officers.map(off =>
-        off.id === editingOfficer.id 
-          ? { 
-              ...off, 
-              ...formData,
-              collegeName: colleges.find(c => c.id === formData.collegeId)?.name
-            }
-          : off
-      ));
-    } else {
-      // Create new officer
-      const newOfficer: Officer = {
-        id: Date.now().toString(),
-        ...formData,
-        collegeName: colleges.find(c => c.id === formData.collegeId)?.name,
-        status: 'ACTIVE',
-        permissions: formData.role === 'ADMIN' 
-          ? ['MANAGE_STUDENTS', 'CREATE_ASSESSMENTS', 'MANAGE_OFFICERS']
-          : ['MANAGE_STUDENTS', 'CREATE_ASSESSMENTS'],
-        createdAt: new Date().toISOString(),
-      };
-      setOfficers([...officers, newOfficer]);
-    }
-    setIsModalOpen(false);
-  };
-
   const handleClose = () => {
     setIsModalOpen(false);
     setEditingOfficer(null);
+    resetForm();
   };
 
-  const handleToggleStatus = (id: string) => {
-    setOfficers(officers.map(off =>
-      off.id === id 
-        ? { ...off, status: off.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }
-        : off
-    ));
+  const handleToggleStatus = async (id: string) => {
+    const officer = officers.find(off => off.id === id);
+    if (!officer) return;
+    
+    const originalStatus = officer.status;
+    const newStatus = officer.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    
+    try {
+      // Optimistic update: Update UI immediately
+      setOfficers(officers.map(off => 
+        off.id === id ? { ...off, status: newStatus } : off
+      ));
+      
+      // Then update backend
+      await AdminService.updateOfficer(id, { status: newStatus });
+      
+    } catch (err: any) {
+      // If backend fails, revert the optimistic update
+      setOfficers(officers.map(off => 
+        off.id === id ? { ...off, status: originalStatus } : off
+      ));
+      setError(err.message || 'Failed to update officer status');
+      console.error('Error updating officer status:', err);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this officer?')) {
-      setOfficers(officers.filter(off => off.id !== id));
+      try {
+        setError(null);
+        await AdminService.deleteOfficer(id);
+        
+        // Reload data to reflect changes
+        await loadData();
+      } catch (err: any) {
+        setError(err.message || 'Failed to delete officer');
+        console.error('Error deleting officer:', err);
+      }
     }
   };
 
@@ -164,10 +244,19 @@ const Officers: React.FC = () => {
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'ADMIN': return 'admin';
-      case 'PTO': return 'pto';
-      case 'COORDINATOR': return 'coordinator';
+      case 'Administrator': return 'admin';
+      case 'Placement Training Officer': return 'pto';
+      case 'Placement Training Staff': return 'coordinator';
       default: return 'coordinator';
+    }
+  };
+
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case 'Placement Training Officer': return 'PTO';
+      case 'Placement Training Staff': return 'PTS';
+      case 'Administrator': return 'Admin';
+      default: return role;
     }
   };
 
@@ -179,6 +268,20 @@ const Officers: React.FC = () => {
           Add New Officer
         </button>
       </div>
+
+      {error && (
+        <div className="admin-error">
+          <p>{error}</p>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="admin-loading">
+          <div className="spinner"></div>
+          <p>Loading officers...</p>
+        </div>
+      ) : (
 
       <div className="admin-table-container">
         <table className="admin-table">
@@ -199,10 +302,10 @@ const Officers: React.FC = () => {
               <tr key={officer.id}>
                 <td>{officer.name}</td>
                 <td>{officer.email}</td>
-                <td>{officer.collegeName}</td>
+                <td>{getCollegeName(officer.collegeId)}</td>
                 <td>
                   <span className={`admin-role-badge ${getRoleColor(officer.role)}`}>
-                    {officer.role}
+                    {getRoleDisplayName(officer.role)}
                   </span>
                 </td>
                 <td>{officer.department || 'N/A'}</td>
@@ -245,28 +348,31 @@ const Officers: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Modal for Add/Edit Officer */}
       {isModalOpen && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal">
+          <div className="admin-modal-content">
             <div className="admin-modal-header">
-              <h2>{editingOfficer ? 'Edit Officer' : 'Add New Officer'}</h2>
+              <h3>{editingOfficer ? 'Edit Officer' : 'Add New Officer'}</h3>
               <button className="admin-modal-close" onClick={handleClose}>
                 &times;
               </button>
             </div>
-            <div className="admin-modal-content">
+            <div className="admin-modal-body">
               <form>
                 <div className="admin-form-group">
                   <label>Name *</label>
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Enter officer name"
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    placeholder="Enter officer name (First letter must be uppercase)"
                     required
+                    className={nameError ? 'error' : ''}
                   />
+                  {nameError && <span className="error-message">{nameError}</span>}
                 </div>
                 <div className="admin-form-group">
                   <label>Email *</label>
@@ -300,9 +406,9 @@ const Officers: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as Officer['role'] })}
                     required
                   >
-                    <option value="PTO">Placement Training Officer (PTO)</option>
-                    <option value="ADMIN">Administrator</option>
-                    <option value="COORDINATOR">Coordinator</option>
+                    <option value="Placement Training Officer">Placement Training Officer</option>
+                    <option value="Placement Training Staff">Placement Training Staff</option>
+                    <option value="Administrator">Administrator</option>
                   </select>
                 </div>
                 <div className="admin-form-group">
@@ -329,8 +435,99 @@ const Officers: React.FC = () => {
               <button className="admin-btn-secondary" onClick={handleClose}>
                 Cancel
               </button>
-              <button className="admin-btn-primary" onClick={handleSave}>
-                {editingOfficer ? 'Update Officer' : 'Add Officer'}
+              <button className="admin-btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : (editingOfficer ? 'Update Officer' : 'Add Officer')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Authentication Information Modal */}
+      {showAuthModal && authInfo && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal">
+            <div className="admin-modal-header">
+              <h2>Authentication Account Created</h2>
+            </div>
+            <div className="admin-modal-body">
+              <div className="auth-info-content">
+                <div className="success-message">
+                  <p><strong>Officer and authentication account created successfully!</strong></p>
+                </div>
+                
+                <div className="password-info">
+                  <h3>Default Login Credentials:</h3>
+                  <div className="credential-item">
+                    <label>Username (Email):</label>
+                    <code>{authInfo.email}</code>
+                    <button 
+                      className="copy-btn"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(authInfo.email);
+                          alert('Email copied to clipboard!');
+                        } catch (err) {
+                          console.error('Failed to copy email:', err);
+                          // Fallback: show the text in an alert
+                          prompt('Copy this email:', authInfo.email);
+                        }
+                      }}
+                      title="Copy email"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="credential-item">
+                    <label>Default Password:</label>
+                    <code className="password-display">{authInfo.defaultPassword}</code>
+                    {authInfo.defaultPassword && authInfo.defaultPassword !== 'Not created - see instructions' && (
+                      <button 
+                        className="copy-btn"
+                        onClick={async () => {
+                          try {
+                            console.log('Copying password:', authInfo.defaultPassword);
+                            await navigator.clipboard.writeText(authInfo.defaultPassword);
+                            alert('Password copied to clipboard!');
+                          } catch (err) {
+                            console.error('Failed to copy password:', err);
+                            // Fallback: show the text in a prompt for manual copying
+                            prompt('Copy this password:', authInfo.defaultPassword);
+                          }
+                        }}
+                        title="Copy password"
+                      >
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="instructions">
+                  <h3>Important Instructions:</h3>
+                  <ul>
+                    <li><strong>Password Format:</strong> FirstPartOfEmail + 123!@# (meets security policy)</li>
+                    <li><strong>Security:</strong> The officer must change their password on first login</li>
+                    <li><strong>Share:</strong> Send these credentials securely to the officer</li>
+                    <li><strong>Activation:</strong> Credentials are active immediately</li>
+                    <li><strong>Login:</strong> Officer can login at the main login page</li>
+                  </ul>
+                </div>
+
+                <div className="security-note">
+                  <p><strong>Security Note:</strong> {authInfo.note}</p>
+                </div>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button 
+                className="admin-btn-primary" 
+                onClick={() => {
+                  setShowAuthModal(false);
+                  setAuthInfo(null);
+                }}
+              >
+                Got it, Close
               </button>
             </div>
           </div>

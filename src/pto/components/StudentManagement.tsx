@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FaUserGraduate, FaSearch, FaFilter, FaEnvelope, FaBuilding } from 'react-icons/fa';
+import PTOService from '../../services/pto.service';
 
 interface Student {
   id: number;
@@ -12,13 +13,9 @@ interface Student {
 }
 
 const StudentManagement: React.FC = () => {
-  const [students] = useState<Student[]>([
-    { id: 1, name: 'Alice Johnson', rollNumber: 'CS001', department: 'Computer Science', email: 'alice@college.edu', testsParticipated: 5, avgScore: 85 },
-    { id: 2, name: 'Bob Williams', rollNumber: 'CS002', department: 'Computer Science', email: 'bob@college.edu', testsParticipated: 4, avgScore: 78 },
-    { id: 3, name: 'Charlie Brown', rollNumber: 'ECE001', department: 'Electronics', email: 'charlie@college.edu', testsParticipated: 3, avgScore: 82 },
-    { id: 4, name: 'Diana Prince', rollNumber: 'ME001', department: 'Mechanical', email: 'diana@college.edu', testsParticipated: 6, avgScore: 90 },
-    { id: 5, name: 'Eve Davis', rollNumber: 'CE001', department: 'Civil', email: 'eve@college.edu', testsParticipated: 2, avgScore: 75 },
-  ]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
@@ -26,7 +23,35 @@ const StudentManagement: React.FC = () => {
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [messageData, setMessageData] = useState({ subject: '', message: '' });
 
-  const departments = ['all', 'Computer Science', 'Electronics', 'Mechanical', 'Civil'];
+  const [departments, setDepartments] = useState<string[]>(['all']);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await PTOService.getStudents();
+        const mapped: Student[] = data.map(s => ({
+          id: Number((s.id || '').split('#').pop()) || Math.random(),
+          name: s.name,
+          rollNumber: s.rollNumber || '',
+          department: s.department,
+          email: s.email,
+          testsParticipated: s.testsParticipated || 0,
+          avgScore: s.avgScore || 0,
+        }));
+        setStudents(mapped);
+        const catalog = await PTOService.getDepartmentCatalog();
+        const codes = Array.isArray(catalog) ? catalog : [];
+        setDepartments(['all', ...codes]);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load students');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -69,6 +94,8 @@ const StudentManagement: React.FC = () => {
 
   return (
     <div className="pto-component-page">
+      {error && <div className="admin-error"><p>{error}</p></div>}
+      {loading && <div className="admin-loading"><div className="spinner"></div><p>Loading students...</p></div>}
       {/* Statistics */}
       <div className="stats-grid">
         <div className="stat-card">

@@ -10,6 +10,7 @@ import {
   FaUserCircle,
   FaSignOutAlt,
 } from "react-icons/fa";
+import { useUser } from "../../contexts/UserContext";
 
 import DashboardHome from "../components/DashboardHome";
 import DepartmentManagement from "../components/DepartmentManagement";
@@ -24,10 +25,11 @@ import "../styles/Dashboard.css";
 const PTODashboard: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading } = useUser();
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentSectionName, setCurrentSectionName] = useState("Dashboard");
+  
 
 
   /* ✅ Nav Items */
@@ -61,7 +63,6 @@ const PTODashboard: React.FC = () => {
     });
 
     setActiveTab(matchedItem ? matchedItem.id : "dashboard");
-    setCurrentSectionName(matchedItem ? matchedItem.label : "Dashboard");
   }, [location, navItems]);
 
   /* ✅ Logout */
@@ -127,26 +128,35 @@ const PTODashboard: React.FC = () => {
       {/* ✅ Overlay */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar}></div>}
 
-      {/* ✅ MAIN */}
-      <main className="dashboard-main">
-        {/* Sticky Header with Section Name */}
-        <header className="pto-sticky-header">
-          <div className="header-inner">
-            <h2 className="section-name-header">{currentSectionName}</h2>
-            <p className="section-subtitle">
-              {currentSectionName === 'Dashboard' && 'Overview and insights for today'}
-              {currentSectionName === 'Departments' && 'Manage departments, staff and performance'}
-              {currentSectionName === 'Staff Management' && 'Create, edit and manage staff permissions'}
-              {currentSectionName === 'Assessments' && 'Plan, create and monitor assessments'}
-              {currentSectionName === 'Students' && 'Search, filter and communicate with students'}
-              {currentSectionName === 'Reports & Analytics' && 'Analyze performance and export reports'}
-              {currentSectionName === 'Profile' && 'Manage your profile and preferences'}
-            </p>
+      {/* ✅ MAIN - Matching  Structure Exactly */}
+      <div className="pto-main-content">
+        {/* Header - Full Width, No Padding on Parent */}
+        <header className="pto-header">
+          <h1 className="pto-header-title">
+            {navItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+          </h1>
+          <div
+            className="pto-user-info"
+            onClick={() => navigate('/pto/profile')}
+            style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            title="Go to Profile Settings"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face"
+              alt="Profile"
+              className="pto-user-avatar"
+            />
+            <div className="pto-user-details">
+              <p className="pto-user-name">{loading ? 'Loading...' : (user?.name || 'PTO Administrator')}</p>
+              <p className="pto-user-role">PTO</p>
+            </div>
           </div>
         </header>
-        
-        {/* ✅ ROUTES */}
-        <div className="dashboard-content">
+
+        {/* Content Container - With Padding */}
+        <main className="pto-content">
           <Routes>
             <Route index element={<DashboardHome />} />
             <Route path="departments" element={<DepartmentManagement />} />
@@ -156,8 +166,8 @@ const PTODashboard: React.FC = () => {
             <Route path="reports" element={<ReportsAnalytics />} />
             <Route path="profile" element={<Profile />} />
           </Routes>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 };

@@ -1,20 +1,16 @@
-import React, { useState } from 'react';
-import { FaChartBar, FaChartLine, FaFileExcel, FaFilePdf, FaDownload, FaFilter } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FaFileExcel, FaFilePdf, FaFilter } from 'react-icons/fa';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import PTOService from '../../services/pto.service';
 
 const ReportsAnalytics: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [reportType, setReportType] = useState('department');
 
-  const departments = ['all', 'Computer Science', 'Electronics', 'Mechanical', 'Civil'];
+  const [departments, setDepartments] = useState<string[]>(['all']);
 
   // Mock data for charts
-  const departmentPerformanceData = [
-    { name: 'CS', students: 450, avgScore: 82, completed: 380 },
-    { name: 'ECE', students: 380, avgScore: 75, completed: 320 },
-    { name: 'ME', students: 420, avgScore: 79, completed: 360 },
-    { name: 'CE', students: 310, avgScore: 73, completed: 280 },
-  ];
+  const [departmentPerformanceData, setDeptPerf] = useState<Array<{ name: string; students: number; avgScore: number; completed: number }>>([]);
 
   const studentAnalyticsData = [
     { name: 'Week 1', accuracy: 75, attempts: 120 },
@@ -30,6 +26,22 @@ const ReportsAnalytics: React.FC = () => {
     { assessment: 'Test 4', total: 450, attended: 340, completion: 76 },
   ];
 
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const dash = await PTOService.getDashboard();
+        const perf = dash.departmentPerformance.map(d => ({ name: d.code || d.name, students: d.students, avgScore: d.avgScore, completed: d.completed }));
+        setDeptPerf(perf);
+        setDepartments(['all', ...Array.from(new Set(perf.map(p => p.name)))]);
+      } catch (e: any) {
+        console.error(e);
+      } finally {
+        // no-op
+      }
+    };
+    load();
+  }, []);
+
   const topPerformers = [
     { rank: 1, name: 'Alice Johnson', department: 'CS', score: 95, tests: 5 },
     { rank: 2, name: 'Diana Prince', department: 'ME', score: 92, tests: 6 },
@@ -39,12 +51,167 @@ const ReportsAnalytics: React.FC = () => {
   ];
 
   const handleExport = (format: 'excel' | 'pdf') => {
-    alert(`Exporting ${reportType} report as ${format.toUpperCase()}...`);
+    if (format === 'excel') {
+      exportToExcel();
+    } else if (format === 'pdf') {
+      exportToPDF();
+    }
+  };
+
+  const exportToExcel = () => {
+    // Create CSV content (Excel compatible)
+    let csvContent = '';
+    
+    if (reportType === 'department') {
+      csvContent = 'Department,Total Students,Average Score,Completed Tests\n';
+      filteredData.forEach(dept => {
+        csvContent += `${dept.name},${dept.students},${dept.avgScore},${dept.completed}\n`;
+      });
+    } else if (reportType === 'student') {
+      csvContent = 'Rank,Name,Department,Average Score,Tests Taken\n';
+      topPerformers.forEach(performer => {
+        csvContent += `${performer.rank},${performer.name},${performer.department},${performer.score},${performer.tests}\n`;
+      });
+    } else if (reportType === 'attendance') {
+      csvContent = 'Assessment,Total Students,Attended,Completion Rate\n';
+      attendanceData.forEach(item => {
+        csvContent += `${item.assessment},${item.total},${item.attended},${item.completion}%\n`;
+      });
+    }
+
+    // Create blob and download (CSV format - Excel compatible)
+    // Add BOM for UTF-8 to ensure Excel opens it correctly
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${reportType}_report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToPDF = () => {
+    // Create PDF content using browser print functionality
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    let htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { color: #523C48; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #9768E1; color: white; }
+          tr:nth-child(even) { background-color: #f2f2f2; }
+        </style>
+      </head>
+      <body>
+        <h1>${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Performance Report</h1>
+        <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        <p>Department: ${selectedDepartment === 'all' ? 'All Departments' : selectedDepartment}</p>
+    `;
+
+    if (reportType === 'department') {
+      htmlContent += `
+        <table>
+          <thead>
+            <tr>
+              <th>Department</th>
+              <th>Total Students</th>
+              <th>Average Score</th>
+              <th>Completed Tests</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      filteredData.forEach(dept => {
+        htmlContent += `
+          <tr>
+            <td>${dept.name}</td>
+            <td>${dept.students}</td>
+            <td>${dept.avgScore}%</td>
+            <td>${dept.completed}</td>
+          </tr>
+        `;
+      });
+      htmlContent += '</tbody></table>';
+    } else if (reportType === 'student') {
+      htmlContent += `
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Name</th>
+              <th>Department</th>
+              <th>Average Score</th>
+              <th>Tests Taken</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      topPerformers.forEach(performer => {
+        htmlContent += `
+          <tr>
+            <td>${performer.rank}</td>
+            <td>${performer.name}</td>
+            <td>${performer.department}</td>
+            <td>${performer.score}%</td>
+            <td>${performer.tests}</td>
+          </tr>
+        `;
+      });
+      htmlContent += '</tbody></table>';
+    } else if (reportType === 'attendance') {
+      htmlContent += `
+        <table>
+          <thead>
+            <tr>
+              <th>Assessment</th>
+              <th>Total Students</th>
+              <th>Attended</th>
+              <th>Completion Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      attendanceData.forEach(item => {
+        htmlContent += `
+          <tr>
+            <td>${item.assessment}</td>
+            <td>${item.total}</td>
+            <td>${item.attended}</td>
+            <td>${item.completion}%</td>
+          </tr>
+        `;
+      });
+      htmlContent += '</tbody></table>';
+    }
+
+    htmlContent += `
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Wait for content to load, then print
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   };
 
   const filteredData = selectedDepartment === 'all' 
     ? departmentPerformanceData 
-    : departmentPerformanceData.filter(d => d.name === selectedDepartment.substring(0, 3));
+    : departmentPerformanceData.filter(d => d.name === selectedDepartment);
 
   return (
     <div className="pto-component-page">

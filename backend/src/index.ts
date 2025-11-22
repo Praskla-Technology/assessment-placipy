@@ -8,8 +8,8 @@ dotenv.config();
 
 const app = require('./app');
 
-// Use port from environment or default to 3000 (matches frontend proxy)
-const PORT = process.env.PORT || 3000;
+// Use port from environment or default to 3005
+const PORT = process.env.PORT || 3005;
 
 const server = app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

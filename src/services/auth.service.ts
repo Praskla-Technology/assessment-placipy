@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define user roles
-export type UserRole = 'Student' | 'PTO' | 'PTS' | 'Admin';
+export type UserRole = 'Student' | 'Placement Training Officer' | 'Placement Training Staff' | 'Administrator';
 
 // Define user interface
 export interface User {
@@ -31,7 +31,8 @@ class AuthService {
     private normalizeRole(role?: string): UserRole {
         if (!role || typeof role !== 'string') {
             console.warn(`normalizeRole: missing or invalid role value (${String(role)}), defaulting to Student`);
-            return 'Student';
+        
+          return 'Student';
         }
         switch (role.toLowerCase()) {
             case 'student':
@@ -40,18 +41,18 @@ class AuthService {
             case 'pto':
             case 'placement training officer':
             case 'placementtrainingofficer':
-                return 'PTO';
+                return 'Placement Training Officer';
             case 'pts':
             case 'placement training staff':
             case 'placementtrainingstaff':
             case 'placement tracking supervisor':
             case 'placementtrackingsupervisor':
-                return 'PTS';
+                return 'Placement Training Staff';
             case 'admin':
             case 'administrator':
-                return 'Admin';
+                return 'Administrator';
             default:
-                if (['Student', 'PTO', 'PTS', 'Admin'].includes(role)) {
+                if (['Student', 'Placement Training Officer', 'Placement Training Staff', 'Administrator'].includes(role)) {
                     return role as UserRole;
                 }
                 console.warn(`Unknown role: ${role}, defaulting to Student`);
@@ -159,7 +160,7 @@ class AuthService {
             }
             const { email, name, role, department, year, joiningDate } = userData;
             const normalizedRole = this.normalizeRole(role);
-            const validRoles: UserRole[] = ['Student', 'PTO', 'PTS', 'Admin'];
+            const validRoles: UserRole[] = ['Student', 'Placement Training Officer', 'Placement Training Staff', 'Administrator'];
             if (!validRoles.includes(normalizedRole)) {
                 throw new Error(`Invalid user role: ${role}`);
             }
@@ -193,6 +194,19 @@ class AuthService {
         this.pendingProfileRequest = null;
     }
 
+    /**
+     * Get dashboard URL based on user role
+     * @param role User role
+     * @returns Dashboard URL path
+     */
+    getDashboardPath(role: UserRole): string {
+        return this.getDashboardUrl(role);
+    }
+
+    /**
+     * Check if user is authenticated
+     * @returns True if user is authenticated, false otherwise
+     */
     isAuthenticated(): boolean {
         const token = localStorage.getItem('accessToken');
         return !!token;
@@ -207,15 +221,15 @@ class AuthService {
         this.clearCache();
     }
 
-    getDashboardPath(role: UserRole): string {
+    private getDashboardUrl(role: UserRole): string {
         switch (role) {
             case 'Student':
                 return '/student';
-            case 'PTO':
+            case 'Placement Training Officer':
                 return '/pto';
-            case 'PTS':
+            case 'Placement Training Staff':
                 return '/pts';
-            case 'Admin':
+            case 'Administrator':
                 return '/company-admin';
             default:
                 return '/';

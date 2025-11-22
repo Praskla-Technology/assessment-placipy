@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { FaUser, FaCog, FaTrash, FaUserPlus, FaBuilding, FaLock, FaUnlock } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FaUser, FaTrash, FaUserPlus, FaBuilding } from 'react-icons/fa';
+import PTOService, { type StaffMember as StaffDto } from '../../services/pto.service';
 
 interface StaffMember {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone: string;
@@ -16,41 +17,47 @@ interface StaffMember {
 }
 
 const StaffManagement: React.FC = () => {
-  const [staff, setStaff] = useState<StaffMember[]>([
-    { 
-      id: 1, 
-      name: 'John Doe', 
-      email: 'john.doe@college.edu', 
-      phone: '+1234567890',
-      designation: 'Placement Trainer',
-      department: 'Computer Science',
-      permissions: { createAssessments: true, editAssessments: true, viewReports: true }
-    },
-    { 
-      id: 2, 
-      name: 'Jane Smith', 
-      email: 'jane.smith@college.edu', 
-      phone: '+1234567891',
-      designation: 'Placement Trainer',
-      department: 'Electronics',
-      permissions: { createAssessments: true, editAssessments: false, viewReports: true }
-    },
-    { 
-      id: 3, 
-      name: 'Bob Johnson', 
-      email: 'bob.johnson@college.edu', 
-      phone: '+1234567892',
-      designation: 'Placement Coordinator',
-      department: 'Mechanical',
-      permissions: { createAssessments: false, editAssessments: true, viewReports: true }
-    },
-  ]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await PTOService.getStaff();
+        const mapped: StaffMember[] = data.map((s: StaffDto) => ({
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          phone: s.phone || '',
+          designation: s.designation || '',
+          department: s.department || '',
+          permissions: {
+            createAssessments: (s.permissions || []).includes('createAssessments'),
+            editAssessments: (s.permissions || []).includes('editAssessments'),
+            viewReports: (s.permissions || []).includes('viewReports')
+          }
+        }));
+        setStaff(mapped);
+      } catch (e: any) {
+        setError(e.message || 'Failed to load staff');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    const i = setInterval(load, 10000);
+    return () => clearInterval(i);
+  }, []);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     designation: '',
@@ -64,15 +71,35 @@ const StaffManagement: React.FC = () => {
 
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'All Departments'];
 
-  const handleAddStaff = () => {
-    if (formData.name && formData.email && formData.department) {
-      const newStaff: StaffMember = {
-        id: staff.length + 1,
-        ...formData
-      };
-      setStaff([...staff, newStaff]);
+  const handleAddStaff = async () => {
+    if ((formData.firstName || formData.lastName) && formData.email && formData.department) {
+      await PTOService.createStaff({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        designation: formData.designation,
+        department: formData.department,
+        permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as any)[perm])
+      });
+      const refreshed = await PTOService.getStaff();
+      const mapped: StaffMember[] = refreshed.map((s: StaffDto) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        phone: s.phone || '',
+        designation: s.designation || '',
+        department: s.department || '',
+        permissions: {
+          createAssessments: (s.permissions || []).includes('createAssessments'),
+          editAssessments: (s.permissions || []).includes('editAssessments'),
+          viewReports: (s.permissions || []).includes('viewReports')
+        }
+      }));
+      setStaff(mapped);
       setFormData({
-        name: '',
+        firstName: '',
+        lastName: '',
         email: '',
         phone: '',
         designation: '',
@@ -86,7 +113,8 @@ const StaffManagement: React.FC = () => {
   const handleEditStaff = (member: StaffMember) => {
     setSelectedStaff(member);
     setFormData({
-      name: member.name,
+      firstName: (member.name || '').split(' ')[0] || '',
+      lastName: (member.name || '').split(' ').slice(1).join(' ') || '',
       email: member.email,
       phone: member.phone,
       designation: member.designation,
@@ -96,20 +124,40 @@ const StaffManagement: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateStaff = () => {
+  const handleUpdateStaff = async () => {
     if (selectedStaff) {
-      setStaff(staff.map(member =>
-        member.id === selectedStaff.id
-          ? { ...selectedStaff, ...formData }
-          : member
-      ));
+      await PTOService.updateStaff(selectedStaff.id, {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        designation: formData.designation,
+        department: formData.department,
+        permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as any)[perm])
+      });
+      const refreshed = await PTOService.getStaff();
+      const mapped: StaffMember[] = refreshed.map((s: StaffDto) => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        phone: s.phone || '',
+        designation: s.designation || '',
+        department: s.department || '',
+        permissions: {
+          createAssessments: (s.permissions || []).includes('createAssessments'),
+          editAssessments: (s.permissions || []).includes('editAssessments'),
+          viewReports: (s.permissions || []).includes('viewReports')
+        }
+      }));
+      setStaff(mapped);
       setIsEditModalOpen(false);
       setSelectedStaff(null);
     }
   };
 
-  const handleDeleteStaff = (id: number) => {
+  const handleDeleteStaff = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this staff member?')) {
+      await PTOService.deleteStaff(id);
       setStaff(staff.filter(member => member.id !== id));
     }
   };
@@ -138,6 +186,8 @@ const StaffManagement: React.FC = () => {
     <div className="pto-component-page">
       {/* Statistics */}
       <div className="stats-grid">
+        {error && (<div className="admin-error"><p>{error}</p></div>)}
+        {loading && (<div className="admin-loading"><div className="spinner"></div><p>Loading staff...</p></div>)}
         <div className="stat-card">
           <FaUser size={24} color="#9768E1" />
           <div className="stat-content">
@@ -232,12 +282,21 @@ const StaffManagement: React.FC = () => {
           <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
             <h3>Create Staff Account</h3>
             <div className="form-group">
-              <label>Name</label>
+              <label>First Name</label>
               <input
                 type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Enter staff name"
+                value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                placeholder="Enter first name"
+              />
+            </div>
+            <div className="form-group">
+              <label>Last Name</label>
+              <input
+                type="text"
+                value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                placeholder="Enter last name"
               />
             </div>
             <div className="form-group">
@@ -246,7 +305,7 @@ const StaffManagement: React.FC = () => {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="Enter email address"
+                placeholder="user@ksrce.ac.in"
               />
             </div>
             <div className="form-group">
@@ -322,11 +381,19 @@ const StaffManagement: React.FC = () => {
           <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
             <h3>Edit Staff Account</h3>
             <div className="form-group">
-              <label>Name</label>
+              <label>First Name</label>
               <input
                 type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Last Name</label>
+              <input
+                type="text"
+                value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
               />
             </div>
             <div className="form-group">

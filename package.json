@@ -11,16 +11,19 @@
     "preview": "npx rolldown-vite preview"
   },
   "dependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.53.2",
     "axios": "^1.13.1",
-  "@faker-js/faker": "^8.0.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.552.0",
-    "nodemon": "^3.1.10",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.9.5",
     "recharts": "^3.3.0",
-    "three": "^0.180.0"
+    "three": "^0.180.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
@@ -33,7 +36,9 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "nodemon": "^3.1.10",
     "rolldown-vite": "^7.1.20",
+    "ts-node": "^10.9.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0"
   }
