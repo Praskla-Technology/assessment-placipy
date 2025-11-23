@@ -225,47 +225,25 @@ const getProfile = async (req, res) => {
         const userData = await dynamoDBService.getUserDataByEmail(email);
 
         if (!userData) {
-            // Include minimal diagnostic info to help debugging in non-production
-            const debugInfo: any = {};
-            if (process.env.NODE_ENV !== 'production') {
-                debugInfo.attempted = { email, userId };
-            }            $token = '<ACCESS_TOKEN>'
-            $body = @{
-              phone = '9999999999'
-              collegeName = 'My College'
-            } | ConvertTo-Json
-            
-            Invoke-RestMethod -Uri 'http://localhost:3005/api/users/profile' -Method Put -Body $body -ContentType 'application/json' -Headers @{ Authorization = "Bearer $token" }
             return res.status(404).json({
                 error: 'Not Found',
-                message: 'User not found in database',
-                ...debugInfo
+                message: 'User not found in database'
             });
         }
 
         // Return user profile with all available data
         return res.status(200).json({
             message: 'User profile retrieved successfully',
-            profile: {
-                email: userData.email || email,
-                name: userData.name || userData.firstName || '',
-                phone: userData.phone || '',
-                regNo: userData.regNo || userData.registrationNumber || '',
-                collegeName: userData.collegeName || userData.college || '',
-                department: userData.department || '',
-                year: userData.year || userData.yearOfStudy || '',
-                section: userData.section || '',
-                enrollmentDate: userData.enrollmentDate || userData.joiningDate || new Date().toISOString().split('T')[0],
-                role: userData.role || 'Student'
-            },
-            user: {
-                email: userData.email || email,
-                name: userData.name,
-                role: userData.role,
-                department: userData.department,
-                year: userData.year,
-                joiningDate: userData.joiningDate
-            }
+            email: userData.email || email,
+            name: userData.name || userData.firstName || '',
+            phone: userData.phone || '',
+            regNo: userData.regNo || userData.registrationNumber || '',
+            collegeName: userData.collegeName || userData.college || '',
+            department: userData.department || '',
+            year: userData.year || userData.yearOfStudy || '',
+            section: userData.section || '',
+            enrollmentDate: userData.enrollmentDate || userData.joiningDate || new Date().toISOString().split('T')[0],
+            role: userData.role || 'Student'
         });
     } catch (error) {
         // Handle DynamoDB specific errors

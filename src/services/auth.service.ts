@@ -154,7 +154,7 @@ class AuthService {
             const response = await axios.get(`${this.apiUrl}/profile`, config);
             console.log('Profile response:', response.data);
 
-            const userData = response?.data?.user;
+            const userData = response?.data;
             if (!userData || typeof userData !== 'object') {
                 throw new Error('Malformed profile response: missing user information');
             }
