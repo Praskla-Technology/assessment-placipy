@@ -49,8 +49,15 @@ const StudentManagement: React.FC = () => {
         }));
         setStudents(mapped);
         const catalog = await PTOService.getDepartmentCatalog();
-        const codes = Array.isArray(catalog) ? catalog : [];
-        setDepartments(['all', ...codes]);
+        const codes = Array.isArray(catalog)
+          ? catalog.map((d: any) => {
+              if (typeof d === 'string') return d;
+              if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
+              return String(d || '').toUpperCase();
+            }).filter((c: string) => !!c && c !== '[OBJECT OBJECT]')
+          : [];
+        const unique = Array.from(new Set(codes));
+        setDepartments(['all', ...unique]);
         try {
           const ann = await PTOService.listAnnouncements({ limit: 10 });
           setAnnouncements(ann.items || []);

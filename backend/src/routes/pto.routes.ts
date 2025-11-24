@@ -15,6 +15,24 @@ router.use((req, res, next) => {
   return authMiddleware.authenticateToken(req, res, next);
 });
 
+// Role guard: only PTO can access when using authenticated requests
+router.use((req, res, next) => {
+  if (process.env.DEV_ALLOW_PTO_NOAUTH === 'true') return next();
+  const headerEmail = String(req.headers['x-user-email'] || req.headers['X-User-Email'] || '').trim();
+  if (headerEmail) return next();
+  try {
+    const groups = (req.user && req.user['cognito:groups']) || [];
+    const userRole = (req.user && (req.user.role || req.user['custom:role'])) || '';
+    const allowed = Array.isArray(groups) ? groups.includes('PTO') : false;
+    if (!allowed && userRole !== 'Placement Training Officer') {
+      return res.status(403).json({ success: false, message: 'Forbidden: PTO role required' });
+    }
+    next();
+  } catch (e) {
+    return res.status(500).json({ success: false, message: 'Authorization check failed' });
+  }
+});
+
 function getEmail(req) {
   const u = req.user || {};
   const headerEmail = String(req.headers['x-user-email'] || req.headers['X-User-Email'] || '').trim();
@@ -309,6 +327,25 @@ router.get('/students', async (req, res) => {
     res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch students', error: error.message });
+  }
+});
+
+// PTO Profile update
+router.put('/profile', async (req, res) => {
+  try {
+    const data = await ptoService.updatePtoProfile(getEmail(req), req.body || {});
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update PTO profile', error: error.message });
+  }
+});
+
+router.get('/profile', async (req, res) => {
+  try {
+    const data = await ptoService.getPtoProfile(getEmail(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch PTO profile', error: error.message });
   }
 });
 

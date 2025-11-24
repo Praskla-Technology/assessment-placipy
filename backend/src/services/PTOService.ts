@@ -437,6 +437,77 @@ class PTOService {
     return true;
   }
 
+  async updatePtoProfile(email, data) {
+    const pk = this.clientPkFromEmail(email);
+    const emailOriginal = String((data.email || email) || '').trim();
+    const userEmail = emailOriginal.toLowerCase();
+    const ptoItems = await this.queryByPrefix(pk, 'PTO#').catch(() => []);
+    let targetSk = '';
+    const employeeId = String(data.employeeId || '').trim();
+    if (employeeId) {
+      const idSk = `PTO#${employeeId}`;
+      const idMatch = (Array.isArray(ptoItems) ? ptoItems : []).find(it => String(it.SK || '') === idSk);
+      if (idMatch) targetSk = idSk;
+    }
+    if (!targetSk) {
+      const emailMatch = (Array.isArray(ptoItems) ? ptoItems : []).find(it => String(it.email || '').toLowerCase() === userEmail);
+      if (emailMatch && emailMatch.SK) targetSk = emailMatch.SK;
+    }
+    if (!targetSk) {
+      const first = (Array.isArray(ptoItems) ? ptoItems : [])[0];
+      if (first && first.SK) targetSk = first.SK;
+    }
+    if (!targetSk) throw new Error('PTO profile not found in existing table');
+    const firstName = String(data.firstName || '').trim();
+    const lastName = String(data.lastName || '').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    const params = {
+      Key: { PK: pk, SK: targetSk },
+      UpdateExpression: 'SET #name = :name, #firstName = :firstName, #lastName = :lastName, #email = :email, #phone = :phone, #designation = :designation, #department = :department, #updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#name': 'name',
+        '#firstName': 'firstName',
+        '#lastName': 'lastName',
+        '#email': 'email',
+        '#phone': 'phone',
+        '#designation': 'designation',
+        '#department': 'department',
+        '#updatedAt': 'updatedAt'
+      },
+      ExpressionAttributeValues: {
+        ':name': fullName,
+        ':firstName': firstName,
+        ':lastName': lastName,
+        ':email': emailOriginal,
+        ':phone': String(data.phone || ''),
+        ':designation': String(data.designation || 'Placement Training Officer'),
+        ':department': String(data.department || ''),
+        ':updatedAt': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    };
+    const res = await this.dynamoService.updateItem(params);
+    await this.updateCognitoAttributes(userEmail, {
+      firstName,
+      lastName,
+      fullName,
+      role: 'Placement Training Officer',
+      department: String(data.department || ''),
+      email: emailOriginal
+    });
+    return res.Attributes;
+  }
+
+  async getPtoProfile(email) {
+    const pk = this.clientPkFromEmail(email);
+    const userEmail = String(email || '').trim().toLowerCase();
+    const ptoItems = await this.queryByPrefix(pk, 'PTO#').catch(() => []);
+    let item = (Array.isArray(ptoItems) ? ptoItems : []).find(it => String(it.email || '').toLowerCase() === userEmail) || null;
+    if (!item) item = (Array.isArray(ptoItems) ? ptoItems : [])[0] || null;
+    if (item) return item;
+    throw new Error('PTO profile not found');
+  }
+
   async getAssessments(email) {
     const pk = this.clientPkFromEmail(email);
     const items = await this.queryByPrefix(pk, 'ASSESSMENT#');

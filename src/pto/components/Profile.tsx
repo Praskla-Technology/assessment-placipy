@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FaUser, FaEdit, FaLock, FaBell } from 'react-icons/fa';
 import { useUser } from '../../contexts/UserContext';
+import PTOService from '../../services/pto.service';
 import ProfileService from '../../services/profile.service';
 
 const Profile: React.FC = () => {
@@ -9,6 +10,11 @@ const Profile: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [profilePicture, setProfilePicture] = useState<string>(
+    localStorage.getItem('ptoProfilePictureUrl') ||
+    'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face'
+  );
+  const [showImageSelector, setShowImageSelector] = useState(false);
   
   const [profileData, setProfileData] = useState({
     firstName: '',
@@ -17,24 +23,54 @@ const Profile: React.FC = () => {
     email: '',
     phone: '',
     contact: '',
+    department: '',
+    employeeId: ''
   });
 
+  const [deptOptions, setDeptOptions] = useState<string[]>([]);
+
   useEffect(() => {
-    if (user) {
-      let first = '';
-      let last = '';
-      if (user.name) {
-        const parts = user.name.trim().split(' ');
-        first = parts[0] || '';
-        last = parts.slice(1).join(' ') || '';
-      }
-      setProfileData(prev => ({
-        ...prev,
-        firstName: first,
-        lastName: last,
-        email: user.email || prev.email,
-      }));
-    }
+    const load = async () => {
+      try {
+        const data = await PTOService.getProfile();
+        const name = String(data.name || '').trim();
+        const parts = name.split(' ');
+        const first = parts[0] || '';
+        const last = parts.slice(1).join(' ') || '';
+        const sk = String((data.SK || '') as string);
+        const empId = sk.startsWith('PTO#') ? sk.replace('PTO#','') : '';
+        setProfileData({
+          firstName: first,
+          lastName: last,
+          designation: String(data.designation || 'Placement Training Officer'),
+          email: String(data.email || user?.email || ''),
+          phone: String(data.phone || ''),
+          contact: '',
+          department: String(data.department || ''),
+          employeeId: String((data.employeeId || empId) || '')
+        });
+        const stored = localStorage.getItem('ptoProfilePictureUrl');
+        if (stored) setProfilePicture(stored);
+      } catch {}
+    };
+    load();
+    const loadDepartments = async () => {
+      try {
+        const catalog = await PTOService.getDepartmentCatalog();
+        const codes = Array.isArray(catalog)
+          ? catalog
+              .map((d: any) => {
+                if (typeof d === 'string') return d;
+                if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
+                return String(d || '').toUpperCase();
+              })
+              .filter((c: string) => !!c && c !== '[OBJECT OBJECT]')
+          : [];
+        const unique = Array.from(new Set(codes));
+        setDeptOptions(unique);
+      } catch {}
+    };
+    loadDepartments();
   }, [user]);
 
   const [passwordData, setPasswordData] = useState({
@@ -50,7 +86,7 @@ const Profile: React.FC = () => {
     studentMessages: true,
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setProfileData(prev => ({
       ...prev,
@@ -76,38 +112,68 @@ const Profile: React.FC = () => {
   const handleSaveDetails = async () => {
     setError('');
     setSuccess('');
-    const domain = (user?.email && user.email.includes('@')) ? user.email.split('@')[1] : '';
     const firstName = String(profileData.firstName || '').trim();
     const lastName = String(profileData.lastName || '').trim();
-    const email = String(profileData.email || '').trim().toLowerCase();
+    const email = String(profileData.email || '').trim();
     const phone = String(profileData.phone || '').trim();
     if (!firstName || !lastName) {
       setError('First name and last name are required');
       return;
     }
-    if (!email || !email.includes('@')) {
-      setError('Valid email is required');
-      return;
-    }
-    if (domain && !email.endsWith(`@${domain}`)) {
-      setError(`Email must end with @${domain}`);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address');
       return;
     }
     try {
-      await ProfileService.updateProfile({
+      const payload = {
         firstName,
         lastName,
         email,
         phone,
         designation: profileData.designation,
-        contact: profileData.contact,
-      });
+        department: profileData.department,
+        employeeId: profileData.employeeId
+      };
+      await PTOService.updateProfile(payload);
       setSuccess('Profile updated successfully');
       setEditing(false);
       await refreshUser();
+      const updated = await PTOService.getProfile();
+      const parts = String(updated.name || '').trim().split(' ');
+        setProfileData({
+          firstName: parts[0] || '',
+          lastName: parts.slice(1).join(' ') || '',
+          designation: String(updated.designation || 'Placement Training Officer'),
+          email: String(updated.email || email),
+          phone: String(updated.phone || ''),
+          contact: '',
+          department: String(updated.department || ''),
+          employeeId: String((updated.employeeId || (String(updated.SK || '').startsWith('PTO#') ? String(updated.SK || '').replace('PTO#','') : '')) || '')
+        });
       setTimeout(() => setSuccess(''), 2500);
     } catch (e: any) {
       setError(e.message || 'Failed to update profile');
+    }
+  };
+
+  const allowedImages = [
+    'https://images.unsplash.com/photo-1494790108755-2616b612b977?w=150&h=150&fit=crop&crop=face',
+    'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
+  ];
+
+  const handleImageSelect = async (url: string) => {
+    setError('');
+    setSuccess('');
+    try {
+      await ProfileService.updateProfilePicture(url);
+      setProfilePicture(url);
+      localStorage.setItem('ptoProfilePictureUrl', url);
+      setShowImageSelector(false);
+      setSuccess('Profile picture updated successfully');
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (e: any) {
+      setError(e.message || 'Failed to update profile picture');
     }
   };
 
@@ -166,7 +232,33 @@ const Profile: React.FC = () => {
             <div className="details-tab">
               <div className="profile-details">
                 {editing ? (
-                  <div className="edit-form">
+                <div className="edit-form">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                    <img
+                      src={profilePicture}
+                      alt="Profile"
+                      style={{ width: 50, height: 50, borderRadius: '50%', border: '2px solid #9768E1' }}
+                    />
+                    <button
+                      className="secondary-btn"
+                      onClick={() => setShowImageSelector(!showImageSelector)}
+                    >
+                      Change Picture
+                    </button>
+                  </div>
+                  {showImageSelector && (
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+                      {allowedImages.map((img) => (
+                        <button
+                          key={img}
+                          onClick={() => handleImageSelect(img)}
+                          style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', border: profilePicture === img ? '3px solid #9768E1' : '2px solid #D0BFE7' }}
+                        >
+                          <img src={img} alt="option" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="form-row">
                     <div className="form-group">
                       <label>First Name *</label>
@@ -195,14 +287,29 @@ const Profile: React.FC = () => {
                   </div>
                   <div className="form-group">
                     <label>Designation *</label>
-                    <input
-                      type="text"
+                    <select
                       name="designation"
                       value={profileData.designation}
                       onChange={handleInputChange}
-                      placeholder="Enter your designation"
                       required
-                    />
+                    >
+                      <option value="Placement Training Officer">Placement Training Officer</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Department *</label>
+                    <select
+                      name="department"
+                      value={profileData.department}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="">Select Department</option>
+                      {deptOptions.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    <div className="helper-text">Required</div>
                   </div>
                   <div className="form-group">
                     <label>Email *</label>
@@ -228,16 +335,7 @@ const Profile: React.FC = () => {
                     />
                     <div className="helper-text">Required</div>
                   </div>
-                  <div className="form-group">
-                    <label>Contact</label>
-                    <input
-                      type="tel"
-                      name="contact"
-                      value={profileData.contact}
-                      onChange={handleInputChange}
-                      placeholder="Enter your contact number"
-                    />
-                  </div>
+                  
                     <div className="form-actions">
                       <button className="primary-btn" onClick={handleSaveDetails}>
                         Save Changes
@@ -266,8 +364,8 @@ const Profile: React.FC = () => {
                       <span className="value">{profileData.phone}</span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Contact:</span>
-                      <span className="value">{profileData.contact}</span>
+                      <span className="label">Department:</span>
+                      <span className="value">{profileData.department}</span>
                     </div>
                     <button className="primary-btn" onClick={() => setEditing(true)}>
                       <FaEdit /> Edit Profile

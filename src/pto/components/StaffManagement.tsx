@@ -28,7 +28,8 @@ const StaffManagement: React.FC = () => {
         setLoading(true);
         setError(null);
         const data = await PTOService.getStaff();
-        const mapped: StaffMember[] = data.map((s: StaffDto) => ({
+        const filtered = data.filter((s: StaffDto) => String(s.id || '').includes('@'));
+        const mapped: StaffMember[] = filtered.map((s: StaffDto) => ({
           id: s.id,
           name: s.name,
           email: s.email,
@@ -69,6 +70,16 @@ const StaffManagement: React.FC = () => {
       viewReports: false
     }
   });
+  const isCreateValid = () => {
+    const email = String(formData.email || '').trim().toLowerCase();
+    const domainOk = !!email && email.includes('@') && email.endsWith(`@${collegeDomain}`);
+    return Boolean(
+      String(formData.firstName || '').trim() &&
+      domainOk &&
+      String(formData.designation || '').trim() &&
+      String(formData.department || '').trim()
+    );
+  };
 
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'All Departments'];
   const ptoEmail = (localStorage.getItem('ptoDevEmail') || localStorage.getItem('ptoEmail') || '') as string;
@@ -80,7 +91,19 @@ const StaffManagement: React.FC = () => {
       setError(`Email must end with @${collegeDomain}`);
       return;
     }
-    if ((formData.firstName || formData.lastName) && formData.email && formData.department) {
+    if (!String(formData.firstName || '').trim()) {
+      setError('First name is required');
+      return;
+    }
+    if (!String(formData.designation || '').trim()) {
+      setError('Designation is required');
+      return;
+    }
+    if (!String(formData.department || '').trim()) {
+      setError('Department is required');
+      return;
+    }
+    if (formData.email) {
       await PTOService.createStaff({
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -91,7 +114,8 @@ const StaffManagement: React.FC = () => {
         permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as any)[perm])
       });
       const refreshed = await PTOService.getStaff();
-      const mapped: StaffMember[] = refreshed.map((s: StaffDto) => ({
+      const filtered = refreshed.filter((s: StaffDto) => String(s.id || '').includes('@'));
+      const mapped: StaffMember[] = filtered.map((s: StaffDto) => ({
         id: s.id,
         name: s.name,
         email: s.email,
@@ -149,7 +173,8 @@ const StaffManagement: React.FC = () => {
         permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as any)[perm])
       });
       const refreshed = await PTOService.getStaff();
-      const mapped: StaffMember[] = refreshed.map((s: StaffDto) => ({
+      const filtered = refreshed.filter((s: StaffDto) => String(s.id || '').includes('@'));
+      const mapped: StaffMember[] = filtered.map((s: StaffDto) => ({
         id: s.id,
         name: s.name,
         email: s.email,
@@ -251,7 +276,8 @@ const StaffManagement: React.FC = () => {
               const result = await PTOService.importStaff(rows as any[]);
               if (result?.success) {
                 const refreshed = await PTOService.getStaff();
-                const mapped: StaffMember[] = refreshed.map((s: StaffDto) => ({
+                const filtered = refreshed.filter((s: StaffDto) => String(s.id || '').includes('@'));
+                const mapped: StaffMember[] = filtered.map((s: StaffDto) => ({
                   id: s.id,
                   name: s.name,
                   email: s.email,
@@ -348,12 +374,13 @@ const StaffManagement: React.FC = () => {
           <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
             <h3>Create Staff Account</h3>
             <div className="form-group">
-              <label>First Name</label>
+              <label>First Name *</label>
               <input
                 type="text"
                 value={formData.firstName}
                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                 placeholder="Enter first name"
+                required
               />
             </div>
             <div className="form-group">
@@ -372,32 +399,37 @@ const StaffManagement: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder={`username@${collegeDomain}`}
+                required
               />
               <div className="helper-text">Must end with @{collegeDomain}</div>
             </div>
             <div className="form-group">
-              <label>Phone</label>
+              <label>Phone *</label>
               <input
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 placeholder="Enter phone number"
+                required
               />
             </div>
             <div className="form-group">
-              <label>Designation</label>
-              <input
-                type="text"
+              <label>Designation *</label>
+              <select
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                placeholder="Enter designation"
-              />
+                required
+              >
+                <option value="">Select designation</option>
+                <option value="Placement Training Staff / PTS">Placement Training Staff / PTS</option>
+              </select>
             </div>
             <div className="form-group">
-              <label>Department</label>
+              <label>Department *</label>
               <select
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                required
               >
                 <option value="">Select Department</option>
                 {departments.map(dept => (
@@ -435,7 +467,7 @@ const StaffManagement: React.FC = () => {
               </div>
             </div>
             <div className="modal-actions">
-              <button className="primary-btn" onClick={handleAddStaff}>Create</button>
+              <button className="primary-btn" onClick={handleAddStaff} disabled={!isCreateValid()}>Create</button>
               <button className="secondary-btn" onClick={() => setIsAddModalOpen(false)}>Cancel</button>
             </div>
           </div>
@@ -482,12 +514,13 @@ const StaffManagement: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label>Designation</label>
-              <input
-                type="text"
+              <label>Designation *</label>
+              <select
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-              />
+              >
+                <option value="Placement Training Staff / PTS">Placement Training Staff / PTS</option>
+              </select>
             </div>
             <div className="form-group">
               <label>Department</label>

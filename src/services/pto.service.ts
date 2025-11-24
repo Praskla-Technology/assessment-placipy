@@ -184,6 +184,14 @@ class PTOService {
     const res = await api.get('/students');
     return res.data.data;
   }
+  async updateProfile(payload: { firstName: string; lastName: string; email: string; phone?: string; designation?: string; department?: string }): Promise<any> {
+    const res = await api.put('/profile', payload);
+    return res.data.data;
+  }
+  async getProfile(): Promise<any> {
+    const res = await api.get('/profile');
+    return res.data.data;
+  }
   async assignStaffToDepartment(code: string, staffId: string): Promise<void> {
     await api.post(`/departments/${encodeURIComponent(code)}/assign-staff`, { staffId });
   }
