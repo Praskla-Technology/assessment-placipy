@@ -1,17 +1,41 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FaUser, FaEdit, FaLock, FaBell } from 'react-icons/fa';
+import { useUser } from '../../contexts/UserContext';
+import ProfileService from '../../services/profile.service';
 
 const Profile: React.FC = () => {
+  const { user, refreshUser } = useUser();
   const [activeTab, setActiveTab] = useState('details');
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   
   const [profileData, setProfileData] = useState({
-    name: 'John Smith',
+    firstName: '',
+    lastName: '',
     designation: 'Placement Training Officer',
-    email: 'john.smith@college.edu',
-    phone: '+1234567890',
-    contact: '+1234567890',
+    email: '',
+    phone: '',
+    contact: '',
   });
+
+  useEffect(() => {
+    if (user) {
+      let first = '';
+      let last = '';
+      if (user.name) {
+        const parts = user.name.trim().split(' ');
+        first = parts[0] || '';
+        last = parts.slice(1).join(' ') || '';
+      }
+      setProfileData(prev => ({
+        ...prev,
+        firstName: first,
+        lastName: last,
+        email: user.email || prev.email,
+      }));
+    }
+  }, [user]);
 
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -49,27 +73,61 @@ const Profile: React.FC = () => {
     }));
   };
 
-  const handleSaveDetails = () => {
-    alert('Profile details saved successfully!');
-    setEditing(false);
+  const handleSaveDetails = async () => {
+    setError('');
+    setSuccess('');
+    const domain = (user?.email && user.email.includes('@')) ? user.email.split('@')[1] : '';
+    const firstName = String(profileData.firstName || '').trim();
+    const lastName = String(profileData.lastName || '').trim();
+    const email = String(profileData.email || '').trim().toLowerCase();
+    const phone = String(profileData.phone || '').trim();
+    if (!firstName || !lastName) {
+      setError('First name and last name are required');
+      return;
+    }
+    if (!email || !email.includes('@')) {
+      setError('Valid email is required');
+      return;
+    }
+    if (domain && !email.endsWith(`@${domain}`)) {
+      setError(`Email must end with @${domain}`);
+      return;
+    }
+    try {
+      await ProfileService.updateProfile({
+        firstName,
+        lastName,
+        email,
+        phone,
+        designation: profileData.designation,
+        contact: profileData.contact,
+      });
+      setSuccess('Profile updated successfully');
+      setEditing(false);
+      await refreshUser();
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (e: any) {
+      setError(e.message || 'Failed to update profile');
+    }
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert('New passwords do not match!');
+      setError('New passwords do not match');
       return;
     }
     if (passwordData.newPassword.length < 6) {
-      alert('Password must be at least 6 characters long!');
+      setError('Password must be at least 6 characters long');
       return;
     }
-    alert('Password changed successfully!');
-    setPasswordData({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    });
+    try {
+      setSuccess('Password updated successfully');
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (err: any) {
+      setError(err.message || 'Failed to change password');
+    }
   };
 
   const handleSaveNotifications = () => {
@@ -79,6 +137,8 @@ const Profile: React.FC = () => {
   return (
     <div className="pto-component-page">
       <div className="profile-page">
+        {success && (<div className="success-message">{success}</div>)}
+        {error && (<div className="error-message">{error}</div>)}
         <div className="tabs">
           <button 
             className={`tab-btn ${activeTab === 'details' ? 'active' : ''}`}
@@ -107,56 +167,77 @@ const Profile: React.FC = () => {
               <div className="profile-details">
                 {editing ? (
                   <div className="edit-form">
+                  <div className="form-row">
                     <div className="form-group">
-                      <label>Name</label>
+                      <label>First Name *</label>
                       <input
                         type="text"
-                        name="name"
-                        value={profileData.name}
+                        name="firstName"
+                        value={profileData.firstName}
                         onChange={handleInputChange}
-                        placeholder="Enter your name"
+                        placeholder="Enter first name"
+                        required
                       />
+                      <div className="helper-text">Required</div>
                     </div>
                     <div className="form-group">
-                      <label>Designation</label>
+                      <label>Last Name *</label>
                       <input
                         type="text"
-                        name="designation"
-                        value={profileData.designation}
+                        name="lastName"
+                        value={profileData.lastName}
                         onChange={handleInputChange}
-                        placeholder="Enter your designation"
+                        placeholder="Enter last name"
+                        required
                       />
+                      <div className="helper-text">Required</div>
                     </div>
-                    <div className="form-group">
-                      <label>Email</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={profileData.email}
-                        onChange={handleInputChange}
-                        placeholder="Enter your email"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Phone</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={profileData.phone}
-                        onChange={handleInputChange}
-                        placeholder="Enter your phone number"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Contact</label>
-                      <input
-                        type="tel"
-                        name="contact"
-                        value={profileData.contact}
-                        onChange={handleInputChange}
-                        placeholder="Enter your contact number"
-                      />
-                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Designation *</label>
+                    <input
+                      type="text"
+                      name="designation"
+                      value={profileData.designation}
+                      onChange={handleInputChange}
+                      placeholder="Enter your designation"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Email *</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={profileData.email}
+                      onChange={handleInputChange}
+                      placeholder={`username@${(user?.email || '').split('@')[1] || 'collegedomain'}`}
+                      required
+                    />
+                    <div className="helper-text">Must end with @{(user?.email || '').split('@')[1] || 'collegedomain'}</div>
+                  </div>
+                  <div className="form-group">
+                    <label>Phone *</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={profileData.phone}
+                      onChange={handleInputChange}
+                      placeholder="Enter your phone number"
+                      required
+                    />
+                    <div className="helper-text">Required</div>
+                  </div>
+                  <div className="form-group">
+                    <label>Contact</label>
+                    <input
+                      type="tel"
+                      name="contact"
+                      value={profileData.contact}
+                      onChange={handleInputChange}
+                      placeholder="Enter your contact number"
+                    />
+                  </div>
                     <div className="form-actions">
                       <button className="primary-btn" onClick={handleSaveDetails}>
                         Save Changes
@@ -170,7 +251,7 @@ const Profile: React.FC = () => {
                   <div className="view-details">
                     <div className="detail-row">
                       <span className="label">Name:</span>
-                      <span className="value">{profileData.name}</span>
+                      <span className="value">{`${profileData.firstName} ${profileData.lastName}`.trim()}</span>
                     </div>
                     <div className="detail-row">
                       <span className="label">Designation:</span>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { FaUser, FaTrash, FaUserPlus, FaBuilding } from 'react-icons/fa';
 import PTOService, { type StaffMember as StaffDto } from '../../services/pto.service';
 
@@ -70,13 +71,20 @@ const StaffManagement: React.FC = () => {
   });
 
   const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'All Departments'];
+  const ptoEmail = (localStorage.getItem('ptoDevEmail') || localStorage.getItem('ptoEmail') || '') as string;
+  const collegeDomain = (ptoEmail.includes('@') ? ptoEmail.split('@')[1] : 'ksrce.ac.in');
 
   const handleAddStaff = async () => {
+    const email = String(formData.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@') || !email.endsWith(`@${collegeDomain}`)) {
+      setError(`Email must end with @${collegeDomain}`);
+      return;
+    }
     if ((formData.firstName || formData.lastName) && formData.email && formData.department) {
       await PTOService.createStaff({
         firstName: formData.firstName,
         lastName: formData.lastName,
-        email: formData.email,
+        email: email,
         phone: formData.phone,
         designation: formData.designation,
         department: formData.department,
@@ -126,10 +134,15 @@ const StaffManagement: React.FC = () => {
 
   const handleUpdateStaff = async () => {
     if (selectedStaff) {
+      const email = String(formData.email || '').trim().toLowerCase();
+      if (email && (!email.includes('@') || !email.endsWith(`@${collegeDomain}`))) {
+        setError(`Email must end with @${collegeDomain}`);
+        return;
+      }
       await PTOService.updateStaff(selectedStaff.id, {
         firstName: formData.firstName,
         lastName: formData.lastName,
-        email: formData.email,
+        email,
         phone: formData.phone,
         designation: formData.designation,
         department: formData.department,
@@ -204,11 +217,64 @@ const StaffManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Action Button */}
-      <div className="action-buttons-section">
+      {/* Action Buttons */}
+      <div className="action-buttons-section" style={{ display: 'flex', gap: '10px' }}>
         <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
           <FaUserPlus /> Create Staff Account
         </button>
+        <button className="secondary-btn" onClick={async () => {
+          try {
+            const blob = await PTOService.exportStaff();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pto-staff.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            alert('Export failed');
+          }
+        }}>Export</button>
+        <label className="secondary-btn" style={{ cursor: 'pointer' }}>
+          Import
+          <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const data = await file.arrayBuffer();
+            const wb = XLSX.read(data, { type: 'array' });
+            const wsName = wb.SheetNames[0];
+            const ws = wb.Sheets[wsName];
+            const rows = XLSX.utils.sheet_to_json(ws);
+            try {
+              const result = await PTOService.importStaff(rows as any[]);
+              if (result?.success) {
+                const refreshed = await PTOService.getStaff();
+                const mapped: StaffMember[] = refreshed.map((s: StaffDto) => ({
+                  id: s.id,
+                  name: s.name,
+                  email: s.email,
+                  phone: s.phone || '',
+                  designation: s.designation || '',
+                  department: s.department || '',
+                  permissions: {
+                    createAssessments: (s.permissions || []).includes('createAssessments'),
+                    editAssessments: (s.permissions || []).includes('editAssessments'),
+                    viewReports: (s.permissions || []).includes('viewReports')
+                  }
+                }));
+                setStaff(mapped);
+                alert('Import completed');
+              } else {
+                alert('Import failed');
+              }
+            } catch (err) {
+              alert('Import failed');
+            }
+            e.currentTarget.value = '';
+          }} />
+        </label>
       </div>
 
       {/* Staff Table */}
@@ -300,13 +366,14 @@ const StaffManagement: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label>Email</label>
+              <label>Email (College ID) *</label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@ksrce.ac.in"
+                placeholder={`username@${collegeDomain}`}
               />
+              <div className="helper-text">Must end with @{collegeDomain}</div>
             </div>
             <div className="form-group">
               <label>Phone</label>
@@ -397,12 +464,14 @@ const StaffManagement: React.FC = () => {
               />
             </div>
             <div className="form-group">
-              <label>Email</label>
+              <label>Email (College ID) *</label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder={`username@${collegeDomain}`}
               />
+              <div className="helper-text">Must end with @{collegeDomain}</div>
             </div>
             <div className="form-group">
               <label>Phone</label>
