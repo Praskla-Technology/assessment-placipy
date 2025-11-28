@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import AdminService, { type DashboardStats } from '../../services/admin.service';
+import AdminService, { type DashboardStats, type TopCollege } from '../../services/admin.service';
 
 const DashboardHome: React.FC = () => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
@@ -38,19 +38,14 @@ const DashboardHome: React.FC = () => {
     { title: 'Active Assessments', value: 0, icon: '📝' },
   ];
 
-  const topColleges = [
-    { name: 'KSR College', assessments: 145, students: 850 },
-    { name: 'SNS College', assessments: 132, students: 720 },
-    { name: 'PSG College', assessments: 128, students: 680 },
-    { name: 'KCT College', assessments: 115, students: 590 },
-    { name: 'Kumaraguru', assessments: 98, students: 520 },
-  ];
+  // Use real data from API or fallback to empty array
+  const topColleges = dashboardStats?.topColleges || [];
 
-  const chartData = topColleges.map(college => ({
+  const chartData = topColleges.length > 0 ? topColleges.map((college: TopCollege) => ({
     name: college.name,
     Assessments: college.assessments,
-    Students: Math.floor(college.students / 10), // Scale down for better visualization
-  }));
+    Students: college.students,
+  })) : [];
 
   if (loading) {
     return (

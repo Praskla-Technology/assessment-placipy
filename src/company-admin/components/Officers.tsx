@@ -27,6 +27,9 @@ const Officers: React.FC = () => {
     department: '',
   });
   const [nameError, setNameError] = useState<string>('');
+  const [resetPasswordOfficer, setResetPasswordOfficer] = useState<Officer | null>(null);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -135,6 +138,37 @@ const handleSave = async () => {
       console.error('Error saving officer:', err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetPassword = async (officer: Officer) => {
+    setResetPasswordOfficer(officer);
+    setShowResetPasswordModal(true);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!resetPasswordOfficer) return;
+    
+    try {
+      setResettingPassword(true);
+      const result = await AdminService.resetOfficerPassword(resetPasswordOfficer.id);
+      
+      // Show the new password in the auth modal
+      setAuthInfo({
+        email: result.authInfo.email,
+        defaultPassword: result.authInfo.newPassword,
+        instructions: result.authInfo.instructions,
+        note: result.authInfo.note
+      });
+      setShowAuthModal(true);
+      setShowResetPasswordModal(false);
+      setResetPasswordOfficer(null);
+      
+    } catch (error: any) {
+      setError(error.message || 'Failed to reset password');
+      console.error('Error resetting password:', error);
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -322,6 +356,14 @@ const handleSave = async () => {
                       onClick={() => handleEdit(officer)}
                     >
                       Edit
+                    </button>
+                    <button
+                      className="admin-btn-warning"
+                      onClick={() => handleResetPassword(officer)}
+                      title="Reset Password"
+                      style={{ marginRight: '8px' }}
+                    >
+                      Reset Password
                     </button>
                     <button
                       className={`admin-btn-toggle ${officer.status === 'ACTIVE' ? 'disable' : 'enable'}`}
@@ -528,6 +570,49 @@ const handleSave = async () => {
                 }}
               >
                 Got it, Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Confirmation Modal */}
+      {showResetPasswordModal && resetPasswordOfficer && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal">
+            <div className="admin-modal-header">
+              <h2>Reset Password</h2>
+            </div>
+            <div className="admin-modal-body">
+              <p>Are you sure you want to reset the password for:</p>
+              <div className="officer-details">
+                <p><strong>Name:</strong> {resetPasswordOfficer.name}</p>
+                <p><strong>Email:</strong> {resetPasswordOfficer.email}</p>
+                <p><strong>Role:</strong> {resetPasswordOfficer.role}</p>
+              </div>
+              <div className="warning-message">
+                <p><strong>Warning:</strong> This will generate a new temporary password and the user will need to change it on their next login.</p>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary"
+                onClick={() => {
+                  setShowResetPasswordModal(false);
+                  setResetPasswordOfficer(null);
+                }}
+                disabled={resettingPassword}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn-warning"
+                onClick={confirmResetPassword}
+                disabled={resettingPassword}
+              >
+                {resettingPassword ? 'Resetting...' : 'Reset Password'}
               </button>
             </div>
           </div>

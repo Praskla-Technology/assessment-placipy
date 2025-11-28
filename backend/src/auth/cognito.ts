@@ -398,11 +398,43 @@ async function adminCreateUser(username, password, email, temporary = false) {
     }
 }
 
+/**
+ * Reset user password using Admin API
+ * @param {string} username 
+ * @param {string} newPassword 
+ * @returns {Promise<Object>} Password reset result
+ */
+async function adminResetUserPassword(username, newPassword) {
+    try {
+        // Validate inputs
+        if (!username || !newPassword) {
+            throw new Error('Username and new password are required');
+        }
+
+        // Set the new password as permanent
+        const params = {
+            UserPoolId: process.env.COGNITO_USER_POOL_ID,
+            Username: username,
+            Password: newPassword,
+            Permanent: true
+        };
+        
+        const command = new AdminSetUserPasswordCommand(params);
+        const result = await cognitoClient.send(command);
+
+        return { success: true, message: 'Password reset successfully' };
+    } catch (error) {
+        // Re-throw the error to be handled by the calling function
+        throw error;
+    }
+}
+
 module.exports = {
     registerUser,
     loginUser,
     addUserToGroup,
     getUserAttributes,
     getUserGroups,
-    adminCreateUser
+    adminCreateUser,
+    adminResetUserPassword
 };

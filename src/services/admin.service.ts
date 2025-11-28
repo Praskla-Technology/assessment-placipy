@@ -57,6 +57,13 @@ export interface Officer {
   updatedAt?: string;
 }
 
+export interface TopCollege {
+  name: string;
+  students: number;
+  officers: number;
+  assessments: number;
+}
+
 export interface DashboardStats {
   totalColleges: number;
   totalOfficers: number;
@@ -64,6 +71,7 @@ export interface DashboardStats {
   activeAssessments: number;
   totalAssessments: number;
   recentActivity: any[];
+  topColleges: TopCollege[];
 }
 
 class AdminService {
@@ -165,6 +173,16 @@ class AdminService {
       return response.data.data;
     } catch (error) {
       console.error('Error updating officer:', error);
+      throw error;
+    }
+  }
+
+  async resetOfficerPassword(officerId: string): Promise<{ success: boolean; message: string; authInfo: { email: string; newPassword: string; instructions: string; note: string } }> {
+    try {
+      const response = await api.put(`/admin/officers/${encodeURIComponent(officerId)}/reset-password`);
+      return response.data;
+    } catch (error) {
+      console.error('Error resetting officer password:', error);
       throw error;
     }
   }

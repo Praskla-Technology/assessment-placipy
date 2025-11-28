@@ -300,14 +300,54 @@ router.post('/officers', async (req, res) => {
     }
     
     res.status(500).json({
-      success: false,
+      success: false, 
       message: errorMessage,
       error: error.message
     });
   }
 });
 
-router.put('/officers/:officerId', async (req, res) => {
+// Reset officer password
+router.put('/officers/:officerId/reset-password', async (req, res) => {
+  try {
+    const { officerId } = req.params;
+    
+    if (!officerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Officer ID is required'
+      });
+    }
+
+    const result = await adminService.resetOfficerPassword(decodeURIComponent(officerId));
+    
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      authInfo: {
+        email: result.email,
+        newPassword: result.newPassword,
+        instructions: result.instructions,
+        note: 'Please share the new password securely with the officer. They will be required to change it on first login.'
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting officer password:', error);
+    
+    let errorMessage = 'Failed to reset password';
+    if (error.message.includes('Officer not found')) {
+      errorMessage = 'Officer not found';
+    } else if (error.message.includes('UserNotFoundException')) {
+      errorMessage = 'User account not found in authentication system';
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: errorMessage,
+      error: error.message
+    });
+  }
+});router.put('/officers/:officerId', async (req, res) => {
   try {
     const { officerId } = req.params;
     const updates = req.body;

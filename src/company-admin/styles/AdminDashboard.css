@@ -429,6 +429,25 @@
   border-color: #d32f2f;
 }
 
+.admin-btn-warning {
+  background-color: #fff3e0;
+  color: #f57c00;
+  border: 1px solid #ffcc02;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: 5px;
+}
+
+.admin-btn-warning:hover {
+  background-color: #f57c00;
+  color: white;
+  border-color: #f57c00;
+}
+
 /* Table Styles */
 .admin-table-container {
   background: white;
@@ -1625,6 +1644,61 @@
   border-radius: 8px;
   padding: 15px;
   color: #856404;
+}
+
+/* Password Reset Modal Styles */
+.officer-details {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 15px 0;
+}
+
+.officer-details p {
+  margin: 8px 0;
+  color: #495057;
+  font-size: 14px;
+}
+
+.officer-details strong {
+  color: #343a40;
+  font-weight: 600;
+}
+
+.warning-message {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 15px 0;
+  color: #856404;
+}
+
+.warning-message p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* No data message styles */
+.no-data-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px dashed #dee2e6;
+}
+
+.no-data-message p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.no-data-message p:first-child {
+  font-weight: 600;
+  color: #495057;
 }
 
 .security-note p {

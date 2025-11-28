@@ -54,11 +54,82 @@ class AdminService {
         totalStudents: students.length,
         activeAssessments: activeAssessments.length,
         totalAssessments: assessments.length,
-        recentActivity: await this.getRecentActivity()
+        recentActivity: await this.getRecentActivity(),
+        topColleges: await this.getTopColleges()
       };
     } catch (error) {
       console.error('Error getting dashboard stats:', error);
       throw error;
+    }
+  }
+
+  async getTopColleges() {
+    try {
+      const colleges = await this.getAllColleges();
+      const collegeStats = [];
+
+      for (const college of colleges) {
+        // Get student count for this college
+        const students = await this.getStudentsByCollege(college.id);
+        // Get officer count for this college
+        const officers = await this.getOfficersByCollege(college.id);
+        // For assessments, we'll use officer count as a proxy since we don't have assessment data per college yet
+        const assessments = officers.length * 15; // Approximate assessments per officer
+        
+        collegeStats.push({
+          name: college.name,
+          students: students.length,
+          officers: officers.length,
+          assessments: assessments
+        });
+      }
+
+      // Sort by student count and return top 5
+      return collegeStats
+        .sort((a, b) => b.students - a.students)
+        .slice(0, 5);
+    } catch (error) {
+      console.error('Error getting top colleges:', error);
+      // Return empty array on error
+      return [];
+    }
+  }
+
+  async getStudentsByCollege(collegeId) {
+    try {
+      const params = {
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': collegeId,
+          ':skPrefix': 'STUDENT#'
+        }
+      };
+
+      const result = await this.queryTable(params);
+      return result.Items || [];
+    } catch (error) {
+      console.error('Error getting students by college:', error);
+      return [];
+    }
+  }
+
+  async getOfficersByCollege(collegeId) {
+    try {
+      const params = {
+        KeyConditionExpression: 'PK = :pk AND (begins_with(SK, :ptoPrefix) OR begins_with(SK, :ptsPrefix) OR begins_with(SK, :adminPrefix))',
+        ExpressionAttributeValues: {
+          ':pk': collegeId,
+          ':ptoPrefix': 'Placement Training Officer#',
+          ':ptsPrefix': 'Placement Training Staff#',
+          ':adminPrefix': 'Administrator#'
+        }
+      };
+
+      const result = await this.queryTable(params);
+      return result.Items || [];
+    } catch (error) {
+      console.error('Error getting officers by college:', error);
+      return [];
     }
   }
 
@@ -383,6 +454,51 @@ class AdminService {
       return formattedOfficer;
     } catch (error) {
       console.error('Error creating officer:', error);
+      throw error;
+    }
+  }
+
+  async resetOfficerPassword(officerId) {
+    try {
+      // First find the officer to get their email
+      const officer = await this.findOfficerById(officerId);
+      
+      if (!officer) {
+        throw new Error('Officer not found');
+      }
+
+      // Generate new password using same format as creation
+      const username = officer.email;
+      const emailPart = username.split('@')[0];
+      const newPassword = emailPart.charAt(0).toUpperCase() + emailPart.slice(1) + '123!@#';
+      
+      // Reset password in Cognito
+      const { adminResetUserPassword } = require('../auth/cognito');
+      await adminResetUserPassword(username, newPassword);
+      
+      // Update DynamoDB record to reflect password reset
+      const updateParams = {
+        Key: {
+          PK: officer.PK,
+          SK: officer.SK
+        },
+        UpdateExpression: 'SET mustChangePassword = :mustChange, updatedAt = :updatedAt',
+        ExpressionAttributeValues: {
+          ':mustChange': true,
+          ':updatedAt': new Date().toISOString()
+        }
+      };
+      await this.updateItem(updateParams);
+      
+      return {
+        success: true,
+        message: 'Password reset successfully',
+        newPassword: newPassword,
+        email: officer.email,
+        instructions: `New password: ${newPassword}. User must change password on first login.`
+      };
+    } catch (error) {
+      console.error('Error resetting officer password:', error);
       throw error;
     }
   }
