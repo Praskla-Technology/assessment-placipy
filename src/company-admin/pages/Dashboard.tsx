@@ -5,7 +5,6 @@ import Colleges from '../components/Colleges';
 import Officers from '../components/Officers';
 import Reports from '../components/Reports';
 import Settings from '../components/Settings';
-import Profile from '../components/Profile';
 import '../styles/AdminDashboard.css';
 import AuthService from '../../services/auth.service';
 
@@ -155,7 +154,7 @@ const AdminDashboard: React.FC = () => {
             <Route path="/officers" element={<Officers />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/profile" element={<Profile />} />
+            <Route path="/profile" element={<Settings />} />
           </Routes>
         </div>
       </main>

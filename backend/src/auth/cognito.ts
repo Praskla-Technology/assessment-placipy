@@ -285,16 +285,8 @@ async function getUserAttributes(username) {
         const command = new AdminGetUserCommand(params);
         const result = await cognitoClient.send(command);
 
-        // Return user information
-        return {
-            username: result.Username,
-            attributes: result.UserAttributes?.reduce((acc, attr) => {
-                acc[attr.Name] = attr.Value;
-                return acc;
-            }, {}),
-            enabled: result.Enabled,
-            userStatus: result.UserStatus
-        };
+        // Return user attributes in the expected format
+        return result.UserAttributes || [];
     } catch (error) {
         // Re-throw the error to be handled by the calling function
         throw error;

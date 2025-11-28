@@ -187,6 +187,115 @@ class AdminService {
     }
   }
 
+  // Admin Profile Management Methods
+  async getAdminProfile(email: string): Promise<any> {
+    try {
+      const response = await api.get(`/admin/profile/${encodeURIComponent(email)}`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error getting admin profile:', error);
+      throw error;
+    }
+  }
+
+  async updateAdminProfile(profileData: any): Promise<any> {
+    try {
+      const response = await api.put('/admin/profile', profileData);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error updating admin profile:', error);
+      throw error;
+    }
+  }
+
+  async changeAdminPassword(passwordData: { currentPassword: string; newPassword: string }): Promise<any> {
+    try {
+      const response = await api.put('/admin/profile/password', passwordData);
+      return response.data;
+    } catch (error) {
+      console.error('Error changing admin password:', error);
+      throw error;
+    }
+  }
+
+  // Branding Management Methods
+  async getBrandingSettings(): Promise<any> {
+    try {
+      const response = await api.get('/admin/branding');
+      return response.data.data;
+    } catch (error) {
+      console.error('Error getting branding settings:', error);
+      return {};
+    }
+  }
+
+  async updateBrandingSettings(brandingData: any): Promise<any> {
+    try {
+      const response = await api.put('/admin/branding', brandingData);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error updating branding settings:', error);
+      throw error;
+    }
+  }
+
+  async uploadLogo(file: File): Promise<string> {
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      
+      const response = await api.post('/admin/branding/logo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data.logoUrl;
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      throw error;
+    }
+  }
+
+  // Email Template Management Methods
+  async getEmailTemplates(): Promise<any[]> {
+    try {
+      const response = await api.get('/admin/email-templates');
+      return response.data.data;
+    } catch (error) {
+      console.error('Error getting email templates:', error);
+      return [];
+    }
+  }
+
+  async createEmailTemplate(templateData: any): Promise<any> {
+    try {
+      const response = await api.post('/admin/email-templates', templateData);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error creating email template:', error);
+      throw error;
+    }
+  }
+
+  async updateEmailTemplate(templateId: string, templateData: any): Promise<any> {
+    try {
+      const response = await api.put(`/admin/email-templates/${templateId}`, templateData);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error updating email template:', error);
+      throw error;
+    }
+  }
+
+  async deleteEmailTemplate(templateId: string): Promise<void> {
+    try {
+      await api.delete(`/admin/email-templates/${templateId}`);
+    } catch (error) {
+      console.error('Error deleting email template:', error);
+      throw error;
+    }
+  }
+
   async deleteOfficer(officerId: string): Promise<void> {
     try {
       await api.delete(`/admin/officers/${encodeURIComponent(officerId)}`);

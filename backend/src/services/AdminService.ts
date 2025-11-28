@@ -115,18 +115,39 @@ class AdminService {
 
   async getOfficersByCollege(collegeId) {
     try {
-      const params = {
-        KeyConditionExpression: 'PK = :pk AND (begins_with(SK, :ptoPrefix) OR begins_with(SK, :ptsPrefix) OR begins_with(SK, :adminPrefix))',
-        ExpressionAttributeValues: {
-          ':pk': collegeId,
-          ':ptoPrefix': 'Placement Training Officer#',
-          ':ptsPrefix': 'Placement Training Staff#',
-          ':adminPrefix': 'Administrator#'
-        }
-      };
+      const pk = collegeId.startsWith('CLIENT#') ? collegeId : `CLIENT#${collegeId}`;
+      const officers = [];
 
-      const result = await this.queryTable(params);
-      return result.Items || [];
+      // Query for each officer type separately since DynamoDB doesn't support OR in KeyConditionExpression
+      const officerPrefixes = [
+        'PTO#',                        // Legacy format
+        'PTS#',                        // Legacy format
+        'Placement Training Officer#',  // New format
+        'Placement Training Staff#',    // New format
+        'Administrator#'               // Admin format
+      ];
+
+      for (const prefix of officerPrefixes) {
+        try {
+          const params = {
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+            ExpressionAttributeValues: {
+              ':pk': pk,
+              ':prefix': prefix
+            }
+          };
+
+          const result = await this.queryTable(params);
+          if (result.Items && result.Items.length > 0) {
+            officers.push(...result.Items);
+          }
+        } catch (prefixError) {
+          console.error(`Error querying officers with prefix ${prefix}:`, prefixError);
+          // Continue with other prefixes
+        }
+      }
+
+      return officers;
     } catch (error) {
       console.error('Error getting officers by college:', error);
       return [];
@@ -287,55 +308,41 @@ class AdminService {
   // Officer Management
   async getAllOfficers(filters = {}) {
     try {
-      let params = {};
-
       if (filters.collegeId) {
-        // Get officers from specific college
-        const pk = filters.collegeId.startsWith('CLIENT#') ? filters.collegeId : `CLIENT#${filters.collegeId}`;
-        
-        // Query for legacy PTO# prefixes
-        params = {
-          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :ptoPrefix)',
-          ExpressionAttributeValues: {
-            ':pk': pk,
-            ':ptoPrefix': 'PTO#'
-          }
-        };
-        const result1 = await this.queryTable(params);
-        
-        // Query for legacy PTS# prefixes
-        params.ExpressionAttributeValues[':ptoPrefix'] = 'PTS#';
-        const result2 = await this.queryTable(params);
-        
-        // Query for new Placement Training Officer# prefixes
-        params.ExpressionAttributeValues[':ptoPrefix'] = 'Placement Training Officer#';
-        const result3 = await this.queryTable(params);
-        
-        // Query for new Placement Training Staff# prefixes
-        params.ExpressionAttributeValues[':ptoPrefix'] = 'Placement Training Staff#';
-        const result4 = await this.queryTable(params);
-        
-        // Query for Administrator# prefixes
-        params.ExpressionAttributeValues[':ptoPrefix'] = 'Administrator#';
-        const result5 = await this.queryTable(params);
-        
-        const officers = [...result1.Items, ...result2.Items, ...result3.Items, ...result4.Items, ...result5.Items];
-        return officers.map(item => this.formatOfficerData(item));
+        // Get officers from specific college using the fixed method
+        return (await this.getOfficersByCollege(filters.collegeId)).map(item => this.formatOfficerData(item));
       } else {
         // Get all officers from all colleges
-        params = {
-          FilterExpression: 'begins_with(SK, :ptoPrefix) OR begins_with(SK, :ptsPrefix) OR begins_with(SK, :newPtoPrefix) OR begins_with(SK, :newPtsPrefix) OR begins_with(SK, :adminPrefix)',
-          ExpressionAttributeValues: {
-            ':ptoPrefix': 'PTO#',
-            ':ptsPrefix': 'PTS#',
-            ':newPtoPrefix': 'Placement Training Officer#',
-            ':newPtsPrefix': 'Placement Training Staff#',
-            ':adminPrefix': 'Administrator#'
+        // Use separate scan operations for each officer type since OR in FilterExpression is also problematic in some AWS SDK versions
+        const officers = [];
+        const officerPrefixes = [
+          'PTO#',                        // Legacy format
+          'PTS#',                        // Legacy format  
+          'Placement Training Officer#',  // New format
+          'Placement Training Staff#',    // New format
+          'Administrator#'               // Admin format
+        ];
+
+        for (const prefix of officerPrefixes) {
+          try {
+            const params = {
+              FilterExpression: 'begins_with(SK, :prefix)',
+              ExpressionAttributeValues: {
+                ':prefix': prefix
+              }
+            };
+            
+            const result = await this.scanTable(params);
+            if (result.Items && result.Items.length > 0) {
+              officers.push(...result.Items);
+            }
+          } catch (prefixError) {
+            console.error(`Error scanning officers with prefix ${prefix}:`, prefixError);
+            // Continue with other prefixes
           }
-        };
+        }
         
-        const result = await this.scanTable(params);
-        return result.Items.map(item => this.formatOfficerData(item));
+        return officers.map(item => this.formatOfficerData(item));
       }
     } catch (error) {
       console.error('Error getting officers:', error);
@@ -499,6 +506,312 @@ class AdminService {
       };
     } catch (error) {
       console.error('Error resetting officer password:', error);
+      throw error;
+    }
+  }
+
+  // Admin Profile Management Methods
+  async getAdminProfile(email) {
+    try {
+      // First try to get profile from database
+      const params = {
+        Key: {
+          PK: 'ADMIN#PROFILE',
+          SK: `USER#${email}`
+        }
+      };
+
+      const result = await this.getItem(params);
+      
+      if (result.Item) {
+        return {
+          id: result.Item.SK,
+          name: result.Item.name,
+          email: result.Item.email,
+          role: result.Item.role || 'Admin',
+          department: result.Item.department,
+          phone: result.Item.phone,
+          createdAt: result.Item.createdAt,
+          updatedAt: result.Item.updatedAt
+        };
+      }
+
+      // If not found in database, get from Cognito and create profile
+      const { getUserAttributes } = require('../auth/cognito');
+      try {
+        const userAttributes = await getUserAttributes(email);
+        const attributeMap = userAttributes.reduce((acc, attr) => {
+          acc[attr.Name] = attr.Value;
+          return acc;
+        }, {});
+
+        // Create initial profile from Cognito data
+        const profile = {
+          id: `USER#${email}`,
+          name: attributeMap.name || attributeMap.given_name || 'Admin User',
+          email: email,
+          role: attributeMap['custom:role'] || 'Admin',
+          department: attributeMap['custom:department'] || '',
+          phone: attributeMap.phone_number || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        // Save to database
+        await this.putItem({
+          PK: 'ADMIN#PROFILE',
+          SK: `USER#${email}`,
+          ...profile
+        });
+
+        return profile;
+      } catch (cognitoError) {
+        console.error('Error fetching from Cognito:', cognitoError);
+        // Return minimal profile if Cognito fails
+        return {
+          id: `USER#${email}`,
+          name: 'Admin User',
+          email: email,
+          role: 'Admin',
+          department: '',
+          phone: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+    } catch (error) {
+      console.error('Error getting admin profile:', error);
+      throw error;
+    }
+  }
+
+  async updateAdminProfile(profileData) {
+    try {
+      const timestamp = new Date().toISOString();
+      
+      const updateParams = {
+        Key: {
+          PK: 'ADMIN#PROFILE',
+          SK: `USER#${profileData.email}`
+        },
+        UpdateExpression: 'SET #name = :name, email = :email, department = :department, phone = :phone, updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+          '#name': 'name'
+        },
+        ExpressionAttributeValues: {
+          ':name': profileData.name,
+          ':email': profileData.email,
+          ':department': profileData.department || '',
+          ':phone': profileData.phone || '',
+          ':updatedAt': timestamp
+        },
+        ReturnValues: 'ALL_NEW'
+      };
+
+      const result = await this.updateItem(updateParams);
+      return {
+        id: result.Attributes.SK,
+        name: result.Attributes.name,
+        email: result.Attributes.email,
+        role: result.Attributes.role || 'Admin',
+        department: result.Attributes.department,
+        phone: result.Attributes.phone,
+        createdAt: result.Attributes.createdAt,
+        updatedAt: result.Attributes.updatedAt
+      };
+    } catch (error) {
+      console.error('Error updating admin profile:', error);
+      throw error;
+    }
+  }
+
+  async changeAdminPassword(email, currentPassword, newPassword) {
+    try {
+      // First verify current password with Cognito
+      const { loginUser } = require('../auth/cognito');
+      
+      try {
+        await loginUser(email, currentPassword);
+      } catch (loginError) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // Update password in Cognito
+      const { adminResetUserPassword } = require('../auth/cognito');
+      await adminResetUserPassword(email, newPassword);
+
+      return { success: true, message: 'Password changed successfully' };
+    } catch (error) {
+      console.error('Error changing admin password:', error);
+      throw error;
+    }
+  }
+
+  // Branding Settings Management
+  async getBrandingSettings() {
+    try {
+      const params = {
+        Key: {
+          PK: 'SYSTEM#SETTINGS',
+          SK: 'BRANDING#CONFIG'
+        }
+      };
+
+      const result = await this.getItem(params);
+      return result.Item || {
+        companyName: 'Placipy Assessment Platform',
+        primaryColor: '#9768E1',
+        secondaryColor: '#523C48',
+        theme: 'light'
+      };
+    } catch (error) {
+      console.error('Error getting branding settings:', error);
+      return {};
+    }
+  }
+
+  async updateBrandingSettings(brandingData) {
+    try {
+      const timestamp = new Date().toISOString();
+      
+      const params = {
+        Key: {
+          PK: 'SYSTEM#SETTINGS',
+          SK: 'BRANDING#CONFIG'
+        },
+        UpdateExpression: 'SET companyName = :companyName, primaryColor = :primaryColor, secondaryColor = :secondaryColor, theme = :theme, logo = :logo, updatedAt = :updatedAt, updatedBy = :updatedBy',
+        ExpressionAttributeValues: {
+          ':companyName': brandingData.companyName,
+          ':primaryColor': brandingData.primaryColor,
+          ':secondaryColor': brandingData.secondaryColor,
+          ':theme': brandingData.theme,
+          ':logo': brandingData.logo || null,
+          ':updatedAt': timestamp,
+          ':updatedBy': brandingData.updatedBy
+        },
+        ReturnValues: 'ALL_NEW'
+      };
+
+      const result = await this.updateItem(params);
+      return result.Attributes;
+    } catch (error) {
+      console.error('Error updating branding settings:', error);
+      throw error;
+    }
+  }
+
+  // Email Template Management
+  async getEmailTemplates() {
+    try {
+      const params = {
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': 'SYSTEM#TEMPLATES',
+          ':skPrefix': 'EMAIL#'
+        }
+      };
+
+      const result = await this.queryTable(params);
+      return result.Items?.map(item => ({
+        id: item.SK.replace('EMAIL#', ''),
+        name: item.name,
+        subject: item.subject,
+        content: item.content,
+        type: item.type,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt
+      })) || [];
+    } catch (error) {
+      console.error('Error getting email templates:', error);
+      return [];
+    }
+  }
+
+  async createEmailTemplate(templateData) {
+    try {
+      const templateId = `${templateData.type}-${Date.now()}`;
+      const timestamp = new Date().toISOString();
+      
+      const template = {
+        PK: 'SYSTEM#TEMPLATES',
+        SK: `EMAIL#${templateId}`,
+        name: templateData.name,
+        subject: templateData.subject,
+        content: templateData.content,
+        type: templateData.type,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        createdBy: templateData.createdBy
+      };
+
+      await this.putItem(template);
+      
+      return {
+        id: templateId,
+        name: template.name,
+        subject: template.subject,
+        content: template.content,
+        type: template.type,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt
+      };
+    } catch (error) {
+      console.error('Error creating email template:', error);
+      throw error;
+    }
+  }
+
+  async updateEmailTemplate(templateId, templateData) {
+    try {
+      const params = {
+        Key: {
+          PK: 'SYSTEM#TEMPLATES',
+          SK: `EMAIL#${templateId}`
+        },
+        UpdateExpression: 'SET #name = :name, subject = :subject, content = :content, updatedAt = :updatedAt, updatedBy = :updatedBy',
+        ExpressionAttributeNames: {
+          '#name': 'name'
+        },
+        ExpressionAttributeValues: {
+          ':name': templateData.name,
+          ':subject': templateData.subject,
+          ':content': templateData.content,
+          ':updatedAt': new Date().toISOString(),
+          ':updatedBy': templateData.updatedBy
+        },
+        ReturnValues: 'ALL_NEW'
+      };
+
+      const result = await this.updateItem(params);
+      
+      return {
+        id: templateId,
+        name: result.Attributes.name,
+        subject: result.Attributes.subject,
+        content: result.Attributes.content,
+        type: result.Attributes.type,
+        createdAt: result.Attributes.createdAt,
+        updatedAt: result.Attributes.updatedAt
+      };
+    } catch (error) {
+      console.error('Error updating email template:', error);
+      throw error;
+    }
+  }
+
+  async deleteEmailTemplate(templateId) {
+    try {
+      const params = {
+        Key: {
+          PK: 'SYSTEM#TEMPLATES',
+          SK: `EMAIL#${templateId}`
+        }
+      };
+
+      await this.deleteItem(params);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting email template:', error);
       throw error;
     }
   }

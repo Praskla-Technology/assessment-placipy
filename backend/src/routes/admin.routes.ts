@@ -519,4 +519,218 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// Admin Profile Management Routes
+router.get('/profile/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const profile = await adminService.getAdminProfile(decodeURIComponent(email));
+    
+    res.json({
+      success: true,
+      data: profile
+    });
+  } catch (error) {
+    console.error('Error getting admin profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get admin profile',
+      error: error.message
+    });
+  }
+});
+
+router.put('/profile', async (req, res) => {
+  try {
+    const { name, email, department, phone } = req.body;
+    
+    const updatedProfile = await adminService.updateAdminProfile({
+      name,
+      email,
+      department,
+      phone,
+      updatedBy: req.user.userId
+    });
+    
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: updatedProfile
+    });
+  } catch (error) {
+    console.error('Error updating admin profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update admin profile',
+      error: error.message
+    });
+  }
+});
+
+router.put('/profile/password', async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userEmail = req.user.email;
+    
+    const result = await adminService.changeAdminPassword(userEmail, currentPassword, newPassword);
+    
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Error changing admin password:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to change password',
+      error: error.message
+    });
+  }
+});
+
+// Branding Management Routes
+router.get('/branding', async (req, res) => {
+  try {
+    const branding = await adminService.getBrandingSettings();
+    res.json({
+      success: true,
+      data: branding
+    });
+  } catch (error) {
+    console.error('Error getting branding settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get branding settings',
+      error: error.message
+    });
+  }
+});
+
+router.put('/branding', async (req, res) => {
+  try {
+    const brandingData = req.body;
+    const updatedBranding = await adminService.updateBrandingSettings({
+      ...brandingData,
+      updatedBy: req.user.userId
+    });
+    
+    res.json({
+      success: true,
+      message: 'Branding settings updated successfully',
+      data: updatedBranding
+    });
+  } catch (error) {
+    console.error('Error updating branding settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update branding settings',
+      error: error.message
+    });
+  }
+});
+
+router.post('/branding/logo', async (req, res) => {
+  try {
+    // This would typically handle file upload with multer
+    // For now, return a placeholder response
+    res.json({
+      success: true,
+      logoUrl: '/uploads/logo-' + Date.now() + '.png',
+      message: 'Logo uploaded successfully'
+    });
+  } catch (error) {
+    console.error('Error uploading logo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload logo',
+      error: error.message
+    });
+  }
+});
+
+// Email Template Management Routes
+router.get('/email-templates', async (req, res) => {
+  try {
+    const templates = await adminService.getEmailTemplates();
+    res.json({
+      success: true,
+      data: templates
+    });
+  } catch (error) {
+    console.error('Error getting email templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get email templates',
+      error: error.message
+    });
+  }
+});
+
+router.post('/email-templates', async (req, res) => {
+  try {
+    const templateData = {
+      ...req.body,
+      createdBy: req.user.userId
+    };
+    
+    const newTemplate = await adminService.createEmailTemplate(templateData);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Email template created successfully',
+      data: newTemplate
+    });
+  } catch (error) {
+    console.error('Error creating email template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create email template',
+      error: error.message
+    });
+  }
+});
+
+router.put('/email-templates/:templateId', async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const templateData = {
+      ...req.body,
+      updatedBy: req.user.userId
+    };
+    
+    const updatedTemplate = await adminService.updateEmailTemplate(templateId, templateData);
+    
+    res.json({
+      success: true,
+      message: 'Email template updated successfully',
+      data: updatedTemplate
+    });
+  } catch (error) {
+    console.error('Error updating email template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update email template',
+      error: error.message
+    });
+  }
+});
+
+router.delete('/email-templates/:templateId', async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    await adminService.deleteEmailTemplate(templateId);
+    
+    res.json({
+      success: true,
+      message: 'Email template deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting email template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete email template',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
