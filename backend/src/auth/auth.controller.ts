@@ -207,17 +207,28 @@ const getProfile = async (req, res) => {
             }
         }
 
-        // If still no email, check if we can use a default admin email
-        if (!email) {
-            // Check if user has admin scope or role
-            if (req.user.scope && req.user.scope.includes('aws.cognito.signin.user.admin')) {
-                email = 'admin@praskla.com'; // Default admin email
-            } else {
-                return res.status(400).json({
-                    error: 'Bad Request',
-                    message: 'Email not found in token or Cognito'
-                });
+        // If we don't have an email, try to get it from Cognito
+        if (!email && userId) {
+            try {
+                const userInfo = await getUserAttributes(userId);
+                
+                // Find email attribute in the user attributes array
+                const emailAttribute = userInfo.find(attr => attr.Name === 'email');
+                if (emailAttribute && emailAttribute.Value) {
+                    email = emailAttribute.Value;
+                }
+            } catch (cognitoError) {
+                console.error('Error fetching from Cognito:', cognitoError);
+                // Continue without email from Cognito
             }
+        }
+
+        // If still no email found, return error
+        if (!email) {
+            return res.status(400).json({
+                error: 'Bad Request',
+                message: 'Email not found in token or Cognito'
+            });
         }
 
         // Validate email format
