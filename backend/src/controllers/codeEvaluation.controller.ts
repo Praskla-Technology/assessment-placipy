@@ -5,6 +5,7 @@ import AWS from 'aws-sdk';
 // Extend Request interface to include user property
 interface AuthenticatedRequest extends Request {
     user?: any;
+    body: any; // Add body property to fix TypeScript error
 }
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({
@@ -17,7 +18,7 @@ class CodeEvaluationController {
 
     constructor() {
         this.assessmentsTableName = process.env.ASSESSMENTS_TABLE_NAME || 'Assesment_placipy_assesments';
-        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assessment_placipy_assesessment_questions';
+        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assesment_placipy_assessment_questions';
     }
 
     /**
@@ -35,7 +36,12 @@ class CodeEvaluationController {
      */
     async evaluateCode(req: AuthenticatedRequest, res: Response) {
         try {
-            const { assessmentId, questionId, code, language } = req.body;
+            const { assessmentId, questionId, code, language } = req.body as { 
+                assessmentId: string; 
+                questionId: string; 
+                code: string; 
+                language: string; 
+            };
             const studentId = req.user?.username || req.user?.sub || req.user?.email || 'unknown_student';
             // Extract email from user object
             const userEmail = req.user?.email || req.user?.username || req.user?.sub || '';
@@ -71,7 +77,7 @@ class CodeEvaluationController {
             const questions = questionResult.Items || [];
             
             // Find the specific question
-            const question = questions.find(q => q.questionId === questionId);
+            const question = questions.find((q: any) => q.questionId === questionId);
             
             if (!question) {
                 return res.status(404).json({

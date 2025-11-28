@@ -13,6 +13,7 @@ const studentRoutes = require('./routes/student.routes');
 const adminRoutes = require('./routes/admin.routes');
 const ptoRoutes = require('./routes/pto.routes');
 const codeEvaluationRoutes = require('./routes/codeEvaluation.routes');
+const resultsRoutes = require('./routes/results.routes');
 
 // Import middleware
 const { authenticateToken, authorizeRole } = require('./auth/auth.middleware');
@@ -52,6 +53,7 @@ app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/pto', ptoRoutes);
 app.use('/api/code-evaluation', codeEvaluationRoutes);
+app.use('/api/results', resultsRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

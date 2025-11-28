@@ -24,7 +24,9 @@ const LANGUAGE_IDS: { [key: string]: number } = {
   'php': 68,
   'ruby': 72,
   'go': 60,
-  'rust': 73
+  'rust': 73,
+  'html': 67, // HTML language ID
+  'react': 63 // Treat React as JavaScript for execution purposes
 };
 
 // Submission interface

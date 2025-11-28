@@ -1,14 +1,21 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useUser } from '../../contexts/UserContext';
+import AssessmentService from '../../services/assessment.service';
+import ResultsService from '../../services/results.service';
 
 const DashboardHome: React.FC = () => {
   const { user } = useUser();
-  // Mock data
+  const [activeAssessmentsCount, setActiveAssessmentsCount] = useState(0);
+  const [completedAssessmentsCount, setCompletedAssessmentsCount] = useState(0); // Changed from 12 to 0
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Dynamic stats data with all static numbers set to 0
   const stats = [
-    { title: 'Active Tests', value: 3, change: '+2 from last week' },
-    { title: 'Completed Tests', value: 12, change: '+3 from last month' },
-    { title: 'Average Score', value: '82%', change: '+5% improvement' },
-    { title: 'Ranking', value: '5th', change: 'In your department' },
+    { title: 'Active Tests', value: activeAssessmentsCount, change: '' },
+    { title: 'Completed Tests', value: completedAssessmentsCount, change: '' },
+    { title: 'Average Score', value: '0%', change: '' },
+    { title: 'Ranking', value: '0th', change: '' },
   ];
 
   const assessments = [
@@ -29,6 +36,61 @@ const DashboardHome: React.FC = () => {
     month: 'long',
     day: 'numeric',
   });
+
+  // Fetch real assessments and calculate active count
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch all assessments
+        const assessmentsResponse = await AssessmentService.getAllAssessments();
+        console.log('Fetched assessments:', assessmentsResponse);
+        
+        // Filter active assessments
+        const activeCount = assessmentsResponse.data.filter((assessment: any) => 
+          assessment.status === 'ACTIVE'
+        ).length;
+        
+        setActiveAssessmentsCount(activeCount);
+        
+        // Fetch student's results to determine completed assessments
+        try {
+          const resultsResponse = await ResultsService.getMyResults();
+          console.log('Fetched results:', resultsResponse);
+          
+          // Count completed assessments (default to 0 if no data)
+          const completedCount = resultsResponse.data && Array.isArray(resultsResponse.data) 
+            ? resultsResponse.data.length 
+            : 0;
+          setCompletedAssessmentsCount(completedCount);
+        } catch (resultsError: any) {
+          // If there's an error fetching results, set completed count to 0 and log the error
+          console.log('No completed assessments found or error fetching results:', resultsError);
+          console.error('Results fetch error details:', {
+            message: resultsError.message,
+            response: resultsError.response?.data,
+            status: resultsError.response?.status
+          });
+          setCompletedAssessmentsCount(0);
+        }
+        
+        setError(null);
+      } catch (err: any) {
+        console.error('Error fetching data:', err);
+        console.error('Error details:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status
+        });
+        setError('Failed to load data. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   return (
     <div className="dashboard-home">
@@ -62,7 +124,7 @@ const DashboardHome: React.FC = () => {
                     {user?.name ? ` ${user.name}` : ' Student'}!
                   </h1>
           <p style={{ margin: '6px 0 0 0', fontSize: '1rem', opacity: 0.95 }}>
-            You have <strong>3</strong> active assessments awaiting your action.
+            You have <strong>{activeAssessmentsCount}</strong> active assessments awaiting your action.
           </p>
         </div>
         <div aria-hidden="true" style={{ position: 'absolute', right: 24, opacity: 0.15, zIndex: 0 }}>
@@ -82,7 +144,7 @@ const DashboardHome: React.FC = () => {
           <div className="stat-card" key={index}>
             <h3>{stat.title}</h3>
             <p className="stat-value">{stat.value}</p>
-            <p className="stat-change">{stat.change}</p>
+            {stat.change && <p className="stat-change">{stat.change}</p>}
           </div>
         ))}
       </div>

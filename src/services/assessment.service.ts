@@ -68,6 +68,19 @@ class AssessmentService {
     }
   }
 
+  async getAssessmentQuestions(assessmentId: string): Promise<any> {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/assessments/${assessmentId}/questions`,
+        { headers: this.getAuthHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error getting assessment questions:', error);
+      throw new Error(error.response?.data?.message || 'Failed to retrieve assessment questions');
+    }
+  }
+
   async updateAssessment(assessmentId: string, updates: any): Promise<any> {
     try {
       const response = await axios.put(

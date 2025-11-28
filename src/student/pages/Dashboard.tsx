@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import DashboardHome from '../components/DashboardHome';
 import Assessments from '../components/Assessments';
 import ResultsReports from '../components/ResultsReports';
@@ -9,6 +9,12 @@ import AssessmentTaking from '../components/AssessmentTaking';
 import '../styles/Dashboard.css';
 import AuthService from '../../services/auth.service';
 import { useUser } from '../../contexts/UserContext';
+
+// Wrapper component to pass assessmentId to AssessmentTaking
+const AssessmentTakingWrapper: React.FC = () => {
+  const { assessmentId } = useParams<{ assessmentId: string }>();
+  return <AssessmentTaking key={assessmentId} />;
+};
 
 // Student Dashboard Component
 const StudentDashboard: React.FC = () => {
@@ -190,6 +196,7 @@ const StudentDashboard: React.FC = () => {
             <Route path="/profile" element={<Profile />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/assessment-taking" element={<AssessmentTaking />} />
+            <Route path="/assessment-taking/:assessmentId" element={<AssessmentTakingWrapper />} />
           </Routes>
         </div>
       </main>

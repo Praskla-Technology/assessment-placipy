@@ -58,6 +58,31 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
     }
 });
 
+// Get assessment questions by ID
+router.get('/:id/questions', authMiddleware.authenticateToken, async (req, res) => {
+    try {
+        console.log('=== Get Assessment Questions Request ===');
+        console.log('User:', req.user);
+        console.log('Params:', req.params);
+        
+        const { id: assessmentId } = req.params;
+        // Extract domain from user email or use default
+        const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        
+        const result = await assessmentService.getAssessmentQuestions(assessmentId, domain);
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        console.error('Error fetching assessment questions:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch assessment questions'
+        });
+    }
+});
+
 // Create a new assessment (no role restrictions)
 router.post('/', authMiddleware.authenticateToken, async (req, res) => {
     try {
