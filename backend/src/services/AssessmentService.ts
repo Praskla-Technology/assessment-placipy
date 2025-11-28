@@ -8,12 +8,11 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 class AssessmentService {
     private assessmentsTableName: string;
     private questionsTableName: string;
-    private questionsTableName: string;
 
     constructor(tableName: string) {
         // Use separate tables for assessments and questions
         this.assessmentsTableName = process.env.ASSESSMENTS_TABLE_NAME || 'Assesment_placipy_assesments';
-        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assesment_placipy_assessment_questions';
+        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assessment_placipy_assesessment_questions';
     }
 
     /**
@@ -466,16 +465,36 @@ class AssessmentService {
                 }
             };
 
-            console.log('Scanning for assessment with params:', JSON.stringify(scanParams, null, 2));
             console.log('Querying for assessment with params:', JSON.stringify(queryParams, null, 2));
             const queryResult = await dynamodb.query(queryParams).promise();
-            console.log('Scan result:', JSON.stringify(scanResult, null, 2));
             console.log('Query result:', JSON.stringify(queryResult, null, 2));
 
             if (!queryResult.Items || queryResult.Items.length === 0) {
                 console.log('No assessment found with ID:', assessmentId);
                 console.log('No assessment found with ID:', assessmentId, 'and domain:', domain);
-                return null;
+                // Let's also try with the default domain to see if that works
+                if (domain !== 'ksrce.ac.in') {
+                    console.log('Trying with default domain ksrce.ac.in');
+                    const defaultDomainQueryParams = {
+                        TableName: this.assessmentsTableName,
+                        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
+                        ExpressionAttributeValues: {
+                            ':pk': `CLIENT#ksrce.ac.in`,
+                            ':sk_prefix': `ASSESSMENT#${assessmentId}`
+                        }
+                    };
+                    const defaultDomainQueryResult = await dynamodb.query(defaultDomainQueryParams).promise();
+                    if (defaultDomainQueryResult.Items && defaultDomainQueryResult.Items.length > 0) {
+                        console.log('Found assessment with default domain');
+                        queryResult.Items = defaultDomainQueryResult.Items;
+                    } else {
+                        console.log('No assessment found with default domain either');
+                    }
+                }
+                
+                if (!queryResult.Items || queryResult.Items.length === 0) {
+                    return null;
+                }
             }
 
             // Since we're using begins_with, we might get multiple items
@@ -491,7 +510,6 @@ class AssessmentService {
                 return null;
             }
 
-            console.log('Found assessment:', JSON.stringify(assessment, null, 2));
             console.log('Found assessment:', JSON.stringify(assessment, null, 2));
 
             // Get batch items for this assessment using another efficient query
@@ -515,16 +533,18 @@ class AssessmentService {
             let allQuestions: any[] = [];
             for (const batchItem of batchItems) {
                 console.log('Processing batch item:', JSON.stringify(batchItem, null, 2));
-                if (batchItem.questions && Array.isArray(batchItem.questions)) {
+                // Validate that this batch item belongs to the correct assessment
+                if (batchItem.PK === `CLIENT#${domain}` && 
+                    batchItem.SK.startsWith(`ASSESSMENT#${assessmentId}#`) &&
+                    batchItem.questions && Array.isArray(batchItem.questions)) {
                     console.log('Adding questions from batch item:', batchItem.questions.length);
                     allQuestions = allQuestions.concat(batchItem.questions);
                 } else {
-                    console.log('No questions found in batch item');
+                    console.log('Skipping invalid batch item');
                 }
             }
 
             console.log('Total questions collected:', allQuestions.length);
-            console.log('All questions:', JSON.stringify(allQuestions, null, 2));
 
             // Return the assessment with questions
             const result = {
@@ -707,6 +727,11 @@ class AssessmentService {
         }
     }
 
+    /**
+     * Get assessment questions by assessment ID and domain
+     * Automatically fetches all question batches and combines them into a single array
+     * Ensures that questions are only returned if they belong to a valid assessment
+     */
     async getAssessmentQuestions(assessmentId: string, domain: string): Promise<any[]> {
         try {
             console.log(`Fetching questions for assessment ${assessmentId} in domain ${domain}`);
@@ -730,10 +755,35 @@ class AssessmentService {
                 }
             };
 
+            console.log('Verifying assessment exists with params:', JSON.stringify(mainAssessmentParams, null, 2));
             const mainAssessmentResult = await dynamodb.query(mainAssessmentParams).promise();
+            console.log('Assessment verification result:', JSON.stringify(mainAssessmentResult, null, 2));
 
             if (!mainAssessmentResult.Items || mainAssessmentResult.Items.length === 0) {
-                throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
+                // Try with default domain as fallback
+                if (domain !== 'ksrce.ac.in') {
+                    console.log('Trying with default domain ksrce.ac.in for assessment verification');
+                    const defaultDomainParams = {
+                        TableName: this.assessmentsTableName,
+                        KeyConditionExpression: 'PK = :pk AND SK = :sk',
+                        ExpressionAttributeValues: {
+                            ':pk': `CLIENT#ksrce.ac.in`,
+                            ':sk': `ASSESSMENT#${assessmentId}`
+                        }
+                    };
+                    const defaultDomainResult = await dynamodb.query(defaultDomainParams).promise();
+                    console.log('Default domain assessment verification result:', JSON.stringify(defaultDomainResult, null, 2));
+                    
+                    if (defaultDomainResult.Items && defaultDomainResult.Items.length > 0) {
+                        console.log('Found assessment with default domain, using it for questions query');
+                        // Use the default domain for the rest of the query
+                        domain = 'ksrce.ac.in';
+                    } else {
+                        throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
+                    }
+                } else {
+                    throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
+                }
             }
 
             // Now query for all question batch items with swapped PK/SK structure
@@ -751,14 +801,107 @@ class AssessmentService {
             const questionResult = await dynamodb.query(questionParams).promise();
             console.log('Found', questionResult.Count, 'question items');
 
-            // Return only the question items (not the metadata)
-            const questions = questionResult.Items || [];
-            console.log('Returning questions:', JSON.stringify(questions, null, 2));
+            // If no questions found with the swapped structure, try the original structure
+            if (!questionResult.Items || questionResult.Items.length === 0) {
+                console.log('No questions found with swapped structure, trying original structure...');
+                
+                // Try with the original structure where PK = ASSESSMENT#<assessmentId> and SK = QUESTION#<questionId>
+                const originalQuestionParams = {
+                    TableName: this.questionsTableName,
+                    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
+                    ExpressionAttributeValues: {
+                        ':pk': `ASSESSMENT#${assessmentId}`,
+                        ':sk_prefix': 'QUESTION#'
+                    }
+                };
+                
+                console.log('Querying questions with original params:', JSON.stringify(originalQuestionParams, null, 2));
+                const originalQuestionResult = await dynamodb.query(originalQuestionParams).promise();
+                console.log('Found with original structure:', originalQuestionResult.Count, 'question items');
+                
+                if (originalQuestionResult.Items && originalQuestionResult.Items.length > 0) {
+                    // Validate that these questions actually belong to the assessment by checking the assessment ID
+                    const validQuestions = originalQuestionResult.Items.filter(question => 
+                        question.PK === `ASSESSMENT#${assessmentId}`
+                    );
+                    
+                    if (validQuestions.length === 0) {
+                        throw new Error(`No valid questions found for assessment ${assessmentId}`);
+                    }
+                    
+                    // Return questions from original structure
+                    return validQuestions.sort((a, b) => {
+                        const numA = a.questionNumber || 0;
+                        const numB = b.questionNumber || 0;
+                        return numA - numB;
+                    });
+                }
+            }
 
-            return questions;
+            // Process and combine all questions from batch items
+            let allQuestions: any[] = [];
+            if (questionResult.Items && questionResult.Items.length > 0) {
+                for (const batchItem of questionResult.Items) {
+                    // Validate that this batch item belongs to the correct assessment
+                    if (batchItem.PK === `CLIENT#${domain}` && 
+                        batchItem.SK.startsWith(`ASSESSMENT#${assessmentId}#`) &&
+                        batchItem.questions && Array.isArray(batchItem.questions)) {
+                        allQuestions = allQuestions.concat(batchItem.questions);
+                    }
+                }
+                
+                // Sort questions by questionNumber if available
+                allQuestions.sort((a, b) => {
+                    const numA = a.questionNumber || 0;
+                    const numB = b.questionNumber || 0;
+                    return numA - numB;
+                });
+            }
+
+            console.log('Returning combined questions:', JSON.stringify(allQuestions, null, 2));
+
+            // If we have no questions but the assessment exists, return empty array
+            if (allQuestions.length === 0) {
+                console.log(`Assessment ${assessmentId} exists but has no questions`);
+                return [];
+            }
+
+            return allQuestions;
         } catch (error) {
             console.error('Error in getAssessmentQuestions:', error);
             throw new Error('Failed to retrieve assessment questions: ' + error.message);
+        }
+    }
+
+    /**
+     * Get assessment with questions combined
+     * This method fetches the assessment metadata and automatically includes all questions
+     */
+    async getAssessmentWithQuestions(assessmentId: string, domain: string): Promise<any> {
+        try {
+            console.log(`Fetching assessment ${assessmentId} with questions for domain ${domain}`);
+
+            // First get the assessment metadata
+            const assessment = await this.getAssessmentById(assessmentId, domain);
+            
+            if (!assessment) {
+                console.log(`Assessment ${assessmentId} not found for domain ${domain}`);
+                throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
+            }
+
+            // Get all questions for this assessment
+            const questions = await this.getAssessmentQuestions(assessmentId, domain);
+
+            // Return assessment with questions combined
+            return {
+                ...assessment,
+                questions: questions,
+                mcqQuestions: questions.filter((q: any) => q.entityType === 'mcq'),
+                codingQuestions: questions.filter((q: any) => q.entityType === 'coding')
+            };
+        } catch (error) {
+            console.error('Error in getAssessmentWithQuestions:', error);
+            throw new Error('Failed to retrieve assessment with questions: ' + error.message);
         }
     }
 
@@ -1032,4 +1175,4 @@ class AssessmentService {
     }
 }
 
-module.exports = new AssessmentService(process.env.DYNAMODB_TABLE_NAME || 'Assesment_placipy');
+module.exports = new AssessmentService();

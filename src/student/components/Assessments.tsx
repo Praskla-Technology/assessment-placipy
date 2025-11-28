@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import AssessmentService from '../../services/assessment.service';
+import StudentAssessmentService from '../../services/student.assessment.service';
 
 // Define the Assessment interface based on the provided schema
 interface Assessment {
@@ -65,7 +65,7 @@ const Assessments: React.FC = () => {
     const fetchAssessments = async () => {
       try {
         setLoading(true);
-        const response = await AssessmentService.getAllAssessments();
+        const response = await StudentAssessmentService.getAllAssessments();
         console.log('Fetched assessments:', response);
         
         // Transform the data to match our interface

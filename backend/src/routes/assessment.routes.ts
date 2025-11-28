@@ -48,16 +48,110 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
         const { id } = req.params;
         // Extract domain from user email
         const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        console.log('Extracted domain from user email:', domain);
+        
+        // Validate assessment ID
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+        
+        console.log(`Calling getAssessmentById with id: ${id}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentById(id, domain);
+        
+        // Check if we got a result
+        if (!result) {
+            console.log(`Assessment ${id} not found for domain ${domain}`);
+            return res.status(404).json({
+                success: false,
+                message: `Assessment ${id} not found for domain ${domain}. Please check if the assessment exists and you have access to it.`
+            });
+        }
+        
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment:', error);
+        
+        // Provide more specific error messages
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment'
+        });
+    }
+});
+
+// Get assessment by ID with questions (enhanced version)
+router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, res) => {
+    try {
+        console.log('=== Get Assessment With Questions Request ===');
+        console.log('User:', req.user);
+        console.log('Params:', req.params);
+        console.log('Assessment service methods:', Object.keys(assessmentService));
+
+        const { id } = req.params;
+        // Extract domain from user email
+        const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        console.log('Extracted domain from user email:', domain);
+        
+        // Validate assessment ID
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+        
+        // Check if the method exists
+        if (typeof assessmentService.getAssessmentWithQuestions !== 'function') {
+            console.error('getAssessmentWithQuestions method not found on assessmentService');
+            return res.status(500).json({
+                success: false,
+                message: 'Method not implemented'
+            });
+        }
+        
+        console.log(`Calling getAssessmentWithQuestions with id: ${id}, domain: ${domain}`);
+        const result = await assessmentService.getAssessmentWithQuestions(id, domain);
+        
+        // Check if we got a result
+        if (!result) {
+            console.log(`Assessment ${id} not found for domain ${domain}`);
+            return res.status(404).json({
+                success: false,
+                message: `Assessment ${id} not found for domain ${domain}. Please check if the assessment exists and you have access to it.`
+            });
+        }
+        
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        console.error('Error fetching assessment with questions:', error);
+        
+        // Provide more specific error messages
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch assessment with questions'
         });
     }
 });
@@ -72,14 +166,39 @@ router.get('/:id/questions', authMiddleware.authenticateToken, async (req, res) 
         const { id: assessmentId } = req.params;
         // Extract domain from user email or use default
         const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        console.log('Extracted domain from user email:', domain);
 
+        // Validate assessment ID
+        if (!assessmentId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+
+        console.log(`Calling getAssessmentQuestions with id: ${assessmentId}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentQuestions(assessmentId, domain);
+        
+        // Check if assessment exists but has no questions
+        if (result && Array.isArray(result) && result.length === 0) {
+            console.log(`Assessment ${assessmentId} exists but has no questions`);
+        }
+        
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment questions:', error);
+        
+        // Provide more specific error messages
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment questions'
@@ -414,6 +533,15 @@ router.post('/import/csv', authMiddleware.authenticateToken, async (req, res) =>
             message: error.message || 'Failed to import assessments from CSV'
         });
     }
+});
+
+// Test endpoint to check if routes are working
+router.get('/test-route', authMiddleware.authenticateToken, async (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'Test route is working',
+        timestamp: new Date().toISOString()
+    });
 });
 
 module.exports = router;

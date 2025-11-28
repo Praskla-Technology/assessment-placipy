@@ -37,26 +37,26 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
 });
 
 // Get student's results (student)
-router.get('/my-results', authMiddleware.authenticateToken, async (req, res) => {
-    try {
-        console.log('=== Get Student Results Request ===');
-        console.log('User:', req.user);
-        
-        const studentId = req.user.sub || req.user.username;
-        const results = await resultsService.getStudentResults(studentId);
-        
-        res.status(200).json({
-            success: true,
-            data: results
-        });
-    } catch (error: any) {
-        console.error('Error fetching student results:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to fetch student results'
-        });
-    }
-});
+// router.get('/my-results', authMiddleware.authenticateToken, async (req, res) => {
+//     try {
+//         console.log('=== Get Student Results Request ===');
+//         console.log('User:', req.user);
+//         
+//         const studentId = req.user.sub || req.user.username;
+//         const results = await resultsService.getStudentResults(studentId);
+//         
+//         res.status(200).json({
+//             success: true,
+//             data: results
+//         });
+//     } catch (error: any) {
+//         console.error('Error fetching student results:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: error.message || 'Failed to fetch student results'
+//         });
+//     }
+// });
 
 // Get specific assessment result (student)
 router.get('/my-results/:assessmentId', authMiddleware.authenticateToken, async (req, res) => {

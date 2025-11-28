@@ -240,7 +240,11 @@ const getProfile = async (req, res) => {
                 role: userData.role,
                 department: userData.department,
                 year: userData.year,
-                joiningDate: userData.joiningDate
+                joiningDate: userData.joiningDate,
+                phone: userData.phone || userData.mobile || '',
+                regNo: userData.regNo || userData.rollNumber || userData.registrationNumber || '',
+                rollNumber: userData.rollNumber || userData.regNo || '',
+                collegeName: userData.collegeName || userData.college || ''
             }
         });
     } catch (error) {

@@ -42,6 +42,41 @@ class Judge0Service {
    */
   async executeCodeWithTestCases(sourceCode: string, language: string, testCases: TestCase[]): Promise<any> {
     try {
+      // Handle case where there are no test cases
+      if (!testCases || !Array.isArray(testCases) || testCases.length === 0) {
+        console.log('No test cases provided, executing code without test cases');
+        
+        const languageId = this.languageIds[language.toLowerCase()] || 63; // Default to JavaScript
+        
+        // Execute code without test cases (just run it)
+        const submission: Judge0Submission = {
+          source_code: sourceCode,
+          language_id: languageId
+        };
+
+        // Submit code to Judge0
+        const submissionResponse = await axios.post(`${this.JUDGE0_API_URL}/submissions/?base64_encoded=false&wait=true`, submission, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RapidAPI-Key': this.API_KEY,
+            'X-RapidAPI-Host': this.API_HOST
+          }
+        });
+
+        const result: Judge0Response = submissionResponse.data;
+        
+        // Return result without test case evaluation
+        return {
+          success: result.status.id === 3, // Accepted status
+          status: result.status.description,
+          stdout: result.stdout || '',
+          stderr: result.stderr || '',
+          compile_output: result.compile_output || '',
+          message: result.message || '',
+          testResults: []
+        };
+      }
+      
       const languageId = this.languageIds[language.toLowerCase()] || 63; // Default to JavaScript
       const results = [];
       let totalMarks = 0;
@@ -49,7 +84,7 @@ class Judge0Service {
 
       // Run each test case
       for (const testCase of testCases) {
-        totalMarks += testCase.marks;
+        totalMarks += testCase.marks || 1; // Default to 1 mark if not specified
         
         const submission: Judge0Submission = {
           source_code: sourceCode,
@@ -75,7 +110,7 @@ class Judge0Service {
                       result.stdout.trim() === testCase.expectedOutput.trim();
         
         if (passed) {
-          obtainedMarks += testCase.marks;
+          obtainedMarks += testCase.marks || 1; // Default to 1 mark if not specified
         }
         
         results.push({
@@ -84,32 +119,59 @@ class Judge0Service {
           actualOutput: result.stdout || '',
           passed: passed,
           status: result.status.description,
-          marks: testCase.marks,
-          obtainedMarks: passed ? testCase.marks : 0
+          marks: testCase.marks || 1
         });
       }
-
-      const accuracy = totalMarks > 0 ? (obtainedMarks / totalMarks) * 100 : 0;
-
+      
       return {
-        testCases: results,
+        success: true,
         totalMarks: totalMarks,
         obtainedMarks: obtainedMarks,
-        accuracy: Math.round(accuracy * 100) / 100,
-        passedCount: results.filter(r => r.passed).length,
-        totalCount: results.length
+        percentage: totalMarks > 0 ? (obtainedMarks / totalMarks) * 100 : 0,
+        testResults: results
       };
     } catch (error) {
-      console.error('Judge0 execution error:', error);
-      throw new Error('Failed to execute code with Judge0');
+      console.error('Error executing code with test cases:', error);
+      throw new Error('Failed to execute code: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   }
-
+  
   /**
-   * Get language ID by language name
+   * Execute code with a single input (for cases without predefined test cases)
    */
-  getLanguageId(language: string): number {
-    return this.languageIds[language.toLowerCase()] || 63; // Default to JavaScript
+  async executeCode(sourceCode: string, language: string, input?: string): Promise<any> {
+    try {
+      const languageId = this.languageIds[language.toLowerCase()] || 63; // Default to JavaScript
+      
+      const submission: Judge0Submission = {
+        source_code: sourceCode,
+        language_id: languageId,
+        stdin: input || ''
+      };
+
+      // Submit code to Judge0
+      const submissionResponse = await axios.post(`${this.JUDGE0_API_URL}/submissions/?base64_encoded=false&wait=true`, submission, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RapidAPI-Key': this.API_KEY,
+          'X-RapidAPI-Host': this.API_HOST
+        }
+      });
+
+      const result: Judge0Response = submissionResponse.data;
+      
+      return {
+        success: result.status.id === 3, // Accepted status
+        status: result.status.description,
+        stdout: result.stdout || '',
+        stderr: result.stderr || '',
+        compile_output: result.compile_output || '',
+        message: result.message || ''
+      };
+    } catch (error) {
+      console.error('Error executing code:', error);
+      throw new Error('Failed to execute code: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
   }
 }
 

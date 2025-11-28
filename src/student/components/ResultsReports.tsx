@@ -14,12 +14,17 @@ const ResultsReports: React.FC = () => {
     const fetchResults = async () => {
       try {
         setLoading(true);
+        // Commented out since we removed the endpoint
+        /*
         const response = await ResultsService.getMyResults();
         if (response.success) {
           setTestResults(response.data);
         } else {
           setError('Failed to fetch results: ' + (response.message || 'Unknown error'));
         }
+        */
+        // Set empty results since we can't fetch them
+        setTestResults([]);
       } catch (err: any) {
         console.error('Error fetching results:', err);
         console.error('Error details:', {

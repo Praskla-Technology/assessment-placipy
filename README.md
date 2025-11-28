@@ -6,6 +6,7 @@ PlaciPy is a comprehensive placement management system designed for educational 
 
 - **Role-based Dashboards**: Separate interfaces for Students, Placement Training Officers (PTO), Placement Training Staff (PTS), and Administrators
 - **Assessment Management**: Create, schedule, and manage assessments for placement preparation
+- **Automatic Assessment Question Fetching**: Automatically fetches assessment questions from the Assessment_placipy_assesment_questions table by matching assessment IDs
 - **Student Tracking**: Monitor student progress and placement statistics
 - **Reporting & Analytics**: Generate detailed reports on placement statistics and performance metrics
 - **Secure Authentication**: AWS Cognito integration for secure user authentication and authorization
@@ -75,6 +76,36 @@ PlaciPy is a comprehensive placement management system designed for educational 
 - **Advanced Analytics Dashboard**: Enhanced data visualization and reporting
 - **Mobile Application**: React Native mobile app for on-the-go access
 - **Integration Capabilities**: APIs for integration with external systems (LMS, HR systems, etc.)
+
+## New Automatic Assessment Question Fetching Feature
+
+### Overview
+The system now includes enhanced functionality to automatically fetch assessment questions from the `Assessment_placipy_assesment_questions` table by matching assessment IDs between the assessments and questions tables. This eliminates the need for manual correlation and ensures questions are correctly associated with their assessments.
+
+### How It Works
+1. When requesting an assessment, the system automatically queries the questions table using the pattern:
+   - PK: `CLIENT#{domain}` 
+   - SK: `ASSESSMENT#{assessmentId}#*` (using begins_with)
+2. All question batches (MCQ and Coding) are automatically retrieved and combined
+3. Questions are sorted by question number for proper display order
+4. The response includes both assessment metadata and all associated questions
+
+### API Endpoints
+- `GET /api/assessments/{id}/with-questions` - Get assessment with questions combined
+- `GET /api/assessments/{id}/questions` - Get only assessment questions
+
+### Frontend Utilities
+The frontend now includes utility functions for easy integration:
+- `fetchAssessmentWithQuestions(assessmentId)` - Fetch assessment metadata with questions
+- `fetchAssessmentQuestions(assessmentId)` - Fetch only questions for an assessment
+- `fetchQuestionsForAssessment(assessmentId, domain)` - Fetch questions with domain matching
+
+### Benefits
+- Eliminates manual matching of assessment IDs between tables
+- Automatically combines question batches into a single array
+- Maintains proper question ordering
+- Reduces API calls by combining assessment metadata and questions
+- Provides type-specific question grouping (MCQ vs Coding)
 
 # Placipy - Student Assessment Platform
 

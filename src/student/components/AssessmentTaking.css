@@ -47,6 +47,21 @@
   100% { opacity: 1; }
 }
 
+.section-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f0f0f0;
+  color: #999;
+  border-color: #ddd;
+}
+
+.section-btn.disabled:hover {
+  background-color: #f0f0f0;
+  color: #999;
+  border-color: #ddd;
+  transform: none;
+}
+
 .fullscreen-btn {
   padding: 8px 16px;
   background-color: #9768E1;
@@ -528,6 +543,30 @@ input:checked + .slider:before {
   font-size: 0.9rem;
   color: black;
   font-weight: normal;
+}
+
+.option-item.correct-answer {
+  background-color: #d4edda !important;
+  border-color: #28a745 !important;
+}
+
+.option-item.incorrect-answer {
+  background-color: #f8d7da !important;
+  border-color: #dc3545 !important;
+}
+
+.feedback-icon {
+  margin-left: auto;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.feedback-icon.correct {
+  color: #28a745;
+}
+
+.feedback-icon.incorrect {
+  color: #dc3545;
 }
 
 /* Removed selected button styles */
@@ -1974,5 +2013,143 @@ input:checked + .slider:before {
     right: 10px;
     padding: 6px 10px;
     font-size: 0.8rem;
+  }
+}
+
+/* Test Cases Section Styles */
+.test-cases-section {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.test-cases-section h3 {
+  color: #495057;
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+}
+
+.test-cases-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.test-case-item {
+  background-color: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.test-case-header {
+  margin-bottom: 10px;
+}
+
+.test-case-number {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.95rem;
+}
+
+.test-case-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.test-case-input,
+.test-case-output {
+  font-size: 0.9rem;
+}
+
+.test-case-input strong,
+.test-case-output strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #495057;
+}
+
+.test-case-preformatted {
+  background-color: #f1f3f5;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  overflow-x: auto;
+}
+
+/* Responsive adjustments for test cases */
+@media (max-width: 768px) {
+  .test-case-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Coding submission button */
+.submission-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+  text-align: center;
+}
+
+.submit-btn.coding-submit {
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
+  padding: 12px 30px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.submit-btn.coding-submit:hover {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4);
+}
+
+/* Auto-submit button */
+.submit-btn.coding-submit.auto-submit {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  padding: 15px 25px;
+  font-size: 1.1rem;
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
+}
+
+/* Success message */
+.success-message {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: 500;
+}
+
+/* Responsive adjustments for all completed indicator */
+@media (max-width: 768px) {
+  .all-completed-indicator {
+    margin-left: 0;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    padding: 3px 8px;
   }
 }

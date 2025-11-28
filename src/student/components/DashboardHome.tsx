@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useUser } from '../../contexts/UserContext';
-import AssessmentService from '../../services/assessment.service';
+import StudentAssessmentService from '../../services/student.assessment.service';
 import ResultsService from '../../services/results.service';
 
 const DashboardHome: React.FC = () => {
@@ -44,7 +44,7 @@ const DashboardHome: React.FC = () => {
         setLoading(true);
         
         // Fetch all assessments
-        const assessmentsResponse = await AssessmentService.getAllAssessments();
+        const assessmentsResponse = await StudentAssessmentService.getAllAssessments();
         console.log('Fetched assessments:', assessmentsResponse);
         
         // Filter active assessments
@@ -55,6 +55,8 @@ const DashboardHome: React.FC = () => {
         setActiveAssessmentsCount(activeCount);
         
         // Fetch student's results to determine completed assessments
+        // Commented out since we removed the endpoint
+        /*
         try {
           const resultsResponse = await ResultsService.getMyResults();
           console.log('Fetched results:', resultsResponse);
@@ -74,6 +76,9 @@ const DashboardHome: React.FC = () => {
           });
           setCompletedAssessmentsCount(0);
         }
+        */
+        // Set completed assessments to 0 since we can't fetch them
+        setCompletedAssessmentsCount(0);
         
         setError(null);
       } catch (err: any) {

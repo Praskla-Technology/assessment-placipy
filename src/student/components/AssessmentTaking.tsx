@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './AssessmentTaking.css';
 import judge0Service, { type SubmissionResult } from '../../services/judge0.service';
-import AssessmentService from '../../services/assessment.service';
+import StudentAssessmentService from '../../services/student.assessment.service';
 import ResultsService from '../../services/results.service';
 
 // Define interfaces for assessment data
@@ -15,19 +15,15 @@ interface MCQQuestion {
   questionId: string;
   question: string;
   options: MCQOption[];
-  correctAnswer?: number[] | string[];
+  correctAnswer?: string[] | string;
   points?: number;
   difficulty?: string;
   subcategory?: string;
   examples?: { input: string; output: string }[];
 }
 
-interface TestCaseInputs {
-  input: string;
-}
-
 interface TestCase {
-  inputs: TestCaseInputs;
+  input: string;
   expectedOutput: string;
   description?: string;
 }
@@ -81,6 +77,7 @@ interface AssessmentData {
 const AssessmentTaking: React.FC = () => {
   // Get assessmentId from URL params
   const { assessmentId } = useParams<{ assessmentId: string }>();
+  const navigate = useNavigate();
   
   // State for assessment data
   const [assessmentData, setAssessmentData] = useState<AssessmentData | null>(null);
@@ -108,12 +105,16 @@ const AssessmentTaking: React.FC = () => {
   const [executionResult, setExecutionResult] = useState<{[key: string]: SubmissionResult}>({});
   const [testCaseResults, setTestCaseResults] = useState<{[key: string]: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[]}>({});
   const [allTestCasesPassed, setAllTestCasesPassed] = useState<boolean>(false);
+  // State to track which coding challenges have been successfully executed without errors
+  const [successfulExecutions, setSuccessfulExecutions] = useState<Record<string, boolean>>({});
   const [isAutoRunEnabled, setIsAutoRunEnabled] = useState<boolean>(false); // Disable auto-run by default
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [customInput, setCustomInput] = useState<string>('');
   
   // State for assessment completion
   const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [mcqResults, setMcqResults] = useState<any>(null);
   
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -305,6 +306,20 @@ console.log("In a browser environment, this would render as HTML");
           ...prev,
           [currentChallenge.questionId]: result
         }));
+        
+        // Mark as successful execution if no compilation or runtime errors
+        if (!result.compile_output && !result.stderr) {
+          setSuccessfulExecutions(prev => ({
+            ...prev,
+            [currentChallenge.questionId]: true
+          }));
+        } else {
+          // Mark as unsuccessful execution if there are errors
+          setSuccessfulExecutions(prev => ({
+            ...prev,
+            [currentChallenge.questionId]: false
+          }));
+        }
       }
     } catch (error) {
       // Provide a more user-friendly error message for rate limiting
@@ -329,6 +344,12 @@ console.log("In a browser environment, this would render as HTML");
           memory: 0
         }
       }));
+      
+      // Mark as unsuccessful execution due to error
+      setSuccessfulExecutions(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: false
+      }));
     } finally {
       setIsLoading(false);
     }
@@ -345,6 +366,11 @@ console.log("In a browser environment, this would render as HTML");
       
       // Check if testCases exist before accessing
       if (!currentChallenge.testCases) {
+        // Mark as successful execution if no test cases
+        setSuccessfulExecutions(prev => ({
+          ...prev,
+          [currentChallenge.questionId]: true
+        }));
         return;
       }
       
@@ -356,11 +382,11 @@ console.log("In a browser environment, this would render as HTML");
         
         try {
           // Preprocess input for array inputs in specific languages
-          let processedInput = testCase.inputs.input;
+          let processedInput = testCase.input;
           
           // For Python and JavaScript, convert array string to actual array if needed
           if ((selectedLanguage === 'python' || selectedLanguage === 'javascript') && 
-              testCase.inputs.input.startsWith('[') && testCase.inputs.input.endsWith(']')) {
+              testCase.input.startsWith('[') && testCase.input.endsWith(']')) {
             // Input is already in correct format for these languages
           }
           
@@ -377,7 +403,7 @@ console.log("In a browser environment, this would render as HTML");
             passed,
             actualOutput,
             expectedOutput,
-            input: testCase.inputs.input
+            input: testCase.input
           });
           
           // Add delay between test cases to avoid rate limiting (except for the last one)
@@ -404,7 +430,7 @@ console.log("In a browser environment, this would render as HTML");
             passed: false,
             actualOutput: errorMessage,
             expectedOutput: testCase.expectedOutput,
-            input: testCase.inputs.input
+            input: testCase.input
           });
           
           // If it's a rate limit error, stop executing more test cases
@@ -428,6 +454,12 @@ console.log("In a browser environment, this would render as HTML");
       // Check if all test cases passed
       const allPassed = results.every(result => result.passed);
       setAllTestCasesPassed(allPassed);
+      
+      // Mark as successful execution if no compilation or runtime errors
+      setSuccessfulExecutions(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: true
+      }));
       
       // Show result in execution panel
       setExecutionResult(prev => ({
@@ -466,6 +498,14 @@ console.log("In a browser environment, this would render as HTML");
           memory: 0
         }
       }));
+      
+      // Mark as unsuccessful execution due to error
+      if (currentChallenge?.questionId) {
+        setSuccessfulExecutions(prev => ({
+          ...prev,
+          [currentChallenge.questionId]: false
+        }));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -475,6 +515,9 @@ console.log("In a browser environment, this would render as HTML");
   useEffect(() => {
     // Prevent multiple calls to the API
     if (hasFetchedData.current || !assessmentId) {
+      if (!assessmentId) {
+        setError('Assessment ID is required');
+      }
       return;
     }
     
@@ -482,47 +525,82 @@ console.log("In a browser environment, this would render as HTML");
       try {
         setLoading(true);
         hasFetchedData.current = true; // Mark as fetched
-        const response = await AssessmentService.getAssessmentById(assessmentId);
+        
+        // Validate assessment ID before making API call
+        if (!assessmentId) {
+          setError('Assessment ID is required');
+          setLoading(false);
+          return;
+        }
+        
+        console.log(`Fetching assessment data for ID: ${assessmentId}`);
+        // Use the NEW endpoint to automatically fetch assessment with questions
+        const response = await StudentAssessmentService.getAssessmentWithQuestions(assessmentId);
         
         if (response.success) {
           // Add additional validation to ensure we have the required data
           if (!response.data) {
-            setError('Assessment data is missing');
+            setError('Assessment not found. Please check if the assessment exists and you have access to it.');
             setLoading(false);
             return;
           }
           
-          // Ensure questions array exists
-          if (!response.data.questions) {
-            response.data.questions = [];
+          // Extract assessment and questions from the new response format
+          const { assessment, questions } = response.data;
+          
+          // Check if assessment exists but has no questions
+          if (!questions || questions.length === 0) {
+            console.log(`Assessment ${assessmentId} exists but has no questions`);
           }
           
-          // Ensure mcqQuestions array exists
-          if (!response.data.mcqQuestions) {
-            response.data.mcqQuestions = response.data.questions.filter((q: any) => q.entityType === 'mcq');
+          // Transform the data to match our existing interface
+          const transformedData = {
+            ...assessment,
+            questions: questions || [],
+            mcqQuestions: questions?.filter((q: any) => q.entityType === 'mcq') || [],
+            codingQuestions: questions?.filter((q: any) => q.entityType === 'coding') || []
+          };
+          
+          // Log coding questions with test cases for debugging
+          const codingQuestions = transformedData.codingQuestions || [];
+          if (codingQuestions.length > 0) {
+            console.log('Found coding questions with test cases:');
+            codingQuestions.forEach((question: any, index: number) => {
+              console.log(`Question ${index + 1} (${question.questionId}):`, question);
+              if (question.testCases && question.testCases.length > 0) {
+                console.log(`  Test cases for ${question.questionId}:`, question.testCases);
+              } else {
+                console.log(`  No test cases found for ${question.questionId}`);
+              }
+            });
           }
           
-          // Ensure codingQuestions array exists
-          if (!response.data.codingQuestions) {
-            response.data.codingQuestions = response.data.questions.filter((q: any) => q.entityType === 'coding');
-          }
-          
-          // Ensure allQuestions array exists
-          if (!response.data.allQuestions) {
-            response.data.allQuestions = response.data.questions;
-          }
-          
-          setAssessmentData(response.data);
+          setAssessmentData(transformedData);
           
           // Set timer based on assessment configuration
-          if (response.data.configuration?.duration) {
-            setTimeLeft(response.data.configuration.duration * 60); // Convert minutes to seconds
+          if (assessment?.configuration?.duration) {
+            setTimeLeft(assessment.configuration.duration * 60); // Convert minutes to seconds
           }
         } else {
-          setError(response.message || 'Failed to load assessment data');
+          // Handle specific error cases
+          if (response.message && response.message.includes('not found')) {
+            setError(`Assessment not found: ${response.message}`);
+          } else {
+            setError(response.message || 'Failed to load assessment data');
+          }
         }
       } catch (err: any) {
-        setError(err.message || 'Failed to load assessment data');
+        console.error('Error fetching assessment data:', err);
+        // Provide more specific error messages
+        if (err.message && err.message.includes('not found')) {
+          setError(`Assessment not found: ${err.message}`);
+        } else if (err.message && err.message.includes('connect')) {
+          setError('Unable to connect to the server. Please check your internet connection and try again.');
+        } else if (err.message && err.message.includes('Authentication failed')) {
+          setError('Authentication failed. Please log in again.');
+        } else {
+          setError(err.message || 'Failed to load assessment data. Please try again later.');
+        }
       } finally {
         setLoading(false);
       }
@@ -654,18 +732,42 @@ console.log("In a browser environment, this would render as HTML");
   
   // Handle MCQ answer selection
   const handleMCQAnswerSelect = (optionIndex: number) => {
+    console.log('MCQ Answer Selected:', {
+      optionIndex,
+      currentQuestionId: mcqQuestions[currentMCQIndex]?.questionId,
+      currentQuestion: mcqQuestions[currentMCQIndex]
+    });
+    
     setMcqAnswers(prev => ({
       ...prev,
       [mcqQuestions[currentMCQIndex]?.questionId]: optionIndex
     }));
   };
   
-  // Handle navigation between MCQ questions
-  const handleMCQNavigation = (direction: 'prev' | 'next') => {
-    if (direction === 'prev' && currentMCQIndex > 0) {
-      setCurrentMCQIndex(currentMCQIndex - 1);
-    } else if (direction === 'next' && currentMCQIndex < mcqQuestions.length - 1) {
-      setCurrentMCQIndex(currentMCQIndex + 1);
+  // Handle MCQ navigation (Save and Next button)
+  const handleMCQNavigation = (direction: 'next' | 'prev') => {
+    if (direction === 'next') {
+      // Save current answer before moving to next question
+      if (currentMCQIndex < mcqQuestions.length - 1) {
+        // Move to next MCQ question
+        setCurrentMCQIndex(prev => prev + 1);
+      } else {
+        // Reached the end of MCQ questions
+        // Check if there are coding questions
+        if (codingChallenges.length > 0) {
+          // Switch to coding tab
+          setActiveTab('coding');
+          setCurrentCodingIndex(0);
+        } else {
+          // No coding questions, submit the assessment
+          handleSubmit();
+        }
+      }
+    } else if (direction === 'prev') {
+      // Move to previous question
+      if (currentMCQIndex > 0) {
+        setCurrentMCQIndex(prev => prev - 1);
+      }
     }
   };
   
@@ -734,8 +836,8 @@ console.log("In a browser environment, this would render as HTML");
     setShowLanguageAlert(false);
   };
 
-  // Calculate score for MCQ questions
-  const calculateMCQScore = (): { score: number, maxScore: number, answers: any } => {
+  // Calculate MCQ score
+  const calculateMCQScore = () => {
     let score = 0;
     let maxScore = 0;
     const answers: any = {};
@@ -748,11 +850,25 @@ console.log("In a browser environment, this would render as HTML");
         points: question.points || 1
       };
       
-      // Check if answer is correct (simplified check)
+      // Check if answer is correct by comparing selected option with correct answer
       if (mcqAnswers[question.questionId] !== undefined) {
-        // In a real implementation, you would compare with the correct answer
-        // For now, we'll just give points for any answer
-        score += question.points || 1;
+        // Get the option ID (A, B, C, D) for the selected index
+        const selectedOptionId = String.fromCharCode(65 + mcqAnswers[question.questionId]);
+        
+        // Check if the selected option matches any of the correct answers
+        let isCorrect = false;
+        if (Array.isArray(question.correctAnswer)) {
+          isCorrect = question.correctAnswer.includes(selectedOptionId);
+        } else if (typeof question.correctAnswer === 'string') {
+          isCorrect = question.correctAnswer === selectedOptionId;
+        }
+        
+        if (isCorrect) {
+          score += question.points || 1;
+        }
+        
+        // Store correctness for UI feedback
+        answers[question.questionId].isCorrect = isCorrect;
       }
     });
     
@@ -771,6 +887,10 @@ console.log("In a browser environment, this would render as HTML");
       const totalScore = mcqScore + codingScore;
       const totalMaxScore = mcqMaxScore + codingMaxScore;
       const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+      
+      // Store MCQ results for UI feedback
+      setMcqResults(answers);
+      setSubmitted(true);
       
       // Get user info from context or local storage
       const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -796,7 +916,15 @@ console.log("In a browser environment, this would render as HTML");
       // Save result
       await ResultsService.saveAssessmentResult(resultData);
       
-      alert('Assessment submitted successfully!');
+      // Navigate to success page with assessment data
+      navigate('/student/assessment-success', {
+        state: {
+          assessmentTitle: assessmentData?.title,
+          score: totalScore,
+          totalScore: totalMaxScore
+        }
+      });
+      
       setIsAssessmentCompleted(true);
       // Notify parent component that assessment is completed
       if (window.parent) {
@@ -900,14 +1028,16 @@ console.log("In a browser environment, this would render as HTML");
         <div className="header-controls">
           {/* Navigation buttons as tabs near timer */}
           <button 
-            className={`section-btn ${activeTab === 'mcq' ? 'active' : ''}`}
-            onClick={() => setActiveTab('mcq')}
+            className={`section-btn ${activeTab === 'mcq' ? 'active' : ''} ${mcqQuestions.length === 0 ? 'disabled' : ''}`}
+            onClick={() => mcqQuestions.length > 0 && setActiveTab('mcq')}
+            disabled={mcqQuestions.length === 0}
           >
             MCQ
           </button>
           <button 
-            className={`section-btn ${activeTab === 'coding' ? 'active' : ''}`}
-            onClick={() => setActiveTab('coding')}
+            className={`section-btn ${activeTab === 'coding' ? 'active' : ''} ${codingChallenges.length === 0 ? 'disabled' : ''}`}
+            onClick={() => codingChallenges.length > 0 && setActiveTab('coding')}
+            disabled={codingChallenges.length === 0}
           >
             Coding
           </button>
@@ -944,18 +1074,50 @@ console.log("In a browser environment, this would render as HTML");
                 </div>
                 
                 <div className="options-container small">
-                  {mcqQuestions[currentMCQIndex]?.options.map((option, index) => (
-                    <div
-                      key={index}
-                      className="option-item"
-                      onClick={() => handleMCQAnswerSelect(index)}
-                    >
-                      <div className={`radio-button ${mcqAnswers[mcqQuestions[currentMCQIndex]?.questionId] === index ? 'selected' : ''}`}>
-                        {mcqAnswers[mcqQuestions[currentMCQIndex]?.questionId] === index && <div className="radio-button-inner"></div>}
+                  {mcqQuestions[currentMCQIndex]?.options.map((option, index) => {
+                    // Check if this option should show feedback
+                    const questionId = mcqQuestions[currentMCQIndex]?.questionId;
+                    const showFeedback = submitted && mcqResults && mcqResults[questionId];
+                    const isSelected = mcqAnswers[questionId] === index;
+                    const isCorrectOption = Array.isArray(mcqQuestions[currentMCQIndex]?.correctAnswer) 
+                      ? mcqQuestions[currentMCQIndex]?.correctAnswer.includes(String.fromCharCode(65 + index))
+                      : mcqQuestions[currentMCQIndex]?.correctAnswer === String.fromCharCode(65 + index);
+                    
+                    let optionClass = "option-item";
+                    if (showFeedback) {
+                      if (isSelected && mcqResults[questionId].isCorrect) {
+                        optionClass += " correct-answer";
+                      } else if (isSelected && !mcqResults[questionId].isCorrect) {
+                        optionClass += " incorrect-answer";
+                      } else if (isCorrectOption) {
+                        optionClass += " correct-answer";
+                      }
+                    }
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={optionClass}
+                        onClick={() => {
+                          // Only allow selection if not submitted
+                          if (!submitted) {
+                            handleMCQAnswerSelect(index);
+                          }
+                        }}
+                      >
+                        <div className={`radio-button ${mcqAnswers[questionId] === index ? 'selected' : ''}`}>
+                          {mcqAnswers[questionId] === index && <div className="radio-button-inner"></div>}
+                        </div>
+                        <span className="option-text">{option.text}</span>
+                        {showFeedback && isSelected && mcqResults[questionId].isCorrect && (
+                          <span className="feedback-icon correct">✓</span>
+                        )}
+                        {showFeedback && isSelected && !mcqResults[questionId].isCorrect && (
+                          <span className="feedback-icon incorrect">✗</span>
+                        )}
                       </div>
-                      <span className="option-text">{option.text}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -973,25 +1135,27 @@ console.log("In a browser environment, this would render as HTML");
             <button 
               className="nav-btn next save-next"
               onClick={() => handleMCQNavigation('next')}
-              disabled={currentMCQIndex === mcqQuestions.length - 1}
+              disabled={currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0}
             >
-              Save and Next
+              {currentMCQIndex === mcqQuestions.length - 1 ? 'Submit' : 'Save and Next'}
             </button>
             
-            {/* Submit button on right side corner */}
-            <button 
-              className="submit-btn small right-corner"
-              onClick={handleSubmit}
-            >
-              Submit
-            </button>
+            {/* Submit button on right side corner - only show if no coding questions */}
+            {codingChallenges.length === 0 && (
+              <button 
+                className="submit-btn small right-corner"
+                onClick={handleSubmit}
+              >
+                Submit
+              </button>
+            )}
             
             {/* 6x6 grid on the right side corner */}
             <div className="question-grid-container">
               {mcqQuestions.map((_, index) => (
                 <div 
                   key={index}
-                  className={`question-number-circle ${mcqAnswers[index] !== undefined ? 'answered' : ''} ${index === currentMCQIndex ? 'current' : ''}`}
+                  className={`question-number-circle ${mcqAnswers[mcqQuestions[index]?.questionId] !== undefined ? 'answered' : ''} ${index === currentMCQIndex ? 'current' : ''}`}
                   onClick={() => setCurrentMCQIndex(index)}
                 >
                   {index + 1}
@@ -1067,10 +1231,33 @@ console.log("In a browser environment, this would render as HTML");
                   ) : (
                     <p>No examples available</p>
                   )}
-                  <div className="note">
-                    <strong>Note for Java:</strong> Class name must be 'Main' for proper execution.
-                  </div>
                 </div>
+                
+                {/* Test Cases Section */}
+                {codingChallenges[currentCodingIndex]?.testCases && codingChallenges[currentCodingIndex]?.testCases.length > 0 && (
+                  <div className="test-cases-section">
+                    <h3>Test Cases:</h3>
+                    <div className="test-cases-container">
+                      {codingChallenges[currentCodingIndex]?.testCases.map((testCase, index) => (
+                        <div key={index} className="test-case-item">
+                          <div className="test-case-header">
+                            <span className="test-case-number">Test Case {index + 1}</span>
+                          </div>
+                          <div className="test-case-content">
+                            <div className="test-case-input">
+                              <strong>Input:</strong>
+                              <pre className="test-case-preformatted">{testCase.input}</pre>
+                            </div>
+                            <div className="test-case-output">
+                              <strong>Expected Output:</strong>
+                              <pre className="test-case-preformatted">{testCase.expectedOutput}</pre>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="right-column">
@@ -1200,6 +1387,26 @@ int main() {
               </div>
             </div>
             
+            {/* Submit button that only appears when code runs without errors */}
+            {executionResult[codingChallenges[currentCodingIndex]?.questionId] && 
+             successfulExecutions[codingChallenges[currentCodingIndex]?.questionId] && (
+              <div className="submission-section">
+                <button 
+                  className="submit-btn coding-submit"
+                  onClick={handleSubmit}
+                >
+                  Submit Code & Finish Assessment
+                </button>
+                
+                {/* Success message when all coding challenges are completed */}
+                {codingChallenges.every(challenge => successfulExecutions[challenge.questionId]) && (
+                  <div className="success-message">
+                    <p>✓ All coding challenges executed successfully! Ready to submit.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="navigation-buttons">
               <button 
                 className="nav-btn prev"
@@ -1215,6 +1422,17 @@ int main() {
               >
                 {currentCodingIndex === codingChallenges.length - 1 ? 'Last Challenge' : 'Next Challenge'}
               </button>
+              
+              {/* Auto-submit button when on last challenge and all executed successfully */}
+              {currentCodingIndex === codingChallenges.length - 1 && 
+               codingChallenges.every(challenge => successfulExecutions[challenge.questionId]) && (
+                <button 
+                  className="submit-btn coding-submit auto-submit"
+                  onClick={handleSubmit}
+                >
+                  Submit Assessment
+                </button>
+              )}
             </div>
           </div>
         )}

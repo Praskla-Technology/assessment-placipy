@@ -9,10 +9,7 @@ interface StudentInfo {
   email: string;
   phone: string;
   regNo: string;
-  collegeName: string;
   department: string;
-  year: string;
-  section: string;
   enrollmentDate: string;
 }
 
@@ -38,10 +35,7 @@ const Profile: React.FC = () => {
     email: '',
     phone: '',
     regNo: '',
-    collegeName: '',
     department: '',
-    year: '',
-    section: '',
     enrollmentDate: new Date().toISOString().split('T')[0]
   });
 
@@ -67,6 +61,20 @@ const Profile: React.FC = () => {
     return (user as unknown as Record<string, unknown>)?.[key] as T | undefined;
   }, [user]);
 
+  const normalizeProfileData = useCallback((rawProfile: Record<string, unknown> | undefined) => {
+    if (!rawProfile) return null;
+    return {
+      name: (rawProfile.name as string) || (rawProfile.firstName as string) || user?.name || '',
+      email: (rawProfile.email as string) || user?.email || '',
+      phone: (rawProfile.phone as string) || (rawProfile.mobile as string) || '',
+      regNo: (rawProfile.regNo as string) || (rawProfile.rollNumber as string) || (rawProfile.registrationNumber as string) || '',
+      department: (rawProfile.department as string) || '',
+      enrollmentDate: (rawProfile.enrollmentDate as string) ||
+        (rawProfile.joiningDate as string) ||
+        new Date().toISOString().split('T')[0]
+    };
+  }, [user]);
+
   const fetchStudentProfile = useCallback(async () => {
     try {
       setLoadingProfile(true);
@@ -81,33 +89,24 @@ const Profile: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (response.data && response.data.profile) {
-        const profile = response.data.profile;
-        setStudentInfo({
-          name: profile.name || profile.firstName || user?.name || '',
-          email: profile.email || user?.email || '',
-          phone: profile.phone || '',
-          regNo: profile.regNo || profile.registrationNumber || '',
-          collegeName: profile.collegeName || profile.college || '',
-          department: profile.department || '',
-          year: profile.year || profile.yearOfStudy || '',
-          section: profile.section || '',
-          enrollmentDate: profile.enrollmentDate || new Date().toISOString().split('T')[0]
-        });
-        setErrorMessage('');
-      } else {
-        setStudentInfo(prev => ({
-          ...prev,
-          name: user?.name || prev.name,
-          email: user?.email || prev.email,
-          phone: getUserAttr<string>('phone') || prev.phone,
-          regNo: getUserAttr<string>('regNo') || prev.regNo,
-          collegeName: getUserAttr<string>('collegeName') || prev.collegeName,
-          department: user?.department || prev.department,
-          year: user?.year || prev.year,
-          section: getUserAttr<string>('section') || prev.section,
-        }));
+      if (response.data) {
+        const profileData = normalizeProfileData(response.data.profile || response.data.user);
+        if (profileData) {
+          setStudentInfo(profileData);
+          setErrorMessage('');
+          return;
+        }
       }
+
+      // fallback to context/user-derived values
+      setStudentInfo(prev => ({
+        ...prev,
+        name: user?.name || prev.name,
+        email: user?.email || prev.email,
+        phone: getUserAttr<string>('phone') || prev.phone,
+        regNo: getUserAttr<string>('regNo') || getUserAttr<string>('rollNumber') || prev.regNo,
+        department: user?.department || prev.department,
+      }));
     } catch (error) {
       console.error('Failed to fetch student profile:', error);
       if (user) {
@@ -116,17 +115,14 @@ const Profile: React.FC = () => {
           name: user.name || prev.name,
           email: user.email || prev.email,
           phone: getUserAttr<string>('phone') || prev.phone,
-          regNo: getUserAttr<string>('regNo') || prev.regNo,
-          collegeName: getUserAttr<string>('collegeName') || prev.collegeName,
+          regNo: getUserAttr<string>('regNo') || getUserAttr<string>('rollNumber') || prev.regNo,
           department: user.department || prev.department,
-          year: user.year || prev.year,
-          section: getUserAttr<string>('section') || prev.section,
         }));
       }
     } finally {
       setLoadingProfile(false);
     }
-  }, [user, getUserAttr]);
+  }, [user, getUserAttr, normalizeProfileData]);
 
   
 
@@ -180,11 +176,8 @@ const Profile: React.FC = () => {
       const payload = {
         name: studentInfo.name,
         regNo: studentInfo.regNo,
-        collegeName: studentInfo.collegeName,
         department: studentInfo.department,
         phone: studentInfo.phone,
-        year: studentInfo.year,
-        section: studentInfo.section,
       };
 
       // Debug logs for request
@@ -198,19 +191,24 @@ const Profile: React.FC = () => {
       console.log('[profile] update response:', response && response.data ? response.data : response);
 
       // Consider success when backend signals success or returns profile
-      const ok = response && response.data && (response.data.success === true || !!response.data.profile);
+      const updatedProfile = response?.data?.profile || response?.data?.user;
+      const ok = response && response.data && (response.data.success === true || !!updatedProfile);
       if (ok) {
         // Update local state immediately with the updated values
-        setStudentInfo(prev => ({
-          ...prev,
-          name: payload.name,
-          regNo: payload.regNo,
-          collegeName: payload.collegeName,
-          department: payload.department,
-          phone: payload.phone,
-          year: payload.year,
-          section: payload.section,
-        }));
+        if (updatedProfile) {
+          const normalized = normalizeProfileData(updatedProfile);
+          if (normalized) {
+            setStudentInfo(normalized);
+          }
+        } else {
+          setStudentInfo(prev => ({
+            ...prev,
+            name: payload.name,
+            regNo: payload.regNo,
+            department: payload.department,
+            phone: payload.phone,
+          }));
+        }
 
         // Refresh the cached user profile in context so UI shows DB-updated values
         try {
@@ -295,24 +293,12 @@ const Profile: React.FC = () => {
                   <div className="pts-form-display">{studentInfo.phone || 'N/A'}</div>
                 </div>
                 <div>
-                  <label className="pts-form-label">Registration Number</label>
+                  <label className="pts-form-label">Roll Number</label>
                   <div className="pts-form-display">{studentInfo.regNo || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="pts-form-label">College Name</label>
-                  <div className="pts-form-display">{studentInfo.collegeName || 'N/A'}</div>
                 </div>
                 <div>
                   <label className="pts-form-label">Department</label>
                   <div className="pts-form-display">{studentInfo.department || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="pts-form-label">Year</label>
-                  <div className="pts-form-display">{studentInfo.year || 'N/A'}</div>
-                </div>
-                <div>
-                  <label className="pts-form-label">Section</label>
-                  <div className="pts-form-display">{studentInfo.section || 'N/A'}</div>
                 </div>
                 <div>
                   <label className="pts-form-label">Enrollment Date</label>
@@ -355,23 +341,13 @@ const Profile: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="pts-form-label">Registration Number</label>
+                  <label className="pts-form-label">Roll Number</label>
                   <input
                     type="text"
                     value={studentInfo.regNo}
                     onChange={(e) => handleInfoChange('regNo', e.target.value)}
                     className="pts-form-input"
-                    placeholder="Enter your registration number"
-                  />
-                </div>
-                <div>
-                  <label className="pts-form-label">College Name</label>
-                  <input
-                    type="text"
-                    value={studentInfo.collegeName}
-                    onChange={(e) => handleInfoChange('collegeName', e.target.value)}
-                    className="pts-form-input"
-                    placeholder="Enter your college name"
+                    placeholder="Enter your roll number"
                   />
                 </div>
                 <div>
@@ -382,26 +358,6 @@ const Profile: React.FC = () => {
                     onChange={(e) => handleInfoChange('department', e.target.value)}
                     className="pts-form-input"
                     placeholder="Enter your department"
-                  />
-                </div>
-                <div>
-                  <label className="pts-form-label">Year</label>
-                  <input
-                    type="text"
-                    value={studentInfo.year}
-                    onChange={(e) => handleInfoChange('year', e.target.value)}
-                    className="pts-form-input"
-                    placeholder="Enter your year"
-                  />
-                </div>
-                <div>
-                  <label className="pts-form-label">Section</label>
-                  <input
-                    type="text"
-                    value={studentInfo.section}
-                    onChange={(e) => handleInfoChange('section', e.target.value)}
-                    className="pts-form-input"
-                    placeholder="Enter your section"
                   />
                 </div>
                 <div>

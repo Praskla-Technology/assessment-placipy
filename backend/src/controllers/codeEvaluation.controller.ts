@@ -1,75 +1,56 @@
-import { Request, Response } from 'express';
-import Judge0Service from '../services/Judge0Service';
-import AWS from 'aws-sdk';
-
-// Extend Request interface to include user property
-interface AuthenticatedRequest extends Request {
-    user?: any;
-    body: any; // Add body property to fix TypeScript error
-}
+// @ts-nocheck
+const AWS = require('aws-sdk');
+const Judge0Service = require('../services/Judge0Service');
 
 const dynamodb = new AWS.DynamoDB.DocumentClient({
     region: process.env.AWS_REGION
 });
 
 class CodeEvaluationController {
-    private assessmentsTableName: string;
     private questionsTableName: string;
 
     constructor() {
-        this.assessmentsTableName = process.env.ASSESSMENTS_TABLE_NAME || 'Assesment_placipy_assesments';
-        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assesment_placipy_assessment_questions';
+        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assessment_placipy_assesessment_questions';
     }
 
     /**
-     * Extract domain from email address
+     * Get domain from email address
      */
     private getDomainFromEmail(email: string): string {
-        if (!email || !email.includes('@')) {
-            return 'ksrce.ac.in'; // Default domain
-        }
-        return email.split('@')[1];
+        if (!email) return 'ksrce.ac.in';
+        const parts = email.split('@');
+        return parts.length > 1 ? parts[1] : 'ksrce.ac.in';
     }
 
     /**
-     * Evaluate student code against test cases using Judge0
+     * Evaluate coding question
      */
-    async evaluateCode(req: AuthenticatedRequest, res: Response) {
+    async evaluateCodingQuestion(req: any, res: any) {
         try {
-            const { assessmentId, questionId, code, language } = req.body as { 
-                assessmentId: string; 
-                questionId: string; 
-                code: string; 
-                language: string; 
-            };
-            const studentId = req.user?.username || req.user?.sub || req.user?.email || 'unknown_student';
-            // Extract email from user object
-            const userEmail = req.user?.email || req.user?.username || req.user?.sub || '';
-            
-            console.log('=== Code Evaluation Request ===');
-            console.log('Assessment ID:', assessmentId);
-            console.log('Question ID:', questionId);
-            console.log('Student ID:', studentId);
-            console.log('User Email:', userEmail);
-            console.log('Language:', language);
-            console.log('Code length:', code?.length);
+            console.log('=== Evaluate Coding Question Request ===');
+            console.log('Body:', req.body);
+            console.log('User:', req.user);
+
+            const { assessmentId, questionId, code, language } = req.body;
+            const userEmail = req.user.email;
 
             // Validate required fields
             if (!assessmentId || !questionId || !code || !language) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Missing required fields: assessmentId, questionId, code, language'
+                    message: 'Missing required fields: assessmentId, questionId, code, and language are required'
                 });
             }
 
-            // Get question with test cases from database
-            // We need to scan for the question since we don't know the exact PK structure
+            console.log(`Evaluating coding question ${questionId} for assessment ${assessmentId}`);
+
+            // Query questions table with swapped PK/SK structure
             const questionParams = {
                 TableName: this.questionsTableName,
-                FilterExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk_prefix': `ASSESSMENT#${assessmentId}`,
-                    ':sk': `CLIENT#${this.getDomainFromEmail(userEmail)}`
+                    ':pk': `CLIENT#${this.getDomainFromEmail(userEmail)}`,
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}#`
                 }
             };
 
@@ -77,7 +58,7 @@ class CodeEvaluationController {
             const questions = questionResult.Items || [];
             
             // Find the specific question
-            const question = questions.find((q: any) => q.questionId === questionId);
+            const question = questions.find(q => q.questionId === questionId);
             
             if (!question) {
                 return res.status(404).json({
@@ -86,43 +67,60 @@ class CodeEvaluationController {
                 });
             }
 
-            // Check if question has test cases
-            const testCases = question.testCases || [];
-            if (testCases.length === 0) {
+            // Handle coding questions with or without test cases
+            if (question.entityType === 'coding') {
+                const testCases = question.testCases || [];
+                
+                console.log('Found test cases:', testCases.length);
+                
+                // If there are test cases, execute with test cases
+                if (testCases.length > 0) {
+                    console.log('Executing code with test cases');
+                    const evaluationResult = await Judge0Service.executeCodeWithTestCases(code, language, testCases);
+                    
+                    // Prepare response with detailed results
+                    const response = {
+                        success: true,
+                        data: {
+                            assessmentId,
+                            questionId,
+                            ...evaluationResult
+                        }
+                    };
+                    
+                    return res.status(200).json(response);
+                } else {
+                    // If no test cases, just execute the code
+                    console.log('No test cases found, executing code without test cases');
+                    const executionResult = await Judge0Service.executeCode(code, language);
+                    
+                    // Prepare response
+                    const response = {
+                        success: true,
+                        data: {
+                            assessmentId,
+                            questionId,
+                            ...executionResult
+                        }
+                    };
+                    
+                    return res.status(200).json(response);
+                }
+            } else {
                 return res.status(400).json({
                     success: false,
-                    message: 'No test cases found for this question'
+                    message: 'Question is not a coding question'
                 });
             }
-
-            console.log('Found test cases:', testCases.length);
-
-            // Execute code with test cases using Judge0
-            const evaluationResult = await Judge0Service.executeCodeWithTestCases(code, language, testCases);
-
-            // Prepare response with detailed results
-            const response = {
-                success: true,
-                data: {
-                    assessmentId,
-                    questionId,
-                    studentId,
-                    language,
-                    ...evaluationResult,
-                    timestamp: new Date().toISOString()
-                }
-            };
-
-            console.log('Code evaluation completed:', response);
-            return res.status(200).json(response);
         } catch (error: any) {
-            console.error('Error evaluating code:', error);
-            return res.status(500).json({
+            console.error('Error evaluating coding question:', error);
+            
+            res.status(500).json({
                 success: false,
-                message: error.message || 'Failed to evaluate code'
+                message: error.message || 'Failed to evaluate coding question'
             });
         }
     }
 }
 
-export default new CodeEvaluationController();
+module.exports = new CodeEvaluationController();

@@ -9,7 +9,7 @@ class ResultsService {
     private resultsTableName: string;
 
     constructor() {
-        this.resultsTableName = process.env.RESULTS_TABLE_NAME || 'Assesment_placipy_results';
+        this.resultsTableName = process.env.RESULTS_TABLE_NAME || 'Assessment_placipy_results';
         console.log('ResultsService initialized with table name:', this.resultsTableName);
         console.log('Environment variables:');
         console.log('- RESULTS_TABLE_NAME:', process.env.RESULTS_TABLE_NAME);
@@ -121,6 +121,11 @@ class ResultsService {
                         ':pk': `ASSESSMENT#${assessmentId}#STUDENT#${studentId}`
                     }
                 };
+                
+                console.log('Query params:', JSON.stringify(params, null, 2));
+                const result = await dynamodb.query(params).promise();
+                console.log('Query result:', JSON.stringify(result, null, 2));
+                return result.Items || [];
             } else {
                 // Get all results for student (scan with filter)
                 params = {
@@ -130,16 +135,12 @@ class ResultsService {
                         ':studentId': studentId
                     }
                 };
+                
+                console.log('Scan params:', JSON.stringify(params, null, 2));
+                const result = await dynamodb.scan(params).promise();
+                console.log('Scan result:', JSON.stringify(result, null, 2));
+                return result.Items || [];
             }
-
-            console.log('Query params:', JSON.stringify(params, null, 2));
-            // Use scan for filter expressions, query for key conditions
-            const result = assessmentId ? 
-                await dynamodb.query(params).promise() : 
-                await dynamodb.scan(params).promise();
-            console.log('Query result:', JSON.stringify(result, null, 2));
-
-            return result.Items || [];
         } catch (error) {
             console.error('Error getting student results:', error);
             throw new Error('Failed to retrieve student results: ' + error.message);
