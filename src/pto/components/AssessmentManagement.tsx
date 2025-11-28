@@ -15,6 +15,7 @@ interface Assessment {
   attempts: number;
   questions: number;
   status: 'active' | 'inactive' | 'scheduled';
+  createdBy?: string;
 }
 
 interface Question {
@@ -48,18 +49,31 @@ const AssessmentManagement: React.FC = () => {
         setLoading(true);
         setError(null);
         const data = await PTOService.getAssessments();
-        const mapped: Assessment[] = data.map((a: AssessDto) => ({
-          id: a.id,
-          name: a.name,
-          department: a.department,
-          type: a.type,
-          duration: a.duration,
-          date: a.date,
-          timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-          attempts: a.attempts,
-          questions: a.questions,
-          status: a.status === 'active' ? 'active' : 'inactive'
-        }));
+        const mapped: Assessment[] = data.map((a: AssessDto | unknown) => {
+          const deptList = getNested(a, ['target', 'departments']);
+          const typeRaw = getProp(a, 'type');
+          const typeStr = asString(typeRaw).toUpperCase();
+          const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
+          const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
+          const createdName = asString(getProp(a, 'createdByName'));
+          const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+          const createdUser = createdName || asString(createdEmail).split('@')[0];
+          const qs = getProp(a, 'questions');
+          const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
+          return {
+            id: asString(getProp(a, 'id') ?? getProp(a, 'assessmentId') ?? getProp(a, 'SK')),
+            name: asString(getProp(a, 'name') ?? getProp(a, 'title')),
+            department: asString(getProp(a, 'department') ?? (Array.isArray(deptList) ? deptList[0] : '')),
+            type: typeStr === 'COLLEGE_WIDE' ? 'college-wide' : 'department-wise',
+            duration: asNumber(getProp(a, 'duration') ?? getProp(a, 'durationMinutes') ?? 60),
+            date: asString(getProp(a, 'date') ?? getNested(a, ['scheduling', 'startDate']) ?? ''),
+            timeWindow: { start: asString(start ?? ''), end: asString(end ?? '') },
+            attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
+            questions: totalQ,
+            status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
+            createdBy: createdUser || undefined
+          };
+        });
         setAssessments(mapped);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load assessments');
@@ -78,18 +92,7 @@ const AssessmentManagement: React.FC = () => {
   const [importText, setImportText] = useState('');
   const [importTargetId, setImportTargetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [scheduleTarget, setScheduleTarget] = useState<Assessment | null>(null);
-  const [scheduleMode, setScheduleMode] = useState<'schedule' | 'reschedule'>('schedule');
-  const [scheduleForm, setScheduleForm] = useState({
-    date: '',
-    startTime: '09:00',
-    endTime: '18:00',
-    duration: 60,
-    attempts: 1,
-    timezone: 'Asia/Kolkata',
-    notes: ''
-  });
+  
   const [formData, setFormData] = useState({
     name: '',
     department: '',
@@ -142,128 +145,97 @@ const AssessmentManagement: React.FC = () => {
 
   const handleDeleteAssessment = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this assessment?')) {
-      await PTOService.deleteAssessment(id);
-      const data = await PTOService.getAssessments();
-      const mapped: Assessment[] = data.map((a: AssessDto) => ({
-        id: a.id,
-        name: a.name,
-        department: a.department,
-        type: a.type,
-        duration: a.duration,
-        date: a.date,
-        timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-        attempts: a.attempts,
-        questions: a.questions,
-        status: a.status === 'active' ? 'active' : 'inactive'
-      }));
-      setAssessments(mapped);
+      setAssessments(prev => prev.filter(a => a.id !== id));
+      setDeletedIds(prev => [...prev, id]);
+      try {
+        await PTOService.deleteAssessment(id);
+      } finally {
+        setTimeout(() => { refreshAssessments(); }, 1500);
+      }
     }
   };
 
-  const openScheduleModal = (assessment: Assessment, mode: 'schedule' | 'reschedule' = 'schedule') => {
-    setScheduleTarget(assessment);
-    setScheduleMode(mode);
-    const startIso = assessment.timeWindow?.start || '';
-    const endIso = assessment.timeWindow?.end || '';
-    const toDate = (iso: string) => (iso ? new Date(iso) : null);
-    const sd = toDate(startIso);
-    const ed = toDate(endIso);
-    const fmtDate = (d: Date | null) => (d ? `${String(d.getFullYear()).padStart(4,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '');
-    const fmtTime = (d: Date | null) => (d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '09:00');
-    setScheduleForm({
-      date: fmtDate(sd),
-      startTime: fmtTime(sd),
-      endTime: fmtTime(ed),
-      duration: assessment.duration || 60,
-      attempts: assessment.attempts || 1,
-      timezone: 'Asia/Kolkata',
-      notes: ''
-    });
-    setIsScheduleModalOpen(true);
-  };
-
-  const combineDateTime = (date: string, time: string) => {
-    if (!date || !time) return '';
-    const d = new Date(`${date}T${time}:00`);
-    return d.toISOString();
-  };
-
-  const submitSchedule = async () => {
-    if (!scheduleTarget) return;
-    const startISO = combineDateTime(scheduleForm.date, scheduleForm.startTime);
-    const endISO = combineDateTime(scheduleForm.date, scheduleForm.endTime);
-    await PTOService.updateAssessment(scheduleTarget.id, {
-      scheduling: { startDate: startISO, endDate: endISO, timezone: scheduleForm.timezone },
-      duration: scheduleForm.duration,
-      attempts: scheduleForm.attempts,
-      instructions: scheduleForm.notes
-    });
-    await PTOService.scheduleAssessment(scheduleTarget.id);
-    const data = await PTOService.getAssessments();
-    const mapped: Assessment[] = data.map((a: AssessDto) => ({
-      id: a.id,
-      name: a.name,
-      department: a.department,
-      type: a.type,
-      duration: a.duration,
-      date: a.date,
-      timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-      attempts: a.attempts,
-      questions: a.questions,
-      status: a.status === 'active' ? 'active' : 'inactive'
-    }));
-    setAssessments(mapped);
-    setIsScheduleModalOpen(false);
-    setScheduleTarget(null);
-  };
+  
 
   const refreshAssessments = async () => {
     const data = await PTOService.getAssessments();
-    const mapped: Assessment[] = data.map((a: AssessDto) => ({
-      id: a.id,
-      name: a.name,
-      department: a.department,
-      type: a.type,
-      duration: a.duration,
-      date: a.date,
-      timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-      attempts: a.attempts,
-      questions: a.questions,
-      status: a.status === 'active' ? 'active' : 'inactive'
-    }));
-    setAssessments(mapped);
+    const mapped: Assessment[] = data.map((a: AssessDto | unknown) => {
+      const deptList = getNested(a, ['target', 'departments']);
+      const typeRaw = getProp(a, 'type');
+      const typeStr = asString(typeRaw).toUpperCase();
+      const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
+      const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
+      const createdName = asString(getProp(a, 'createdByName'));
+          const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+          const createdUser = createdName || asString(createdEmail).split('@')[0];
+      const qs = getProp(a, 'questions');
+      const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
+      return {
+        id: asString(getProp(a, 'id') ?? getProp(a, 'assessmentId') ?? getProp(a, 'SK')),
+        name: asString(getProp(a, 'name') ?? getProp(a, 'title')),
+        department: asString(getProp(a, 'department') ?? (Array.isArray(deptList) ? deptList[0] : '')),
+        type: typeStr === 'COLLEGE_WIDE' ? 'college-wide' : 'department-wise',
+        duration: asNumber(getProp(a, 'duration') ?? getProp(a, 'durationMinutes') ?? 60),
+        date: asString(getProp(a, 'date') ?? getNested(a, ['scheduling', 'startDate']) ?? ''),
+        timeWindow: { start: asString(start ?? ''), end: asString(end ?? '') },
+        attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
+        questions: totalQ,
+        status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
+            createdBy: createdUser || undefined
+          };
+    });
+    const filtered = mapped.filter(a => !(deletedIds || []).includes(a.id));
+    setAssessments(prev => {
+      const prevById = new Map(prev.map(a => [a.id, a]));
+      return filtered.map(cur => {
+        const old = prevById.get(cur.id);
+        if (!old) return cur;
+        return {
+          ...cur,
+          name: cur.name || old.name,
+          department: cur.department || old.department,
+          date: cur.date || old.date,
+          timeWindow: {
+            start: cur.timeWindow.start || old.timeWindow.start,
+            end: cur.timeWindow.end || old.timeWindow.end,
+          },
+          attempts: typeof cur.attempts === 'number' ? cur.attempts : old.attempts,
+          questions: typeof cur.questions === 'number' && cur.questions > 0 ? cur.questions : old.questions,
+          createdBy: cur.createdBy || old.createdBy,
+          status: cur.status || old.status,
+        };
+      });
+    });
   };
 
   const handleActivate = async (id: string) => {
-    await PTOService.enableAssessment(id);
-    await refreshAssessments();
+    // Optimistic update for better UX
+    setAssessments(prev => prev.map(a => a.id === id ? { ...a, status: 'active' } : a));
+    try {
+      await PTOService.enableAssessment(id);
+    } finally {
+      await refreshAssessments();
+    }
   };
 
   const handleDisable = async (id: string) => {
-    await PTOService.disableAssessment(id);
-    await refreshAssessments();
+    // Optimistic update for better UX
+    setAssessments(prev => prev.map(a => a.id === id ? { ...a, status: 'inactive' } : a));
+    try {
+      await PTOService.disableAssessment(id);
+    } finally {
+      await refreshAssessments();
+    }
   };
 
-  const handleCancelSchedule = async (id: string) => {
-    await PTOService.disableAssessment(id);
-    await refreshAssessments();
-  };
+  
 
   // Legacy status toggle removed in favor of explicit actions
 
-  const scheduleAssessment = (id: string) => {
-    const assessment = assessments.find(a => a.id === id);
-    if (!assessment) return;
-    openScheduleModal(assessment, 'schedule');
-  };
-
-  const rescheduleAssessment = (id: string) => {
-    const assessment = assessments.find(a => a.id === id);
-    if (!assessment) return;
-    openScheduleModal(assessment, 'reschedule');
-  };
+  
 
   const [previewData, setPreviewData] = useState<AssessmentDetail | null>(null);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const handlePreview = async (assessment: Assessment) => {
     const full = await PTOService.getAssessment(assessment.id) as AssessmentDetail;
     setSelectedAssessment({
@@ -401,6 +373,7 @@ const AssessmentManagement: React.FC = () => {
             <tr>
               <th>Assessment Name</th>
               <th>Department</th>
+              <th>Created By</th>
               <th>Type</th>
               <th>Duration</th>
               <th>Status</th>
@@ -410,12 +383,13 @@ const AssessmentManagement: React.FC = () => {
           <tbody>
             {/* Active Section */}
             {assessments.filter(a => a.status === 'active').length > 0 && (
-              <tr><td colSpan={8}><strong>Active</strong></td></tr>
+              <tr><td colSpan={7}><strong>Active</strong></td></tr>
             )}
             {assessments.filter(a => a.status === 'active').map(assessment => (
               <tr key={`active-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
                 <td>{assessment.name || '(Untitled)'} </td>
                 <td>{assessment.department}</td>
+                <td>{assessment.createdBy || '—'}</td>
                 <td>
                   <span className={`type-badge ${assessment.type}`}>
                     {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
@@ -428,7 +402,7 @@ const AssessmentManagement: React.FC = () => {
                 <td>
                   <div className="action-buttons">
                     <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
-                    <button className="text-btn" onClick={() => handleDisable(assessment.id)} title="Disable" type="button">Disable</button>
+                    <button className="text-btn" onClick={() => handleDisable(assessment.id)} title="Deactivate" type="button">Deactivate</button>
                     <button className="text-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }} title="Import Questions" type="button">Import</button>
                   </div>
                 </td>
@@ -439,12 +413,13 @@ const AssessmentManagement: React.FC = () => {
 
             {/* Inactive Section */}
             {assessments.filter(a => a.status === 'inactive').length > 0 && (
-              <tr><td colSpan={8}><strong>Inactive</strong></td></tr>
+              <tr><td colSpan={7}><strong>Inactive</strong></td></tr>
             )}
               {assessments.filter(a => a.status === 'inactive').map(assessment => (
                 <tr key={`inactive-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
                   <td>{assessment.name || '(Untitled)'} </td>
                   <td>{assessment.department}</td>
+                  <td>{assessment.createdBy || '—'}</td>
                   <td>
                     <span className={`type-badge ${assessment.type}`}>
                       {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
@@ -454,13 +429,13 @@ const AssessmentManagement: React.FC = () => {
                 <td>
                   <span className={`status-badge ${assessment.status}`}>Inactive</span>
                 </td>
-                  <td>
-                    <div className="action-buttons">
-                      <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                <td>
+                  <div className="action-buttons">
+                    <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
                       <button className="text-btn" onClick={() => handleActivate(assessment.id)} title="Activate" type="button">Activate</button>
                       <button className="icon-btn delete-btn" onClick={() => handleDeleteAssessment(assessment.id)} title="Delete"><FaTrash /></button>
-                    </div>
-                  </td>
+                  </div>
+                </td>
                 </tr>
               ))}
           </tbody>
@@ -473,24 +448,39 @@ const AssessmentManagement: React.FC = () => {
           <div className="modal-content large" onClick={(e) => e.stopPropagation()} style={{ width: '95vw', maxWidth: '1200px', maxHeight: '80vh' }}>
             <h3>Create Assessment</h3>
             <div style={{ height: 'calc(80vh - 64px)', overflow: 'auto' }}>
-              <PTSAssessmentCreation />
+              <div className="pts-dashboard">
+                <PTSAssessmentCreation />
+              </div>
             </div>
             <div className="modal-actions">
               <button className="secondary-btn" onClick={async () => {
                 setIsAddModalOpen(false);
                 const data = await PTOService.getAssessments();
-                const mapped: Assessment[] = data.map((a: AssessDto) => ({
-                  id: a.id,
-                  name: a.name,
-                  department: a.department,
-                  type: a.type,
-                  duration: a.duration,
-                  date: a.date,
-                  timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-                  attempts: a.attempts,
-                  questions: a.questions,
-                  status: a.status === 'active' ? 'active' : 'inactive'
-                }));
+                const mapped: Assessment[] = data.map((a: AssessDto | unknown) => {
+                  const deptList = getNested(a, ['target', 'departments']);
+                  const typeRaw = getProp(a, 'type');
+                  const typeStr = asString(typeRaw).toUpperCase();
+                  const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
+                  const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
+                  const createdName = asString(getProp(a, 'createdByName'));
+                  const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+                  const createdUser = createdName || asString(createdEmail).split('@')[0];
+                  const qs = getProp(a, 'questions');
+                  const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
+                  return {
+                    id: asString(getProp(a, 'id') ?? getProp(a, 'assessmentId') ?? getProp(a, 'SK')),
+                    name: asString(getProp(a, 'name') ?? getProp(a, 'title')),
+                    department: asString(getProp(a, 'department') ?? (Array.isArray(deptList) ? deptList[0] : '')),
+                    type: typeStr === 'COLLEGE_WIDE' ? 'college-wide' : 'department-wise',
+                    duration: asNumber(getProp(a, 'duration') ?? getProp(a, 'durationMinutes') ?? 60),
+                    date: asString(getProp(a, 'date') ?? getNested(a, ['scheduling', 'startDate']) ?? ''),
+                    timeWindow: { start: asString(start ?? ''), end: asString(end ?? '') },
+                    attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
+                    questions: totalQ,
+                    status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
+                    createdBy: createdUser || undefined
+                  };
+                });
                 setAssessments(mapped);
               }}>Close</button>
             </div>
@@ -690,55 +680,32 @@ const AssessmentManagement: React.FC = () => {
         </div>
       )}
 
-      {isScheduleModalOpen && scheduleTarget && (
-        <div className="modal-overlay" onClick={() => setIsScheduleModalOpen(false)}>
-          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
-            <h3>{scheduleMode === 'reschedule' ? 'Reschedule Assessment' : 'Schedule Assessment'}</h3>
-            <div className="form-group">
-              <label>Date</label>
-              <input type="date" value={scheduleForm.date} onChange={(e) => setScheduleForm({ ...scheduleForm, date: e.target.value })} />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Start Time</label>
-                <input type="time" value={scheduleForm.startTime} onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label>End Time</label>
-                <input type="time" value={scheduleForm.endTime} onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })} />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Duration (minutes)</label>
-                <input type="number" min={1} value={scheduleForm.duration} onChange={(e) => setScheduleForm({ ...scheduleForm, duration: parseInt(e.target.value) || 1 })} />
-              </div>
-              <div className="form-group">
-                <label>Attempts</label>
-                <input type="number" min={1} value={scheduleForm.attempts} onChange={(e) => setScheduleForm({ ...scheduleForm, attempts: parseInt(e.target.value) || 1 })} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Timezone</label>
-              <select value={scheduleForm.timezone} onChange={(e) => setScheduleForm({ ...scheduleForm, timezone: e.target.value })}>
-                <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
-                <option value="UTC">UTC</option>
-                <option value="Europe/Paris">Europe/Paris</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Notes (optional)</label>
-              <textarea rows={4} placeholder="Any scheduling notes or instructions" value={scheduleForm.notes} onChange={(e) => setScheduleForm({ ...scheduleForm, notes: e.target.value })} />
-            </div>
-            <div className="modal-actions">
-              <button className="primary-btn" onClick={submitSchedule}>{scheduleMode === 'reschedule' ? 'Save' : 'Schedule'}</button>
-              <button className="secondary-btn" onClick={() => setIsScheduleModalOpen(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 };
 
 export default AssessmentManagement;
+  const getProp = (obj: unknown, key: string): unknown => {
+    if (obj && typeof obj === 'object' && key in (obj as Record<string, unknown>)) {
+      return (obj as Record<string, unknown>)[key];
+    }
+    return undefined;
+  };
+  const getNested = (obj: unknown, keys: string[]): unknown => {
+    let cur: unknown = obj;
+    for (const k of keys) {
+      if (cur && typeof cur === 'object' && k in (cur as Record<string, unknown>)) {
+        cur = (cur as Record<string, unknown>)[k];
+      } else {
+        return undefined;
+      }
+    }
+    return cur;
+  };
+  const asString = (v: unknown, fallback = ''): string => {
+    return typeof v === 'string' ? v : String(v ?? fallback);
+  };
+  const asNumber = (v: unknown, fallback = 0): number => {
+    return typeof v === 'number' ? v : Number(v ?? fallback);
+  };

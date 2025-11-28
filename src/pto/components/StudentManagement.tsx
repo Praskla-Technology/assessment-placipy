@@ -19,11 +19,16 @@ const StudentManagement: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
+  const [filterAssessment, setFilterAssessment] = useState('all');
+  const [assessments, setAssessments] = useState<Array<{ id: string; name: string; department: string; status?: string }>>([]);
   const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [messageData, setMessageData] = useState({ subject: '', message: '', tags: '' });
   const [attachments, setAttachments] = useState<Array<{ filename: string; contentType: string; data: string }>>([]);
   const [isConversationModalOpen, setIsConversationModalOpen] = useState(false);
+  const [isInboxPage, setIsInboxPage] = useState(false);
+  const [inboxTab, setInboxTab] = useState<'messages' | 'announcements'>('messages');
+  const [inboxStudentEmail, setInboxStudentEmail] = useState('');
   const [conversationFor, setConversationFor] = useState<string>('');
   const [messages, setMessages] = useState<Array<{ messageId: string; senderType: string; senderId: string; recipientType: string; recipientId: string; message: string; timestamp: string; readStatus: boolean }>>([]);
   const [messagesNextToken, setMessagesNextToken] = useState<any>(null);
@@ -59,8 +64,15 @@ const StudentManagement: React.FC = () => {
         const unique = Array.from(new Set(codes));
         setDepartments(['all', ...unique]);
         try {
+          const asses = await PTOService.getAssessments();
+          const mappedAss = (asses || []).map((a: any) => ({ id: String(a.id || a.assessmentId || a.SK || ''), name: String(a.name || a.title || ''), department: String(a.department || (Array.isArray((a.target||{}).departments) ? (a.target as any).departments[0] : '')), status: String((a.status || '').toLowerCase()) }));
+          setAssessments([{ id: 'all', name: 'All Assessments', department: '' }, ...mappedAss.filter(x => x.id && x.name)]);
+        } catch {}
+        try {
           const ann = await PTOService.listAnnouncements({ limit: 10 });
-          setAnnouncements(ann.items || []);
+          const items = (ann.items || []).slice().sort((a: any, b: any) => String(b.createdAt || b.SK).localeCompare(String(a.createdAt || a.SK)));
+          const uniq = Array.from(new Map(items.map((x: any) => [String(x.SK || x.id), x])).values());
+          setAnnouncements(uniq);
         } catch {}
       } catch (e: any) {
         setError(e.message || 'Failed to load students');
@@ -76,7 +88,13 @@ const StudentManagement: React.FC = () => {
                          student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = filterDepartment === 'all' || student.department === filterDepartment;
-    return matchesSearch && matchesDepartment;
+    let matchesAssessment = true;
+    if (filterAssessment !== 'all') {
+      const selected = assessments.find(a => a.id === filterAssessment);
+      const dept = selected?.department || '';
+      matchesAssessment = !dept || student.department === dept;
+    }
+    return matchesSearch && matchesDepartment && matchesAssessment;
   });
 
   const handleSelectStudent = (id: number) => {
@@ -96,16 +114,19 @@ const StudentManagement: React.FC = () => {
   const handleSendMessage = async () => {
     if (selectedStudents.length > 0 && messageData.subject && messageData.message) {
       const recipients = filteredStudents.filter(s => selectedStudents.includes(s.id));
-      for (const r of recipients) {
+      const emails = Array.from(new Set(recipients.map(r => r.email)));
+      let sent = 0;
+      for (const em of emails) {
         try {
-          await PTOService.sendMessage(r.email, `${messageData.subject}\n\n${messageData.message}`, attachments);
+          await PTOService.sendMessage(em, `${messageData.subject}\n\n${messageData.message}`, attachments);
+          sent += 1;
         } catch (e) {}
       }
       setIsMessageModalOpen(false);
       setMessageData({ subject: '', message: '', tags: '' });
       setAttachments([]);
       setSelectedStudents([]);
-      alert(`Message sent to ${recipients.length} student(s)`);
+      alert(`Message sent to ${sent} student(s)`);
     }
   };
 
@@ -150,6 +171,13 @@ const StudentManagement: React.FC = () => {
     } catch {}
   };
 
+  const deleteMessage = async (msg: { messageId: string }) => {
+    try {
+      await PTOService.deleteMessage({ recipientId: conversationFor, messageId: msg.messageId });
+      setMessages(prev => (prev || []).filter(m => m.messageId !== msg.messageId));
+    } catch {}
+  };
+
   return (
     <div className="pto-component-page">
       {error && <div className="admin-error"><p>{error}</p></div>}
@@ -174,7 +202,7 @@ const StudentManagement: React.FC = () => {
           <FaFilter size={24} color="#9768E1" />
           <div className="stat-content">
             <h3>Active Tests</h3>
-            <p className="stat-value">{students.reduce((sum, s) => sum + s.testsParticipated, 0)}</p>
+            <p className="stat-value">{assessments.filter(a => a.id !== 'all' && a.status === 'active').length}</p>
           </div>
         </div>
       </div>
@@ -184,7 +212,6 @@ const StudentManagement: React.FC = () => {
         <button 
           className="primary-btn"
           onClick={() => {
-            setSelectedStudents([]);
             setIsMessageModalOpen(true);
           }}
           disabled={selectedStudents.length === 0}
@@ -193,15 +220,10 @@ const StudentManagement: React.FC = () => {
         </button>
         <button
           className="secondary-btn"
-          onClick={() => {
-            if (selectedStudents.length === 1) {
-              const student = filteredStudents.find(s => s.id === selectedStudents[0]);
-              if (student) openConversation(student.email);
-            }
-          }}
-          disabled={selectedStudents.length !== 1}
+          onClick={() => setIsInboxPage(true)}
+          disabled={false}
         >
-          Inbox (1)
+          Inbox
         </button>
         <button 
           className="secondary-btn"
@@ -238,9 +260,123 @@ const StudentManagement: React.FC = () => {
             ))}
           </select>
         </div>
+        <div className="filter-box">
+          <FaFilter className="filter-icon" />
+          <select
+            value={filterAssessment}
+            onChange={(e) => setFilterAssessment(e.target.value)}
+          >
+            {assessments.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name || (a.id === 'all' ? 'All Assessments' : a.id)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
+      {/* Inbox Page */}
+      {isInboxPage && (
+        <div className="table-container">
+          <div className="action-buttons" style={{ marginBottom: 12 }}>
+            <button className="secondary-btn" onClick={() => setIsInboxPage(false)}>Back</button>
+            <button className={`secondary-btn ${inboxTab === 'messages' ? 'active' : ''}`} onClick={() => setInboxTab('messages')}>Messages</button>
+            <button className={`secondary-btn ${inboxTab === 'announcements' ? 'active' : ''}`} onClick={() => setInboxTab('announcements')}>Announcements</button>
+          </div>
+          {inboxTab === 'messages' && (
+            <div>
+              <div className="form-row" style={{ marginBottom: 12 }}>
+                <div className="form-group">
+                  <label>Select Student</label>
+                  <select value={inboxStudentEmail} onChange={async (e) => {
+                    const email = e.target.value;
+                    setInboxStudentEmail(email);
+                    if (email) {
+                      await openConversation(email);
+                    }
+                  }}>
+                    <option value="">Choose student…</option>
+                    {filteredStudents.map(s => (
+                      <option key={s.id} value={s.email}>{s.name} ({s.email})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="messages-list">
+                {messagesLoading && <div className="admin-loading"><div className="spinner"></div><p>Loading...</p></div>}
+                {!messagesLoading && (!messages || messages.length === 0) && (
+                  <div className="admin-empty-chart"><p>No messages</p></div>
+                )}
+                {(messages || []).map(m => (
+                  <div key={m.messageId} className={`message-item ${m.senderType === 'PTO' ? 'sent' : 'received'}`}>
+                    <div className="message-meta">
+                      <span>{new Date(m.timestamp).toLocaleString()}</span>
+                      {!m.readStatus && (
+                        <button className="text-btn" onClick={() => markRead(m)}>Mark read</button>
+                      )}
+                      <button className="text-btn danger" onClick={() => deleteMessage(m)}>Delete</button>
+                    </div>
+                    <div className="message-body">{m.message}</div>
+                    {Array.isArray((m as any).attachments) && (m as any).attachments.length > 0 && (
+                      <div className="attachments">
+                        {((m as any).attachments as any[]).map((att: any, idx: number) => (
+                          <a key={idx} href={`data:${att.contentType};base64,${att.data}`} download={att.filename} className="text-btn">
+                            {att.filename}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {messagesNextToken && (
+                  <div className="modal-actions">
+                    <button className="secondary-btn" onClick={loadMoreMessages}>Load more</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {inboxTab === 'announcements' && (
+            <div className="table-container" style={{ marginTop: 12 }}>
+              <h3>Recent Announcements</h3>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Message</th>
+                    <th>Tags</th>
+                    <th>Created At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {announcements.map((a: any) => (
+                    <tr key={a.SK}>
+                      <td>{a.title}</td>
+                      <td>{a.message}</td>
+                      <td>{Array.isArray(a.tags) ? a.tags.join(', ') : ''}</td>
+                      <td>
+                        {new Date(a.createdAt).toLocaleString()}
+                        <button className="icon-btn delete-btn" title="Delete" style={{ marginLeft: 12 }} onClick={async () => {
+                          if (!window.confirm('Delete this announcement?')) return;
+                          try {
+                            await PTOService.deleteAnnouncement(a.id || a.SK);
+                            setAnnouncements(prev => prev.filter(x => (x.id || x.SK) !== (a.id || a.SK)));
+                          } catch (e) {
+                            alert('Failed to delete announcement');
+                          }
+                        }}>✖</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Students Table */}
+      {!isInboxPage && (
       <div className="table-container">
         <table className="data-table">
           <thead>
@@ -258,7 +394,6 @@ const StudentManagement: React.FC = () => {
               <th>Email</th>
               <th>Tests Participated</th>
               <th>Average Score</th>
-              <th>Messages</th>
             </tr>
           </thead>
           <tbody>
@@ -281,16 +416,12 @@ const StudentManagement: React.FC = () => {
                     {student.avgScore}%
                   </span>
                 </td>
-                <td>
-                  <button className="text-btn" onClick={() => openConversation(student.email)}>
-                    View Messages
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Send Message Modal */}
       {isMessageModalOpen && (
@@ -379,6 +510,7 @@ const StudentManagement: React.FC = () => {
                     {!m.readStatus && (
                       <button className="text-btn" onClick={() => markRead(m)}>Mark read</button>
                     )}
+                    <button className="text-btn danger" onClick={() => deleteMessage(m)}>Delete</button>
                   </div>
                   <div className="message-body">{m.message}</div>
                   {Array.isArray((m as any).attachments) && (m as any).attachments.length > 0 && (
@@ -422,7 +554,18 @@ const StudentManagement: React.FC = () => {
                   <td>{a.title}</td>
                   <td>{a.message}</td>
                   <td>{Array.isArray(a.tags) ? a.tags.join(', ') : ''}</td>
-                  <td>{new Date(a.createdAt).toLocaleString()}</td>
+                  <td>
+                    {new Date(a.createdAt).toLocaleString()}
+                    <button className="icon-btn delete-btn" title="Delete" style={{ marginLeft: 12 }} onClick={async () => {
+                      if (!window.confirm('Delete this announcement?')) return;
+                      try {
+                        await PTOService.deleteAnnouncement(a.id || a.SK);
+                        setAnnouncements(prev => prev.filter(x => (x.id || x.SK) !== (a.id || a.SK)));
+                      } catch (e) {
+                        alert('Failed to delete announcement');
+                      }
+                    }}>✖</button>
+                  </td>
                 </tr>
               ))}
             </tbody>

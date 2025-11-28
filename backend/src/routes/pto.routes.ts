@@ -429,6 +429,16 @@ router.get('/announcements/:id', async (req, res) => {
   }
 });
 
+router.delete('/announcements/:id', async (req, res) => {
+  try {
+    const email = await getEmail(req);
+    const data = await ptoService.deleteAnnouncement(email, req.params.id);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to delete announcement', error: error.message });
+  }
+});
+
 // Messaging
 router.post('/messages/send', async (req, res) => {
   try {
@@ -472,6 +482,25 @@ router.post('/messages/:messageId/read', async (req, res) => {
     res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to mark message as read', error: error.message });
+  }
+});
+
+router.delete('/messages/:messageId', async (req, res) => {
+  try {
+    const messageId = req.params.messageId;
+    let conversationId = req.body?.conversationId || req.query?.conversationId;
+    const recipientId = req.body?.recipientId || req.query?.recipientId;
+    if (!conversationId && recipientId) {
+      const email = await getEmail(req);
+      const pk = ptoService.clientPkFromEmail(email);
+      conversationId = `CONVERSATION#${pk}#${recipientId}`;
+    }
+    if (!conversationId || !messageId) return res.status(400).json({ success: false, message: 'conversationId or recipientId and messageId required' });
+    const email = await getEmail(req);
+    const data = await ptoService.deleteMessage(email, { conversationId, messageId });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to delete message', error: error.message });
   }
 });
 

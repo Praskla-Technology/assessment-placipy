@@ -211,6 +211,11 @@ class PTOService {
     return res.data.data;
   }
 
+  async deleteAnnouncement(id: string): Promise<any> {
+    const res = await api.delete(`/announcements/${encodeURIComponent(id)}`);
+    return res.data.data;
+  }
+
   async sendMessage(recipientId: string, message: string, attachments?: { filename: string; contentType: string; data: string }[]): Promise<any> {
     const res = await api.post('/messages/send', { recipientId, message, attachments: attachments || [] });
     return res.data.data;
@@ -231,6 +236,14 @@ class PTOService {
     if (params.conversationId) body.conversationId = params.conversationId;
     if (params.recipientId) body.recipientId = params.recipientId;
     const res = await api.post(`/messages/${encodeURIComponent(params.messageId)}/read`, body);
+    return res.data.data;
+  }
+
+  async deleteMessage(params: { conversationId?: string; recipientId?: string; messageId: string }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params.conversationId) qs.append('conversationId', params.conversationId);
+    if (params.recipientId) qs.append('recipientId', params.recipientId);
+    const res = await api.delete(`/messages/${encodeURIComponent(params.messageId)}${qs.toString() ? `?${qs.toString()}` : ''}`);
     return res.data.data;
   }
 }
