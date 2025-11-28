@@ -1157,7 +1157,7 @@
 .data-table td {
   padding: 15px;
   border-top: 1px solid var(--light-gray);
-  color: var(--text-gray);
+  color: var(--text-dark);
   background-color: white;
 }
 
@@ -1355,6 +1355,7 @@
   min-height: 100px;
 }
 
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1391,6 +1392,22 @@
   max-width: 700px;
 }
 
+/* PTS overrides when embedded inside modal to remove right-side gap */
+.modal-content .pts-dashboard {
+  display: block;
+  height: auto;
+  background-color: transparent;
+}
+.modal-content .pts-form-container {
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.modal-content .pts-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 .modal-content h3 {
   margin: 0 0 25px 0;
   color: var(--text-dark);
@@ -1402,6 +1419,56 @@
   gap: 15px;
   margin-top: 25px;
   justify-content: flex-end;
+}
+
+/* Messages Inbox */
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.message-item {
+  background: #f9f9fc;
+  border: 1px solid var(--light-gray);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.message-item.sent {
+  border-left: 4px solid var(--primary-purple);
+}
+
+.message-item.received {
+  border-left: 4px solid #4caf50;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-gray);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.message-body {
+  color: var(--text-dark);
+  white-space: pre-wrap;
+}
+
+.attachments {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.text-btn.danger {
+  color: #c62828;
 }
 
 /* Badge Styles */
@@ -1522,6 +1589,7 @@
   border-color: var(--primary-purple);
   box-shadow: 0 0 0 3px rgba(151, 104, 225, 0.1);
 }
+
 
 /* Staff Assignment */
 .staff-assignment {
@@ -2950,3 +3018,7 @@
   accent-color: var(--primary-purple);
 }
 
+.data-table td:first-child {
+  color: var(--text-dark);
+  font-weight: 600;
+}

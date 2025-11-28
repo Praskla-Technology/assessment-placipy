@@ -10,6 +10,7 @@ class PTOService {
     this.dynamoService = new DynamoDBService(process.env.DYNAMODB_TABLE_NAME || 'Assesment_placipy');
     this.announcementsTable = new DynamoDBService(process.env.DYNAMODB_ANNOUNCEMENTS_TABLE_NAME || 'Assesment_placipy_announcements');
     this.messagesTable = new DynamoDBService(process.env.DYNAMODB_MESSAGES_TABLE_NAME || 'Assesment_placipy_messages');
+    this.resultsTable = new DynamoDBService(process.env.DYNAMODB_RESULTS_TABLE_NAME || 'assessment_placipy_assessment_result');
     this.cognitoClient = new CognitoIdentityProviderClient({
       region: process.env.COGNITO_REGION || process.env.AWS_REGION || 'us-east-1',
       credentials: fromEnv()
@@ -538,30 +539,42 @@ class PTOService {
       department: i.department || 'All Departments',
       type: i.type || 'college-wide',
       duration: i.duration || 60,
-      date: i.date || '',
-      timeWindow: i.timeWindow || {},
-      attempts: i.attempts || 1,
-      questions: (i.questions || []).length,
-      status: i.status || 'inactive'
+      date: i.scheduling?.startDate || i.date || '',
+      timeWindow: {
+        start: i.scheduling?.startDate || i.timeWindow?.start || '',
+        end: i.scheduling?.endDate || i.timeWindow?.end || ''
+      },
+      attempts: i.configuration?.maxAttempts ?? i.attempts ?? 1,
+      questions: i.configuration?.totalQuestions ?? (i.questions || []).length ?? 0,
+      status: (typeof i.status === 'string' ? String(i.status).toLowerCase() : 'inactive'),
+      createdBy: i.createdBy,
+      createdByName: i.createdByName
     }));
 
     const assessmentService = require('./AssessmentService');
-    const all = await assessmentService.getAllAssessments();
+    const domain = (String(email || '').split('@')[1] || '').trim();
+    const all = await assessmentService.getAllAssessments({ clientDomain: domain });
     const mappedAlt = (all.items || []).map(m => ({
-      id: String(m.PK || ''),
+      id: String(m.SK || ''),
       name: m.title || m.name || '',
       department: m.department || 'All Departments',
       type: (m.department && m.department !== 'All Departments') ? 'department-wise' : 'college-wide',
-      duration: m.duration || 60,
-      date: m.createdAt || m.date || '',
-      timeWindow: {},
-      attempts: 1,
-      questions: m.questionCount || 0,
-      status: m.status || 'inactive'
+      duration: m.configuration?.duration || m.duration || 60,
+      date: m.scheduling?.startDate || m.createdAt || m.date || '',
+      timeWindow: {
+        start: m.scheduling?.startDate || '',
+        end: m.scheduling?.endDate || ''
+      },
+      attempts: m.configuration?.maxAttempts ?? 1,
+      questions: m.configuration?.totalQuestions ?? m.questionCount ?? 0,
+      status: (typeof m.status === 'string' ? String(m.status).toLowerCase() : 'inactive'),
+      createdBy: m.createdBy,
+      createdByName: m.createdByName
     }));
     const byId = new Map();
     for (const a of [...mappedClient, ...mappedAlt]) {
-      if (!byId.has(a.id)) byId.set(a.id, a);
+      const key = a.id || '';
+      if (!byId.has(key)) byId.set(key, a);
     }
     return Array.from(byId.values());
   }
@@ -755,16 +768,14 @@ class PTOService {
     const clientItem = await this.dynamoService.getItem({ Key: { PK: pk, SK: id } });
     if (clientItem && clientItem.Item) {
       await this.dynamoService.deleteItem({ Key: { PK: pk, SK: id } });
-      return true;
+      // continue to delete alt layout below
     }
-    const res = await this.dynamoService.queryTable({
-      KeyConditionExpression: 'PK = :pk',
-      ExpressionAttributeValues: { ':pk': id }
-    });
-    const toDelete = (res.Items || []).map(it => ({
-      DeleteRequest: { Key: { PK: it.PK, SK: it.SK } }
-    }));
-    if (toDelete.length) await this.dynamoService.batchWrite(toDelete);
+    const cleaned = String(id || '');
+    const assessmentId = cleaned.replace(/^ASSESSMENT#/, '');
+    try {
+      const assessmentService = require('./AssessmentService');
+      await assessmentService.deleteAssessment(assessmentId);
+    } catch (_) {}
     return true;
   }
 
@@ -812,6 +823,18 @@ class PTOService {
     try { res = await this.announcementsTable.getItem({ Key: { PK: pk, SK: sk } }); }
     catch (_) { res = await this.dynamoService.getItem({ Key: { PK: pk, SK: sk } }); }
     return res?.Item || null;
+  }
+
+  async deleteAnnouncement(email, id) {
+    const pk = this.clientPkFromEmail(email);
+    const sk = id.startsWith('ANNOUNCEMENT#') ? id : `ANNOUNCEMENT#${id}`;
+    const params = { Key: { PK: pk, SK: sk } };
+    try {
+      await this.announcementsTable.deleteItem(params);
+    } catch (_) {
+      await this.dynamoService.deleteItem(params);
+    }
+    return { deleted: true, id: sk };
   }
 
   async sendMessage(email, { recipientId, message, attachments }) {
@@ -872,6 +895,19 @@ class PTOService {
     return res.Attributes;
   }
 
+  async deleteMessage(email, { conversationId, messageId, recipientId }) {
+    const pkClient = this.clientPkFromEmail(email);
+    const convId = conversationId || (recipientId ? `CONVERSATION#${pkClient}#${recipientId}` : null);
+    if (!convId || !messageId) throw new Error('conversationId or recipientId and messageId required');
+    const params = { Key: { PK: convId, SK: messageId } };
+    try {
+      await this.messagesTable.deleteItem(params);
+    } catch (_) {
+      await this.dynamoService.deleteItem(params);
+    }
+    return { deleted: true, messageId };
+  }
+
   async assignStaffToDepartment(email, deptCode, staffId) {
     const pk = this.clientPkFromEmail(email);
     const now = new Date().toISOString();
@@ -899,15 +935,47 @@ class PTOService {
   async getStudents(email) {
     const pk = this.clientPkFromEmail(email);
     const items = await this.queryByPrefix(pk, 'STUDENT#');
-    return items.map(i => ({
-      id: i.SK,
-      name: i.name,
-      rollNumber: i.rollNumber,
-      department: i.department,
-      email: i.email,
-      testsParticipated: i.testsParticipated || 0,
-      avgScore: i.avgScore || 0
-    }));
+    const scoresMap = await this.getScoresMapForDomain(email).catch(() => ({}));
+    return items.map(i => {
+      const em = String(i.email || '').toLowerCase();
+      const scoreInfo = scoresMap[em] || { tests: 0, avg: 0 };
+      return {
+        id: i.SK,
+        name: i.name,
+        rollNumber: i.rollNumber,
+        department: i.department,
+        email: i.email,
+        testsParticipated: Number(i.testsParticipated || scoreInfo.tests || 0),
+        avgScore: Math.round(Number(i.avgScore || scoreInfo.avg || 0))
+      };
+    });
+  }
+
+  async getScoresMapForDomain(email) {
+    const domain = String(email).split('@')[1] || '';
+    const out = {};
+    // Try scanning results table; aggregate by student email
+    const params = { };
+    try {
+      const res = await this.resultsTable.scanTable(params);
+      const items = res.Items || [];
+      for (const it of items) {
+        const em = String(it.studentEmail || it.recipientId || it.email || '').toLowerCase();
+        if (!em || (domain && !em.endsWith(`@${domain}`))) continue;
+        const totalMarks = Number(it.totalMarks || 0);
+        const obtainedMarks = Number(it.obtainedMarks || 0);
+        let score = Number(it.score || it.accuracy || 0);
+        if (!score && totalMarks > 0) score = (obtainedMarks / totalMarks) * 100;
+        if (!out[em]) out[em] = { tests: 0, avg: 0, sum: 0 };
+        out[em].tests += 1;
+        out[em].sum += (isNaN(score) ? 0 : score);
+      }
+      Object.keys(out).forEach(k => {
+        const v = out[k];
+        v.avg = v.tests ? (v.sum / v.tests) : 0;
+      });
+    } catch (_) {}
+    return out;
   }
 
   async queryByPrefix(pk, skPrefix) {

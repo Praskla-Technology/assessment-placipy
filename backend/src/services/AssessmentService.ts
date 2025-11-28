@@ -8,6 +8,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 class AssessmentService {
     private assessmentsTableName: string;
     private questionsTableName: string;
+    private questionsTableName: string;
 
     constructor(tableName: string) {
         // Use separate tables for assessments and questions
@@ -95,7 +96,7 @@ class AssessmentService {
             entities.push({
                 type: "Coding",
                 description: "Programming questions",
-                batch: `programming_batch_1`
+                batch: `coding_batch_1`
             });
         }
 
@@ -108,16 +109,17 @@ class AssessmentService {
     private async getNextAssessmentNumber(deptCode: string, domain: string): Promise<string> {
         try {
             // Query DynamoDB for assessments with this department code
+            // Swapped PK and SK for efficient client-based querying
             const params = {
                 TableName: this.assessmentsTableName,
-                FilterExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':sk': `CLIENT#${domain}`,
-                    ':pk_prefix': `ASSESSMENT#ASSESS_${deptCode}_`
+                    ':pk': `CLIENT#${domain}`,
+                    ':sk_prefix': `ASSESSMENT#ASSESS_${deptCode}_`
                 }
             };
             console.log('Scanning with params:', JSON.stringify(params, null, 2));
-            const result = await dynamodb.scan(params).promise();
+            const result = await dynamodb.query(params).promise();
             console.log(`Found ${result.Items?.length || 0} existing assessments for department ${deptCode}`);
             console.log('Found items:', JSON.stringify(result.Items, null, 2));
             const deptAssessments = result.Items || [];
@@ -125,10 +127,10 @@ class AssessmentService {
             // Find the highest number and increment
             let maxNumber = 0;
             for (const assessment of deptAssessments) {
-                const pk = assessment.PK as string;
-                console.log(`Processing PK: ${pk}`);
+                const sk = assessment.SK as string;
+                console.log(`Processing SK: ${sk}`);
                 // Extract the number part from ASSESSMENT#ASSESS_DEPT_XXX
-                const parts = pk.split('_');
+                const parts = sk.split('_');
                 if (parts.length >= 4) {
                     const numberPart = parts[3]; // The XXX part (index 3)
                     const number = parseInt(numberPart, 10);
@@ -266,10 +268,10 @@ class AssessmentService {
                 return baseQuestion;
             });
 
-            // Create assessment metadata in assessments table with original structure
+            // Create assessment metadata in assessments table with swapped PK/SK structure
             const assessment = {
-                PK: `ASSESSMENT#${assessmentId}`, // Updated PK format to match sample
-                SK: `CLIENT#${domain}`, // Using dynamic domain from email
+                PK: `CLIENT#${domain}`, // Swapped: CLIENT is now PK for efficient querying
+                SK: `ASSESSMENT#${assessmentId}`, // Swapped: ASSESSMENT is now SK
                 assessmentId: assessmentId, // Keep original field for reference
                 title: assessmentData.title,
                 description: assessmentData.description || '',
@@ -311,8 +313,8 @@ class AssessmentService {
                 updatedAt: createdAt
             };
 
-            console.log('Saving assessment with PK:', assessment.PK);
-            // Check if assessment with this PK already exists
+            console.log('Saving assessment with PK:', assessment.PK, 'and SK:', assessment.SK);
+            // Check if assessment with this PK/SK already exists
             const existingAssessmentParams = {
                 TableName: this.assessmentsTableName,
                 Key: {
@@ -324,7 +326,7 @@ class AssessmentService {
             try {
                 const existingAssessment = await dynamodb.get(existingAssessmentParams).promise();
                 if (existingAssessment.Item) {
-                    console.log(`Assessment with PK ${assessment.PK} already exists, regenerating assessment number`);
+                    console.log(`Assessment with PK ${assessment.PK} and SK ${assessment.SK} already exists, regenerating assessment number`);
                     // Assessment already exists, regenerate the assessment number
                     // We need to generate a new number that's guaranteed to be unique
                     let newAssessmentNumber = assessmentNumber;
@@ -332,7 +334,7 @@ class AssessmentService {
                     do {
                         newAssessmentNumber = String(parseInt(newAssessmentNumber) + 1).padStart(3, '0');
                         const newAssessmentId = `ASSESS_${deptCode}_${newAssessmentNumber}`;
-                        assessment.PK = `ASSESSMENT#${newAssessmentId}`;
+                        assessment.SK = `ASSESSMENT#${newAssessmentId}`;
                         assessment.assessmentId = newAssessmentId;
                         console.log(`Trying new assessment ID: ${newAssessmentId}`);
                         attempts++;
@@ -371,7 +373,7 @@ class AssessmentService {
             await dynamodb.put(assessmentParams).promise();
 
             console.log('All questions:', JSON.stringify(questions, null, 2));
-            // Create batch items for MCQ batches
+            // Create batch items for MCQ batches with swapped PK/SK structure
             const mcqQuestions = questions.filter((q: any) => q.entityType === 'mcq');
             console.log(`Found ${mcqQuestions.length} MCQ questions`);
             if (mcqQuestions.length > 0) {
@@ -382,11 +384,11 @@ class AssessmentService {
                 }
 
                 console.log(`Creating ${mcqBatches.length} MCQ batches`);
-                // Create batch items for each MCQ batch
+                // Create batch items for each MCQ batch with swapped PK/SK
                 for (let i = 0; i < mcqBatches.length; i++) {
                     const batchItem = {
-                        PK: `ASSESSMENT#${assessment.assessmentId}#MCQ_BATCH_${i + 1}`,
-                        SK: `CLIENT#${domain}`,
+                        PK: `CLIENT#${domain}`, // Swapped: CLIENT is now PK
+                        SK: `ASSESSMENT#${assessment.assessmentId}#MCQ_BATCH_${i + 1}`, // Swapped: ASSESSMENT is now SK
                         assessmentId: assessment.assessmentId,
                         department: assessmentData.department,
                         entityType: `mcq_batch_${i + 1}`,
@@ -404,7 +406,7 @@ class AssessmentService {
                 }
             }
 
-            // Create batch items for Coding questions
+            // Create batch items for Coding questions with swapped PK/SK structure
             const codingQuestions = questions.filter((q: any) => q.entityType === 'coding');
             console.log(`Found ${codingQuestions.length} Coding questions`);
             console.log('Coding questions:', JSON.stringify(codingQuestions, null, 2));
@@ -416,11 +418,11 @@ class AssessmentService {
                 }
 
                 console.log(`Creating ${codingBatches.length} Coding batches`);
-                // Create batch items for each Coding batch
+                // Create batch items for each Coding batch with swapped PK/SK
                 for (let i = 0; i < codingBatches.length; i++) {
                     const batchItem = {
-                        PK: `ASSESSMENT#${assessment.assessmentId}#CODING_BATCH_${i + 1}`,
-                        SK: `CLIENT#${domain}`,
+                        PK: `CLIENT#${domain}`, // Swapped: CLIENT is now PK
+                        SK: `ASSESSMENT#${assessment.assessmentId}#CODING_BATCH_${i + 1}`, // Swapped: ASSESSMENT is now SK
                         assessmentId: assessment.assessmentId,
                         department: assessmentData.department,
                         entityType: `coding_batch_${i + 1}`,
@@ -449,47 +451,64 @@ class AssessmentService {
         }
     }
 
-    async getAssessmentById(assessmentId: string): Promise<any> {
+    async getAssessmentById(assessmentId: string, domain: string): Promise<any> {
         try {
-            console.log('=== getAssessmentById called with ID:', assessmentId, '===');
-            
-            // First, scan to find any assessment with this ID to get the domain
-            const scanParams = {
+            console.log('=== getAssessmentById called with ID:', assessmentId, 'and domain:', domain, '===');
+
+            // Use efficient query with the new swapped PK/SK structure
+            // PK = CLIENT#domain and SK begins_with ASSESSMENT#assessmentId
+            const queryParams = {
                 TableName: this.assessmentsTableName,
-                FilterExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`,
-                    ':sk_prefix': 'CLIENT#'
+                    ':pk': `CLIENT#${domain}`, // PK is now CLIENT#domain
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}` // SK begins with ASSESSMENT#assessmentId
                 }
             };
 
             console.log('Scanning for assessment with params:', JSON.stringify(scanParams, null, 2));
-            const scanResult = await dynamodb.scan(scanParams).promise();
+            console.log('Querying for assessment with params:', JSON.stringify(queryParams, null, 2));
+            const queryResult = await dynamodb.query(queryParams).promise();
             console.log('Scan result:', JSON.stringify(scanResult, null, 2));
+            console.log('Query result:', JSON.stringify(queryResult, null, 2));
 
-            if (!scanResult.Items || scanResult.Items.length === 0) {
+            if (!queryResult.Items || queryResult.Items.length === 0) {
                 console.log('No assessment found with ID:', assessmentId);
+                console.log('No assessment found with ID:', assessmentId, 'and domain:', domain);
                 return null;
             }
 
-            const assessment = scanResult.Items[0];
+            // Since we're using begins_with, we might get multiple items
+            // Find the exact match for the assessment (not a batch item)
+            const assessment = queryResult.Items.find(item =>
+                item.SK === `ASSESSMENT#${assessmentId}` &&
+                !item.SK.includes('#MCQ_BATCH_') &&
+                !item.SK.includes('#CODING_BATCH_')
+            );
+
+            if (!assessment) {
+                console.log('No exact assessment match found with ID:', assessmentId, 'and domain:', domain);
+                return null;
+            }
+
+            console.log('Found assessment:', JSON.stringify(assessment, null, 2));
             console.log('Found assessment:', JSON.stringify(assessment, null, 2));
 
-            // Get batch items for this assessment
-            const batchParams = {
+            // Get batch items for this assessment using another efficient query
+            const batchQueryParams = {
                 TableName: this.questionsTableName,
-                FilterExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk_prefix': `ASSESSMENT#${assessmentId}#`,
-                    ':sk': assessment.SK
+                    ':pk': `CLIENT#${domain}`, // PK is CLIENT#domain
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}#` // SK begins with ASSESSMENT#assessmentId#
                 }
             };
 
-            console.log('Scanning for batch items with params:', JSON.stringify(batchParams, null, 2));
-            const batchResult = await dynamodb.scan(batchParams).promise();
-            console.log('Batch items result:', JSON.stringify(batchResult, null, 2));
-            
-            const batchItems = batchResult.Items || [];
+            console.log('Querying for batch items with params:', JSON.stringify(batchQueryParams, null, 2));
+            const batchQueryResult = await dynamodb.query(batchQueryParams).promise();
+            console.log('Batch items result:', JSON.stringify(batchQueryResult, null, 2));
+
+            const batchItems = batchQueryResult.Items || [];
             console.log('Found batch items:', batchItems.length);
 
             // Collect all questions from batch items
@@ -520,7 +539,7 @@ class AssessmentService {
                 mcqQuestions: allQuestions.filter(q => q.entityType === 'mcq'),
                 codingQuestions: allQuestions.filter(q => q.entityType === 'coding')
             };
-            
+
             console.log('Final result:', JSON.stringify(result, null, 2));
             return result;
         } catch (error) {
@@ -535,76 +554,153 @@ class AssessmentService {
             console.log('Filters:', filters);
             console.log('Limit:', limit);
             console.log('LastKey:', lastKey);
-            
-            // Build the base scan parameters
-            const scanParams: any = {
-                TableName: this.assessmentsTableName,
-                Limit: limit
-            };
 
-            // Build filter expression based on provided filters
-            const filterExpressions = [];
-            const expressionAttributeValues: any = {};
-            
-            // Add base filter to only get assessment items (not batch items)
-            filterExpressions.push('begins_with(PK, :pk_prefix) AND begins_with(SK, :sk_prefix)');
-            expressionAttributeValues[':pk_prefix'] = 'ASSESSMENT#';
-            expressionAttributeValues[':sk_prefix'] = 'CLIENT#';
-            
-            // Add department filter if provided
-            if (filters.department) {
-                filterExpressions.push('department = :department');
-                expressionAttributeValues[':department'] = filters.department;
-            }
-            
-            // Add status filter if provided
-            if (filters.status) {
-                filterExpressions.push('#status = :status');
-                expressionAttributeValues[':status'] = filters.status;
-                // Use expression attribute names for reserved words like 'status'
-                scanParams.ExpressionAttributeNames = {
-                    '#status': 'status'
+            // If a specific domain/client is provided in filters, use query for better performance
+            if (filters.clientDomain) {
+                // Use query for a specific client domain
+                const queryParams: any = {
+                    TableName: this.assessmentsTableName,
+                    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
+                    ExpressionAttributeValues: {
+                        ':pk': `CLIENT#${filters.clientDomain}`,
+                        ':sk_prefix': 'ASSESSMENT#'
+                    },
+                    Limit: limit
+                };
+
+                // Add filter expressions for additional filters
+                const filterExpressions = [];
+                const expressionAttributeValues: any = {};
+
+                // Add department filter if provided
+                if (filters.department) {
+                    filterExpressions.push('department = :department');
+                    expressionAttributeValues[':department'] = filters.department;
+                }
+
+                // Add status filter if provided
+                if (filters.status) {
+                    filterExpressions.push('#status = :status');
+                    expressionAttributeValues[':status'] = filters.status;
+                    // Use expression attribute names for reserved words like 'status'
+                    queryParams.ExpressionAttributeNames = {
+                        '#status': 'status'
+                    };
+                }
+
+                // Combine all filter expressions
+                if (filterExpressions.length > 0) {
+                    queryParams.FilterExpression = filterExpressions.join(' AND ');
+                    Object.assign(queryParams.ExpressionAttributeValues, expressionAttributeValues);
+                }
+
+                if (lastKey) {
+                    queryParams.ExclusiveStartKey = lastKey;
+                }
+
+                console.log('Querying with params:', JSON.stringify(queryParams, null, 2));
+                const queryResult = await dynamodb.query(queryParams).promise();
+                console.log('Query result count:', queryResult.Count);
+                console.log('Query result items:', JSON.stringify(queryResult.Items, null, 2));
+
+                // Filter out batch items (those with #MCQ_BATCH_ or #CODING_BATCH_ in SK)
+                let items = queryResult.Items || [];
+                console.log('Total items before filtering:', items.length);
+
+                items = items.filter(item => {
+                    // Check if this is an assessment item (not a batch item)
+                    // Swapped: Now PK is CLIENT# and SK is ASSESSMENT#
+                    const isAssessment = item.PK &&
+                        item.PK.startsWith('CLIENT#') &&
+                        item.SK &&
+                        item.SK.startsWith('ASSESSMENT#') &&
+                        !item.SK.includes('#MCQ_BATCH_') &&
+                        !item.SK.includes('#CODING_BATCH_');
+                    console.log('Item PK:', item.PK, 'SK:', item.SK, 'Is Assessment:', isAssessment);
+                    return isAssessment;
+                });
+
+                console.log('Total items after filtering:', items.length);
+
+                return {
+                    items: items,
+                    lastKey: queryResult.LastEvaluatedKey,
+                    hasMore: !!queryResult.LastEvaluatedKey
+                };
+            } else {
+                // Use scan for all domains/clients
+                // Build the base scan parameters with swapped PK/SK structure
+                const scanParams: any = {
+                    TableName: this.assessmentsTableName,
+                    Limit: limit
+                };
+
+                // Build filter expression based on provided filters
+                const filterExpressions = [];
+                const expressionAttributeValues: any = {};
+
+                // Add base filter to only get assessment items (not batch items)
+                // Swapped: Now PK is CLIENT# and SK is ASSESSMENT#
+                filterExpressions.push('begins_with(PK, :pk_prefix) AND begins_with(SK, :sk_prefix)');
+                expressionAttributeValues[':pk_prefix'] = 'CLIENT#';
+                expressionAttributeValues[':sk_prefix'] = 'ASSESSMENT#';
+
+                // Add department filter if provided
+                if (filters.department) {
+                    filterExpressions.push('department = :department');
+                    expressionAttributeValues[':department'] = filters.department;
+                }
+
+                // Add status filter if provided
+                if (filters.status) {
+                    filterExpressions.push('#status = :status');
+                    expressionAttributeValues[':status'] = filters.status;
+                    // Use expression attribute names for reserved words like 'status'
+                    scanParams.ExpressionAttributeNames = {
+                        '#status': 'status'
+                    };
+                }
+
+                // Combine all filter expressions
+                if (filterExpressions.length > 0) {
+                    scanParams.FilterExpression = filterExpressions.join(' AND ');
+                    scanParams.ExpressionAttributeValues = expressionAttributeValues;
+                }
+
+                if (lastKey) {
+                    scanParams.ExclusiveStartKey = lastKey;
+                }
+
+                console.log('Scanning with params:', JSON.stringify(scanParams, null, 2));
+                const scanResult = await dynamodb.scan(scanParams).promise();
+                console.log('Scan result count:', scanResult.Count);
+                console.log('Scan result items:', JSON.stringify(scanResult.Items, null, 2));
+
+                // Filter out batch items (those with #MCQ_BATCH_ or #CODING_BATCH_ in SK)
+                let items = scanResult.Items || [];
+                console.log('Total items before filtering:', items.length);
+
+                items = items.filter(item => {
+                    // Check if this is an assessment item (not a batch item)
+                    // Swapped: Now PK is CLIENT# and SK is ASSESSMENT#
+                    const isAssessment = item.PK &&
+                        item.PK.startsWith('CLIENT#') &&
+                        item.SK &&
+                        item.SK.startsWith('ASSESSMENT#') &&
+                        !item.SK.includes('#MCQ_BATCH_') &&
+                        !item.SK.includes('#CODING_BATCH_');
+                    console.log('Item PK:', item.PK, 'SK:', item.SK, 'Is Assessment:', isAssessment);
+                    return isAssessment;
+                });
+
+                console.log('Total items after filtering:', items.length);
+
+                return {
+                    items: items,
+                    lastKey: scanResult.LastEvaluatedKey,
+                    hasMore: !!scanResult.LastEvaluatedKey
                 };
             }
-            
-            // Combine all filter expressions
-            if (filterExpressions.length > 0) {
-                scanParams.FilterExpression = filterExpressions.join(' AND ');
-                scanParams.ExpressionAttributeValues = expressionAttributeValues;
-            }
-
-            if (lastKey) {
-                scanParams.ExclusiveStartKey = lastKey;
-            }
-
-            console.log('Scanning with params:', JSON.stringify(scanParams, null, 2));
-            const scanResult = await dynamodb.scan(scanParams).promise();
-            console.log('Scan result count:', scanResult.Count);
-            console.log('Scan result items:', JSON.stringify(scanResult.Items, null, 2));
-
-            // Filter out batch items (those with #MCQ_BATCH_ or #CODING_BATCH_ in PK)
-            let items = scanResult.Items || [];
-            console.log('Total items before filtering:', items.length);
-            
-            items = items.filter(item => {
-                // Check if this is an assessment item (not a batch item)
-                const isAssessment = item.PK && 
-                                     item.PK.startsWith('ASSESSMENT#') && 
-                                     item.SK && 
-                                     item.SK.startsWith('CLIENT#') &&
-                                     !item.PK.includes('#MCQ_BATCH_') && 
-                                     !item.PK.includes('#CODING_BATCH_');
-                console.log('Item PK:', item.PK, 'SK:', item.SK, 'Is Assessment:', isAssessment);
-                return isAssessment;
-            });
-            
-            console.log('Total items after filtering:', items.length);
-
-            return {
-                items: items,
-                lastKey: scanResult.LastEvaluatedKey,
-                hasMore: !!scanResult.LastEvaluatedKey
-            };
         } catch (error) {
             console.error('Error getting all assessments:', error);
             throw new Error('Failed to retrieve assessments: ' + error.message);
@@ -614,51 +710,51 @@ class AssessmentService {
     async getAssessmentQuestions(assessmentId: string, domain: string): Promise<any[]> {
         try {
             console.log(`Fetching questions for assessment ${assessmentId} in domain ${domain}`);
-            
+
             // Validate inputs
             if (!assessmentId) {
                 throw new Error('Assessment ID is required');
             }
-            
+
             if (!domain) {
                 throw new Error('Domain is required');
             }
-            
-            // First verify that the assessment exists
+
+            // First verify that the assessment exists with swapped PK/SK structure
             const mainAssessmentParams = {
                 TableName: this.assessmentsTableName,
                 KeyConditionExpression: 'PK = :pk AND SK = :sk',
                 ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`,
-                    ':sk': `CLIENT#${domain}`
+                    ':pk': `CLIENT#${domain}`, // Swapped: CLIENT is now PK
+                    ':sk': `ASSESSMENT#${assessmentId}` // Swapped: ASSESSMENT is now SK
                 }
             };
-            
+
             const mainAssessmentResult = await dynamodb.query(mainAssessmentParams).promise();
-            
+
             if (!mainAssessmentResult.Items || mainAssessmentResult.Items.length === 0) {
                 throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
-            
-            // Now query for all question batch items
-            // Using the pattern: PK begins_with "ASSESSMENT#<assessmentId>#" and SK = "CLIENT#<domain>"
+
+            // Now query for all question batch items with swapped PK/SK structure
+            // Using the pattern: PK = "CLIENT#<domain>" and SK begins_with "ASSESSMENT#<assessmentId>#"
             const questionParams = {
                 TableName: this.questionsTableName,  // Use questions table instead of assessments table
-                FilterExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk AND attribute_exists(questions)',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk_prefix': `ASSESSMENT#${assessmentId}#`,
-                    ':sk': `CLIENT#${domain}`
+                    ':pk': `CLIENT#${domain}`, // Swapped: CLIENT is now PK
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}#` // Swapped: ASSESSMENT is now in SK
                 }
             };
-            
-            console.log('Scanning questions with params:', JSON.stringify(questionParams, null, 2));
-            const questionResult = await dynamodb.scan(questionParams).promise();
+
+            console.log('Querying questions with params:', JSON.stringify(questionParams, null, 2));
+            const questionResult = await dynamodb.query(questionParams).promise();
             console.log('Found', questionResult.Count, 'question items');
-            
+
             // Return only the question items (not the metadata)
             const questions = questionResult.Items || [];
             console.log('Returning questions:', JSON.stringify(questions, null, 2));
-            
+
             return questions;
         } catch (error) {
             console.error('Error in getAssessmentQuestions:', error);
@@ -671,15 +767,18 @@ class AssessmentService {
             const timestamp = new Date().toISOString();
 
             // First, get the current item to understand its structure
+            // Use query instead of scan for better performance
             const getCurrentItemParams = {
                 TableName: this.assessmentsTableName,
-                FilterExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
+                KeyConditionExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`,
-                    ':sk_prefix': 'CLIENT#'
+                    ':sk': `ASSESSMENT#${assessmentId}`,
+                    ':pk_prefix': 'CLIENT#'
                 }
             };
 
+            // Since we don't know the exact domain, we'll need to use scan for this case
+            // In a production environment, you'd want to pass the domain as a parameter
             const currentItemResult = await dynamodb.scan(getCurrentItemParams).promise();
             const currentItem = currentItemResult.Items && currentItemResult.Items[0];
 
@@ -733,16 +832,17 @@ class AssessmentService {
             // Handle questions update if provided
             if (updates.questions && Array.isArray(updates.questions)) {
                 // First, delete all existing batch items for this assessment
+                // Use query for better performance when we know the domain
                 const batchParams = {
                     TableName: this.questionsTableName,
-                    FilterExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk',
+                    KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                     ExpressionAttributeValues: {
-                        ':pk_prefix': `ASSESSMENT#${assessmentId}#`,
-                        ':sk': currentItem.SK
+                        ':pk': currentItem.PK, // We know the PK from currentItem
+                        ':sk_prefix': `ASSESSMENT#${assessmentId}#`
                     }
                 };
 
-                const batchResult = await dynamodb.scan(batchParams).promise();
+                const batchResult = await dynamodb.query(batchParams).promise();
                 const batchItems = batchResult.Items || [];
 
                 // Delete existing batch items
@@ -757,7 +857,7 @@ class AssessmentService {
                     await dynamodb.delete(deleteParams).promise();
                 }
 
-                // Create new batch items
+                // Create new batch items with swapped PK/SK structure
                 // Create batch items for MCQ batches
                 const mcqQuestions = updates.questions.filter((q: any) => q.entityType === 'mcq');
                 if (mcqQuestions.length > 0) {
@@ -767,11 +867,11 @@ class AssessmentService {
                         mcqBatches.push(mcqQuestions.slice(i, i + 50));
                     }
 
-                    // Create batch items for each MCQ batch
+                    // Create batch items for each MCQ batch with swapped PK/SK
                     for (let i = 0; i < mcqBatches.length; i++) {
                         const batchItem = {
-                            PK: `ASSESSMENT#${assessmentId}#MCQ_BATCH_${i + 1}`,
-                            SK: currentItem.SK,
+                            PK: currentItem.PK, // Swapped: CLIENT is now PK
+                            SK: `ASSESSMENT#${assessmentId}#MCQ_BATCH_${i + 1}`, // Swapped: ASSESSMENT is now SK
                             assessmentId: assessmentId,
                             department: currentItem.department,
                             entityType: `mcq_batch_${i + 1}`,
@@ -787,7 +887,7 @@ class AssessmentService {
                     }
                 }
 
-                // Create batch items for Coding questions
+                // Create batch items for Coding questions with swapped PK/SK structure
                 const codingQuestions = updates.questions.filter((q: any) => q.entityType === 'coding');
                 if (codingQuestions.length > 0) {
                     // Group Coding questions into batches (no limit)
@@ -796,15 +896,14 @@ class AssessmentService {
                         codingBatches.push(codingQuestions.slice(i, i + 50));
                     }
 
-                    // Create batch items for each Coding batch
+                    // Create batch items for each Coding batch with swapped PK/SK
                     for (let i = 0; i < codingBatches.length; i++) {
                         const batchItem = {
-                            PK: `ASSESSMENT#${assessmentId}#CODING_BATCH_${i + 1}`,
-                            SK: currentItem.SK,
+                            PK: currentItem.PK, // Swapped: CLIENT is now PK
+                            SK: `ASSESSMENT#${assessmentId}#CODING_BATCH_${i + 1}`, // Swapped: ASSESSMENT is now SK
                             assessmentId: assessmentId,
                             department: currentItem.department,
                             entityType: `coding_batch_${i + 1}`,
-
                             questions: codingBatches[i]
                         };
 
@@ -819,17 +918,18 @@ class AssessmentService {
             }
 
             // Get updated questions from batch items
-            const batchParams = {
+            // Use query for better performance
+            const batchQueryParams = {
                 TableName: this.questionsTableName,
-                FilterExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk_prefix': `ASSESSMENT#${assessmentId}#`,
-                    ':sk': currentItem.SK
+                    ':pk': currentItem.PK, // We know the PK from currentItem
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}#`
                 }
             };
 
-            const batchResult = await dynamodb.scan(batchParams).promise();
-            const batchItems = batchResult.Items || [];
+            const batchQueryResult = await dynamodb.query(batchQueryParams).promise();
+            const batchItems = batchQueryResult.Items || [];
 
             // Collect all questions from batch items
             let updatedQuestions: any[] = [];
@@ -872,12 +972,13 @@ class AssessmentService {
     async deleteAssessment(assessmentId: string): Promise<void> {
         try {
             // First, find the assessment by scanning since we don't know the domain
+            // In a production environment, you'd want to pass the domain as a parameter
             const getAssessmentParams = {
                 TableName: this.assessmentsTableName,
-                FilterExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
+                FilterExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`,
-                    ':sk_prefix': 'CLIENT#'
+                    ':sk': `ASSESSMENT#${assessmentId}`,
+                    ':pk_prefix': 'CLIENT#'
                 }
             };
 
@@ -900,17 +1001,18 @@ class AssessmentService {
             await dynamodb.delete(assessmentParams).promise();
 
             // Delete all batch items for this assessment
-            const batchParams = {
+            // Use query for better performance when we know the PK
+            const batchQueryParams = {
                 TableName: this.questionsTableName,
-                FilterExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk_prefix': `ASSESSMENT#${assessmentId}#`,
-                    ':sk': assessment.SK
+                    ':pk': assessment.PK, // We know the PK from assessment
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}#`
                 }
             };
 
-            const batchResult = await dynamodb.scan(batchParams).promise();
-            const batchItems = batchResult.Items || [];
+            const batchQueryResult = await dynamodb.query(batchQueryParams).promise();
+            const batchItems = batchQueryResult.Items || [];
 
             // Delete each batch item
             for (const batchItem of batchItems) {

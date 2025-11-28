@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { FaClipboardList, FaPlus, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaUpload, FaFileExcel } from 'react-icons/fa';
+import { FaClipboardList, FaPlus, FaTrash, FaEye, FaToggleOn, FaToggleOff } from 'react-icons/fa';
+import PTSAssessmentCreation from '../../pts/AssessmentCreation';
 import * as XLSX from 'xlsx';
 import PTOService, { type Assessment as AssessDto } from '../../services/pto.service';
 
@@ -14,6 +15,27 @@ interface Assessment {
   attempts: number;
   questions: number;
   status: 'active' | 'inactive' | 'scheduled';
+  createdBy?: string;
+}
+
+interface Question {
+  id?: string;
+  text: string;
+  options?: string[];
+  correctIndex?: number;
+}
+
+interface AssessmentDetail {
+  id?: string;
+  name: string;
+  department: string;
+  type: 'department-wise' | 'college-wide';
+  duration: number;
+  date: string;
+  timeWindow?: { start?: string; end?: string };
+  attempts: number;
+  questions?: Question[];
+  status?: 'active' | 'inactive' | 'scheduled';
 }
 
 const AssessmentManagement: React.FC = () => {
@@ -27,21 +49,34 @@ const AssessmentManagement: React.FC = () => {
         setLoading(true);
         setError(null);
         const data = await PTOService.getAssessments();
-        const mapped: Assessment[] = data.map((a: AssessDto) => ({
-          id: (a as any).id,
-          name: a.name,
-          department: a.department,
-          type: a.type,
-          duration: a.duration,
-          date: a.date,
-          timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-          attempts: a.attempts,
-          questions: a.questions,
-          status: a.status === 'active' ? 'active' : (a.status === 'scheduled' ? 'scheduled' : 'inactive')
-        }));
+        const mapped: Assessment[] = data.map((a: AssessDto | unknown) => {
+          const deptList = getNested(a, ['target', 'departments']);
+          const typeRaw = getProp(a, 'type');
+          const typeStr = asString(typeRaw).toUpperCase();
+          const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
+          const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
+          const createdName = asString(getProp(a, 'createdByName'));
+          const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+          const createdUser = createdName || asString(createdEmail).split('@')[0];
+          const qs = getProp(a, 'questions');
+          const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
+          return {
+            id: asString(getProp(a, 'id') ?? getProp(a, 'assessmentId') ?? getProp(a, 'SK')),
+            name: asString(getProp(a, 'name') ?? getProp(a, 'title')),
+            department: asString(getProp(a, 'department') ?? (Array.isArray(deptList) ? deptList[0] : '')),
+            type: typeStr === 'COLLEGE_WIDE' ? 'college-wide' : 'department-wise',
+            duration: asNumber(getProp(a, 'duration') ?? getProp(a, 'durationMinutes') ?? 60),
+            date: asString(getProp(a, 'date') ?? getNested(a, ['scheduling', 'startDate']) ?? ''),
+            timeWindow: { start: asString(start ?? ''), end: asString(end ?? '') },
+            attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
+            questions: totalQ,
+            status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
+            createdBy: createdUser || undefined
+          };
+        });
         setAssessments(mapped);
-      } catch (e: any) {
-        setError(e.message || 'Failed to load assessments');
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to load assessments');
       } finally {
         setLoading(false);
       }
@@ -57,6 +92,7 @@ const AssessmentManagement: React.FC = () => {
   const [importText, setImportText] = useState('');
   const [importTargetId, setImportTargetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     department: '',
@@ -74,59 +110,16 @@ const AssessmentManagement: React.FC = () => {
       try {
         const list = await PTOService.getDepartmentCatalog();
         setDepartments(list);
-      } catch (_) {
+      } catch {
         setDepartments(['CE', 'ME', 'EEE', 'ECE', 'CSE', 'IT']);
       }
     };
     loadCatalog();
   }, []);
 
-  const handleAddAssessment = async () => {
-    if (formData.name && formData.department) {
-      const created = await PTOService.createAssessment({
-        name: formData.name,
-        department: formData.department,
-        type: formData.type,
-        duration: formData.duration,
-        date: formData.date,
-        timeWindow: formData.timeWindow,
-        attempts: formData.attempts,
-        questions: []
-      });
-      const newAssessment: Assessment = {
-        id: (created as any).id,
-        name: formData.name,
-        department: formData.department,
-        type: formData.type,
-        duration: formData.duration,
-        date: formData.date,
-        timeWindow: formData.timeWindow,
-        attempts: formData.attempts,
-        questions: 0,
-        status: 'inactive'
-      };
-      setAssessments(prev => [...prev, newAssessment]);
-      setImportTargetId(String((created as any).id));
-      setIsImportModalOpen(true);
-      resetForm();
-      setIsAddModalOpen(false);
-    }
-  };
+  // PTO manual creation removed in favor of PTS schema
 
-  const handleEditAssessment = (assessment: Assessment) => {
-    setSelectedAssessment(assessment);
-    setFormData({
-      name: assessment.name,
-      department: assessment.department,
-      type: assessment.type,
-      duration: assessment.duration,
-      date: assessment.date,
-      timeWindow: assessment.timeWindow,
-      attempts: assessment.attempts,
-      questions: assessment.questions,
-    });
-    setIsEditModalOpen(true);
-  };
+  // Edit action is not part of the streamlined PTO UX; opener removed
 
   const handleUpdateAssessment = async () => {
     if (selectedAssessment) {
@@ -152,70 +145,99 @@ const AssessmentManagement: React.FC = () => {
 
   const handleDeleteAssessment = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this assessment?')) {
-      await PTOService.deleteAssessment(id);
-      const data = await PTOService.getAssessments();
-      const mapped: Assessment[] = data.map((a: AssessDto) => ({
-        id: (a as any).id,
-        name: a.name,
-        department: a.department,
-        type: a.type,
-        duration: a.duration,
-        date: a.date,
-        timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-        attempts: a.attempts,
-        questions: a.questions,
-        status: a.status === 'active' ? 'active' : 'inactive'
-      }));
-      setAssessments(mapped);
+      setAssessments(prev => prev.filter(a => a.id !== id));
+      setDeletedIds(prev => [...prev, id]);
+      try {
+        await PTOService.deleteAssessment(id);
+      } finally {
+        setTimeout(() => { refreshAssessments(); }, 1500);
+      }
     }
   };
 
-  const toggleAssessmentStatus = async (id: string) => {
-    const current = assessments.find(a => a.id === id);
-    if (!current) return;
-    const nextStatus = current.status === 'active' ? 'inactive' : 'active';
-    if (nextStatus === 'active') {
+  
+
+  const refreshAssessments = async () => {
+    const data = await PTOService.getAssessments();
+    const mapped: Assessment[] = data.map((a: AssessDto | unknown) => {
+      const deptList = getNested(a, ['target', 'departments']);
+      const typeRaw = getProp(a, 'type');
+      const typeStr = asString(typeRaw).toUpperCase();
+      const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
+      const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
+      const createdName = asString(getProp(a, 'createdByName'));
+          const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+          const createdUser = createdName || asString(createdEmail).split('@')[0];
+      const qs = getProp(a, 'questions');
+      const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
+      return {
+        id: asString(getProp(a, 'id') ?? getProp(a, 'assessmentId') ?? getProp(a, 'SK')),
+        name: asString(getProp(a, 'name') ?? getProp(a, 'title')),
+        department: asString(getProp(a, 'department') ?? (Array.isArray(deptList) ? deptList[0] : '')),
+        type: typeStr === 'COLLEGE_WIDE' ? 'college-wide' : 'department-wise',
+        duration: asNumber(getProp(a, 'duration') ?? getProp(a, 'durationMinutes') ?? 60),
+        date: asString(getProp(a, 'date') ?? getNested(a, ['scheduling', 'startDate']) ?? ''),
+        timeWindow: { start: asString(start ?? ''), end: asString(end ?? '') },
+        attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
+        questions: totalQ,
+        status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
+            createdBy: createdUser || undefined
+          };
+    });
+    const filtered = mapped.filter(a => !(deletedIds || []).includes(a.id));
+    setAssessments(prev => {
+      const prevById = new Map(prev.map(a => [a.id, a]));
+      return filtered.map(cur => {
+        const old = prevById.get(cur.id);
+        if (!old) return cur;
+        return {
+          ...cur,
+          name: cur.name || old.name,
+          department: cur.department || old.department,
+          date: cur.date || old.date,
+          timeWindow: {
+            start: cur.timeWindow.start || old.timeWindow.start,
+            end: cur.timeWindow.end || old.timeWindow.end,
+          },
+          attempts: typeof cur.attempts === 'number' ? cur.attempts : old.attempts,
+          questions: typeof cur.questions === 'number' && cur.questions > 0 ? cur.questions : old.questions,
+          createdBy: cur.createdBy || old.createdBy,
+          status: cur.status || old.status,
+        };
+      });
+    });
+  };
+
+  const handleActivate = async (id: string) => {
+    // Optimistic update for better UX
+    setAssessments(prev => prev.map(a => a.id === id ? { ...a, status: 'active' } : a));
+    try {
       await PTOService.enableAssessment(id);
-    } else {
-      await PTOService.disableAssessment(id);
+    } finally {
+      await refreshAssessments();
     }
-    const data = await PTOService.getAssessments();
-    const mapped: Assessment[] = data.map((a: AssessDto) => ({
-      id: (a as any).id,
-      name: a.name,
-      department: a.department,
-      type: a.type,
-      duration: a.duration,
-      date: a.date,
-      timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-      attempts: a.attempts,
-      questions: a.questions,
-      status: a.status === 'active' ? 'active' : (a.status === 'scheduled' ? 'scheduled' : 'inactive')
-    }));
-    setAssessments(mapped);
   };
 
-  const scheduleAssessment = async (id: string) => {
-    await PTOService.scheduleAssessment(id);
-    const data = await PTOService.getAssessments();
-    const mapped: Assessment[] = data.map((a: AssessDto) => ({
-      id: (a as any).id,
-      name: a.name,
-      department: a.department,
-      type: a.type,
-      duration: a.duration,
-      date: a.date,
-      timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
-      attempts: a.attempts,
-      questions: a.questions,
-      status: a.status === 'active' ? 'active' : (a.status === 'scheduled' ? 'scheduled' : 'inactive')
-    }));
-    setAssessments(mapped);
+  const handleDisable = async (id: string) => {
+    // Optimistic update for better UX
+    setAssessments(prev => prev.map(a => a.id === id ? { ...a, status: 'inactive' } : a));
+    try {
+      await PTOService.disableAssessment(id);
+    } finally {
+      await refreshAssessments();
+    }
   };
 
-  const [previewData, setPreviewData] = useState<any | null>(null);
+  
+
+  // Legacy status toggle removed in favor of explicit actions
+
+  
+
+  const [previewData, setPreviewData] = useState<AssessmentDetail | null>(null);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const handlePreview = async (assessment: Assessment) => {
-    const full = await PTOService.getAssessment(assessment.id);
+    const full = await PTOService.getAssessment(assessment.id) as AssessmentDetail;
     setSelectedAssessment({
       id: assessment.id,
       name: full?.name || assessment.name,
@@ -223,7 +245,10 @@ const AssessmentManagement: React.FC = () => {
       type: full?.type || assessment.type,
       duration: full?.duration ?? assessment.duration,
       date: full?.date || assessment.date,
-      timeWindow: full?.timeWindow || assessment.timeWindow,
+      timeWindow: {
+        start: full?.timeWindow?.start ?? assessment.timeWindow.start,
+        end: full?.timeWindow?.end ?? assessment.timeWindow.end,
+      },
       attempts: full?.attempts ?? assessment.attempts,
       questions: Array.isArray(full?.questions) ? full.questions.length : assessment.questions,
       status: (full?.status === 'active' ? 'active' : full?.status === 'inactive' ? 'inactive' : assessment.status)
@@ -245,9 +270,10 @@ const AssessmentManagement: React.FC = () => {
     });
   };
 
-  const parsePastedQuestions = (text: string) => {
+  type ParsedQuestion = { text: string; options: string[]; correctIndex: number };
+  const parsePastedQuestions = (text: string): ParsedQuestion[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const items: any[] = [];
+    const items: ParsedQuestion[] = [];
     for (const line of lines) {
       const parts = line.split('|').map(p => p.trim());
       if (parts.length >= 3) {
@@ -280,12 +306,12 @@ const AssessmentManagement: React.FC = () => {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[];
-    const parsed: any[] = [];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[];
+    const parsed: ParsedQuestion[] = [];
     for (const r of rows) {
       if (Array.isArray(r) && r.length >= 3) {
         const q = String(r[0] || '').trim();
-        const opts = r.slice(1, r.length - 1).map((x: any) => String(x || '').trim()).filter(Boolean);
+        const opts = r.slice(1, r.length - 1).map((x: unknown) => String(x ?? '').trim()).filter(Boolean);
         const ans = r[r.length - 1];
         let idx = parseInt(ans, 10);
         if (Number.isNaN(idx)) {
@@ -347,199 +373,116 @@ const AssessmentManagement: React.FC = () => {
             <tr>
               <th>Assessment Name</th>
               <th>Department</th>
+              <th>Created By</th>
               <th>Type</th>
               <th>Duration</th>
-              <th>Date</th>
-              <th>Questions</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {assessments.map(assessment => (
-              <tr key={assessment.id} onClick={(e) => e.stopPropagation()}>
-                <td>{assessment.name}</td>
+            {/* Active Section */}
+            {assessments.filter(a => a.status === 'active').length > 0 && (
+              <tr><td colSpan={7}><strong>Active</strong></td></tr>
+            )}
+            {assessments.filter(a => a.status === 'active').map(assessment => (
+              <tr key={`active-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
+                <td>{assessment.name || '(Untitled)'} </td>
                 <td>{assessment.department}</td>
+                <td>{assessment.createdBy || '—'}</td>
                 <td>
                   <span className={`type-badge ${assessment.type}`}>
                     {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
                   </span>
                 </td>
                 <td>{assessment.duration} min</td>
-                <td>{assessment.date}</td>
-                <td>{assessment.questions}</td>
                 <td>
-                  <div className="status-actions">
-                    <button
-                      className={`status-toggle ${assessment.status}`}
-                      onClick={() => toggleAssessmentStatus(assessment.id)}
-                    >
-                      {assessment.status === 'active' ? (
-                        <><FaToggleOn /> Active</>
-                      ) : (
-                        <><FaToggleOff /> Inactive</>
-                      )}
-                    </button>
-                    <button
-                      className="text-btn"
-                      onClick={() => scheduleAssessment(assessment.id)}
-                      title="Schedule"
-                      type="button"
-                    >
-                      Schedule
-                    </button>
-                  </div>
+                  <span className={`status-badge ${assessment.status}`}>Active</span>
                 </td>
                 <td>
                   <div className="action-buttons">
-                    <button 
-                      className="icon-btn preview-btn" 
-                      onClick={() => handlePreview(assessment)}
-                      title="Preview"
-                    >
-                      <FaEye />
-                    </button>
-                    <button 
-                      className="edit-btn text-btn" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleEditAssessment(assessment);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      title="Edit"
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="text-btn"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }}
-                      title="Import Questions"
-                      type="button"
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="icon-btn delete-btn" 
-                      onClick={() => handleDeleteAssessment(assessment.id)}
-                      title="Delete"
-                    >
-                      <FaTrash />
-                    </button>
+                    <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                    <button className="text-btn" onClick={() => handleDisable(assessment.id)} title="Deactivate" type="button">Deactivate</button>
+                    <button className="text-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }} title="Import Questions" type="button">Import</button>
                   </div>
                 </td>
               </tr>
             ))}
+
+            
+
+            {/* Inactive Section */}
+            {assessments.filter(a => a.status === 'inactive').length > 0 && (
+              <tr><td colSpan={7}><strong>Inactive</strong></td></tr>
+            )}
+              {assessments.filter(a => a.status === 'inactive').map(assessment => (
+                <tr key={`inactive-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
+                  <td>{assessment.name || '(Untitled)'} </td>
+                  <td>{assessment.department}</td>
+                  <td>{assessment.createdBy || '—'}</td>
+                  <td>
+                    <span className={`type-badge ${assessment.type}`}>
+                      {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
+                    </span>
+                  </td>
+                <td>{assessment.duration} min</td>
+                <td>
+                  <span className={`status-badge ${assessment.status}`}>Inactive</span>
+                </td>
+                <td>
+                  <div className="action-buttons">
+                    <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                      <button className="text-btn" onClick={() => handleActivate(assessment.id)} title="Activate" type="button">Activate</button>
+                      <button className="icon-btn delete-btn" onClick={() => handleDeleteAssessment(assessment.id)} title="Delete"><FaTrash /></button>
+                  </div>
+                </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
 
-      {/* Add Assessment Modal */}
+      {/* Add Assessment Modal replaced with PTS schema */}
       {isAddModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content large" onClick={(e) => e.stopPropagation()} style={{ width: '95vw', maxWidth: '1200px', maxHeight: '80vh' }}>
             <h3>Create Assessment</h3>
-            <div className="form-group">
-              <label>Assessment Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Enter assessment name"
-              />
-            </div>
-            <div className="form-group">
-              <label>Type</label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value as 'department-wise' | 'college-wide' })}
-              >
-                <option value="department-wise">Department-wise</option>
-                <option value="college-wide">College-wide</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Department</label>
-              <select
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              >
-                <option value="">Select Department</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Duration (minutes)</label>
-                <input
-                  type="number"
-                  value={formData.duration}
-                  onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
-                  min="1"
-                />
-              </div>
-              <div className="form-group">
-                <label>Number of Attempts</label>
-                <input
-                  type="number"
-                  value={formData.attempts}
-                  onChange={(e) => setFormData({ ...formData, attempts: parseInt(e.target.value) })}
-                  min="1"
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Date</label>
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Time Window Start</label>
-                <input
-                  type="time"
-                  value={formData.timeWindow.start}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    timeWindow: { ...formData.timeWindow, start: e.target.value }
-                  })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Time Window End</label>
-                <input
-                  type="time"
-                  value={formData.timeWindow.end}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    timeWindow: { ...formData.timeWindow, end: e.target.value }
-                  })}
-                />
-              </div>
-            </div>
-            <div className="upload-section">
-              <label>Upload Questions</label>
-              <div className="upload-options">
-                <button type="button" className="upload-btn">
-                  <FaUpload /> Copy-Paste
-                </button>
-                <button type="button" className="upload-btn">
-                  <FaFileExcel /> Import Excel
-                </button>
-                <button type="button" className="upload-btn">
-                  <FaUpload /> Import Text File
-                </button>
+            <div style={{ height: 'calc(80vh - 64px)', overflow: 'auto' }}>
+              <div className="pts-dashboard">
+                <PTSAssessmentCreation />
               </div>
             </div>
             <div className="modal-actions">
-              <button className="primary-btn" onClick={handleAddAssessment}>Create</button>
-              <button className="secondary-btn" onClick={() => setIsAddModalOpen(false)}>Cancel</button>
+              <button className="secondary-btn" onClick={async () => {
+                setIsAddModalOpen(false);
+                const data = await PTOService.getAssessments();
+                const mapped: Assessment[] = data.map((a: AssessDto | unknown) => {
+                  const deptList = getNested(a, ['target', 'departments']);
+                  const typeRaw = getProp(a, 'type');
+                  const typeStr = asString(typeRaw).toUpperCase();
+                  const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
+                  const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
+                  const createdName = asString(getProp(a, 'createdByName'));
+                  const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+                  const createdUser = createdName || asString(createdEmail).split('@')[0];
+                  const qs = getProp(a, 'questions');
+                  const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
+                  return {
+                    id: asString(getProp(a, 'id') ?? getProp(a, 'assessmentId') ?? getProp(a, 'SK')),
+                    name: asString(getProp(a, 'name') ?? getProp(a, 'title')),
+                    department: asString(getProp(a, 'department') ?? (Array.isArray(deptList) ? deptList[0] : '')),
+                    type: typeStr === 'COLLEGE_WIDE' ? 'college-wide' : 'department-wise',
+                    duration: asNumber(getProp(a, 'duration') ?? getProp(a, 'durationMinutes') ?? 60),
+                    date: asString(getProp(a, 'date') ?? getNested(a, ['scheduling', 'startDate']) ?? ''),
+                    timeWindow: { start: asString(start ?? ''), end: asString(end ?? '') },
+                    attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
+                    questions: totalQ,
+                    status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
+                    createdBy: createdUser || undefined
+                  };
+                });
+                setAssessments(mapped);
+              }}>Close</button>
             </div>
           </div>
         </div>
@@ -673,7 +616,7 @@ const AssessmentManagement: React.FC = () => {
                 <div className="preview-item">
                   <strong>Question List:</strong>
                   <div>
-                    {previewData.questions.map((q: any, idx: number) => (
+                    {previewData.questions.map((q: Question, idx: number) => (
                       <div key={q.id || idx} style={{ marginTop: '8px' }}>
                         <div>{idx + 1}. {q.text}</div>
                         {Array.isArray(q.options) && q.options.length > 0 && (
@@ -736,8 +679,33 @@ const AssessmentManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      
     </div>
   );
 };
 
 export default AssessmentManagement;
+  const getProp = (obj: unknown, key: string): unknown => {
+    if (obj && typeof obj === 'object' && key in (obj as Record<string, unknown>)) {
+      return (obj as Record<string, unknown>)[key];
+    }
+    return undefined;
+  };
+  const getNested = (obj: unknown, keys: string[]): unknown => {
+    let cur: unknown = obj;
+    for (const k of keys) {
+      if (cur && typeof cur === 'object' && k in (cur as Record<string, unknown>)) {
+        cur = (cur as Record<string, unknown>)[k];
+      } else {
+        return undefined;
+      }
+    }
+    return cur;
+  };
+  const asString = (v: unknown, fallback = ''): string => {
+    return typeof v === 'string' ? v : String(v ?? fallback);
+  };
+  const asNumber = (v: unknown, fallback = 0): number => {
+    return typeof v === 'number' ? v : Number(v ?? fallback);
+  };
