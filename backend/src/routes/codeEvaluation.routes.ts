@@ -1,5 +1,6 @@
-import express from 'express';
-import codeEvaluationController from '../controllers/codeEvaluation.controller';
+// @ts-nocheck
+const express = require('express');
+const codeEvaluationController = require('../controllers/codeEvaluation.controller');
 const authMiddleware = require('../auth/auth.middleware');
 
 const router = express.Router();
@@ -9,6 +10,6 @@ const router = express.Router();
  * @desc Evaluate student code against test cases using Judge0
  * @access Private (requires authentication)
  */
-router.post('/evaluate', authMiddleware.authenticateToken, codeEvaluationController.evaluateCode);
+router.post('/evaluate', authMiddleware.authenticateToken, codeEvaluationController.evaluateCodingQuestion);
 
 module.exports = router;

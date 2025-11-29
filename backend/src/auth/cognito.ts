@@ -24,18 +24,22 @@ function initializeCognitoClient() {
     try {
         // Validate required environment variables
         if (!process.env.COGNITO_USER_POOL_ID) {
-            console.error('ERROR: COGNITO_USER_POOL_ID is not set in environment variables');
-            console.error('Please set COGNITO_USER_POOL_ID in your .env file');
+            const errorMsg = 'COGNITO_USER_POOL_ID is not set in environment variables. Please set it in your .env file.';
+            console.error('ERROR:', errorMsg);
+            throw new Error(errorMsg);
         }
         
         if (!process.env.COGNITO_CLIENT_ID) {
-            console.error('ERROR: COGNITO_CLIENT_ID is not set in environment variables');
-            console.error('Please set COGNITO_CLIENT_ID in your .env file');
+            const errorMsg = 'COGNITO_CLIENT_ID is not set in environment variables. Please set it in your .env file.';
+            console.error('ERROR:', errorMsg);
+            throw new Error(errorMsg);
         }
 
         cognitoRegion = process.env.COGNITO_REGION || process.env.AWS_REGION || 'us-east-1';
         
         console.log(`Initializing Cognito client for region: ${cognitoRegion}`);
+        console.log(`COGNITO_USER_POOL_ID: ${process.env.COGNITO_USER_POOL_ID ? 'Set' : 'Missing'}`);
+        console.log(`COGNITO_CLIENT_ID: ${process.env.COGNITO_CLIENT_ID ? 'Set' : 'Missing'}`);
         
         cognitoClient = new CognitoIdentityProviderClient({
             region: cognitoRegion,
@@ -51,6 +55,8 @@ function initializeCognitoClient() {
         console.error('1. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY set in your environment');
         console.error('2. COGNITO_REGION or AWS_REGION set correctly');
         console.error('3. A valid Cognito User Pool in the specified region');
+        console.error('4. COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID in your .env file');
+        // Don't throw here - let it fail when login is attempted so we can return a proper error
         return false;
     }
 }
@@ -138,14 +144,18 @@ async function registerUser(username, password, email) {
  */
 async function loginUser(username, password, newPassword = null, session = null) {
     try {
-        // Validate Cognito client is initialized
-        if (!cognitoClient) {
-            throw new Error('Cognito client is not initialized. Please check your AWS configuration and environment variables.');
+        // Validate required environment variables first
+        if (!process.env.COGNITO_USER_POOL_ID) {
+            throw new Error('COGNITO_USER_POOL_ID is not configured. Please set it in your .env file.');
         }
 
-        // Validate required environment variables
         if (!process.env.COGNITO_CLIENT_ID) {
             throw new Error('COGNITO_CLIENT_ID is not configured. Please set it in your .env file.');
+        }
+
+        // Validate Cognito client is initialized
+        if (!cognitoClient) {
+            throw new Error('Cognito client is not initialized. Please check your AWS configuration and environment variables. Make sure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set.');
         }
 
         // Validate inputs

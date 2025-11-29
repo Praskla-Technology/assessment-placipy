@@ -2,6 +2,7 @@
 const express = require('express');
 const authMiddleware = require('../auth/auth.middleware');
 const assessmentService = require('../services/AssessmentService');
+const notificationService = require('../services/NotificationService');
 
 const router = express.Router();
 
@@ -266,6 +267,47 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         });
 
         const result = await assessmentService.createAssessment(assessmentData, createdBy);
+        
+        // Send notifications if assessment is published
+        if (assessmentData.isPublished && result) {
+            try {
+                const domain = createdBy.split('@')[1] || 'ksrce.ac.in';
+                let studentEmails: string[] = [];
+
+                // Get target students based on departments
+                if (assessmentData.targetDepartments && assessmentData.targetDepartments.length > 0) {
+                    for (const dept of assessmentData.targetDepartments) {
+                        const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
+                        studentEmails.push(...deptStudents);
+                    }
+                } else {
+                    // Get all students for the domain
+                    studentEmails = await notificationService.getStudentsByDomain(domain);
+                }
+
+                // Remove duplicates
+                studentEmails = [...new Set(studentEmails)];
+
+                // Send notifications
+                const priority = assessmentData.scheduling?.startDate ? 'medium' : 'medium';
+                await notificationService.createNotificationsForStudents(
+                    studentEmails,
+                    'assessment_published',
+                    `New Assessment: ${assessmentData.title}`,
+                    assessmentData.scheduling?.startDate 
+                        ? `A new assessment "${assessmentData.title}" has been published and is scheduled.`
+                        : `A new assessment "${assessmentData.title}" has been published.`,
+                    `/student/assessments/${result.assessmentId || result.assessmentId}`,
+                    priority,
+                    { assessmentId: result.assessmentId || result.assessmentId }
+                );
+                console.log(`Sent notifications to ${studentEmails.length} students for published assessment`);
+            } catch (notifError) {
+                console.error('Error sending notifications:', notifError);
+                // Don't fail the request if notifications fail
+            }
+        }
+        
         res.status(201).json({
             success: true,
             data: result
@@ -330,7 +372,53 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
         // Add the updatedByName to the assessment data
         assessmentData.updatedByName = updatedByName;
 
+        // Check if assessment is being published (isPublished changing from false to true)
+        const wasPublished = assessmentData.wasPublished === false || assessmentData.wasPublished === undefined;
+        const isBeingPublished = assessmentData.isPublished === true && wasPublished;
+
         const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
+        
+        // Send notifications if assessment is being published
+        if (isBeingPublished && result) {
+            try {
+                const domain = updatedBy.split('@')[1] || 'ksrce.ac.in';
+                let studentEmails: string[] = [];
+
+                // Get target students based on departments
+                const targetDepts = assessmentData.targetDepartments || result.target?.departments || [];
+                if (targetDepts.length > 0) {
+                    for (const dept of targetDepts) {
+                        const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
+                        studentEmails.push(...deptStudents);
+                    }
+                } else {
+                    // Get all students for the domain
+                    studentEmails = await notificationService.getStudentsByDomain(domain);
+                }
+
+                // Remove duplicates
+                studentEmails = [...new Set(studentEmails)];
+
+                // Send notifications
+                const priority = (assessmentData.scheduling?.startDate || result.scheduling?.startDate) ? 'medium' : 'medium';
+                await notificationService.createNotificationsForStudents(
+                    studentEmails,
+                    'assessment_published',
+                    `New Assessment: ${result.title || assessmentData.title}`,
+                    (assessmentData.scheduling?.startDate || result.scheduling?.startDate)
+                        ? `A new assessment "${result.title || assessmentData.title}" has been published and is scheduled.`
+                        : `A new assessment "${result.title || assessmentData.title}" has been published.`,
+                    `/student/assessments/${id}`,
+                    priority,
+                    { assessmentId: id }
+                );
+                console.log(`Sent notifications to ${studentEmails.length} students for published assessment`);
+            } catch (notifError) {
+                console.error('Error sending notifications:', notifError);
+                // Don't fail the request if notifications fail
+            }
+        }
+        
         res.status(200).json({
             success: true,
             data: result

@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ResultsService from '../../services/results.service';
 
 const ResultsReports: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('scores');
+  const navigate = useNavigate();
   const [testResults, setTestResults] = useState<any[]>([]);
-  const [departmentRankings, setDepartmentRankings] = useState<any[]>([]);
-  const [detailedAnalysis, setDetailedAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,17 +13,30 @@ const ResultsReports: React.FC = () => {
     const fetchResults = async () => {
       try {
         setLoading(true);
-        // Commented out since we removed the endpoint
-        /*
-        const response = await ResultsService.getMyResults();
-        if (response.success) {
-          setTestResults(response.data);
-        } else {
-          setError('Failed to fetch results: ' + (response.message || 'Unknown error'));
+        setError(null);
+        const response = await ResultsService.getStudentResults();
+        console.log('Results response:', response);
+        console.log('Response type:', typeof response);
+        console.log('Response keys:', response ? Object.keys(response) : 'null');
+        
+        // Handle different response formats
+        let results = [];
+        if (response) {
+          if (Array.isArray(response)) {
+            // Direct array response
+            results = response;
+          } else if (response.data) {
+            // Response with data property
+            results = Array.isArray(response.data) ? response.data : [];
+          } else if (response.success && response.data) {
+            // Response with success flag
+            results = Array.isArray(response.data) ? response.data : [];
+          }
         }
-        */
-        // Set empty results since we can't fetch them
-        setTestResults([]);
+        
+        console.log('Extracted results:', results);
+        console.log('Results count:', results.length);
+        setTestResults(results);
       } catch (err: any) {
         console.error('Error fetching results:', err);
         console.error('Error details:', {
@@ -33,10 +45,16 @@ const ResultsReports: React.FC = () => {
           status: err.response?.status
         });
         
-        const errorMessage = err.response?.data?.message || 
-                            err.message || 
-                            'Failed to fetch results. Please try again later.';
-        setError(errorMessage);
+        // Only show error if it's not a 404 (no results is not an error)
+        if (err.response?.status !== 404) {
+          const errorMessage = err.response?.data?.message || 
+                              err.message || 
+                              'Failed to fetch results. Please try again later.';
+          setError(errorMessage);
+        } else {
+          // 404 means no results found, which is fine
+          setTestResults([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -45,27 +63,14 @@ const ResultsReports: React.FC = () => {
     fetchResults();
   }, []);
 
-  // Mock data for department rankings (in a real app, this would come from the API)
-  useEffect(() => {
-    setDepartmentRankings([
-      { rank: 1, name: 'Alice Johnson', score: 95 },
-      { rank: 2, name: 'Michael Chen', score: 92 },
-      { rank: 3, name: 'Sarah Williams', score: 90 },
-      { rank: 4, name: 'John Doe', score: 85 },
-      { rank: 5, name: 'Emma Davis', score: 82 },
-    ]);
-  }, []);
+  const handleViewResult = (result: any) => {
+    // Navigate to result detail page with attemptId (SK)
+    if (result.SK) {
+      const encodedAttemptId = encodeURIComponent(result.SK);
+      navigate(`/student/results/${encodedAttemptId}`);
+    }
+  };
 
-  // Mock detailed analysis data (in a real app, this would come from the API)
-  useEffect(() => {
-    setDetailedAnalysis({
-      testName: 'Mathematics Quiz',
-      correctAnswers: 17,
-      totalQuestions: 20,
-      timeSpent: '45 minutes',
-      feedback: 'Good work on algebra questions. Need to improve on geometry concepts.'
-    });
-  }, []);
 
   if (loading) {
     return (
@@ -99,98 +104,48 @@ const ResultsReports: React.FC = () => {
     <div className="results-reports-page">
       <h2>Results & Reports</h2>
       
-      <div className="tabs">
-        <button 
-          className={`tab-btn ${activeTab === 'scores' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scores')}
-        >
-          Scores & Ranks
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`}
-          onClick={() => setActiveTab('analysis')}
-        >
-          Detailed Analysis
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'ranking' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ranking')}
-        >
-          Department Ranking
-        </button>
-      </div>
-
-      <div className="tab-content">
-        {activeTab === 'scores' && (
-          <div className="scores-tab">
-            <h3>Your Test Scores</h3>
-            {testResults.length > 0 ? (
-              <div className="results-table">
-                <div className="table-header">
-                  <div>Test Name</div>
-                  <div>Score</div>
-                  <div>Rank</div>
-                  <div>Date</div>
-                </div>
-                {testResults.map((result: any, index: number) => (
-                  <div key={index} className="table-row">
-                    <div>{result.assessmentId || 'Assessment'}</div>
-                    <div className="score">{result.percentage || 0}%</div>
-                    <div>#{index + 1}/{testResults.length}</div>
-                    <div>{result.submittedAt ? new Date(result.submittedAt).toLocaleDateString() : 'N/A'}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="no-results">
-                <p>No assessment results available yet.</p>
-                <p>Complete assessments to see your scores here.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'analysis' && (
-          <div className="analysis-tab">
-            <h3>Detailed Analysis</h3>
-            <div className="analysis-content">
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <h4>Questions Answered</h4>
-                  <p className="stat-value">{detailedAnalysis?.correctAnswers || 0}/{detailedAnalysis?.totalQuestions || 0}</p>
-                </div>
-                <div className="stat-card">
-                  <h4>Time Spent</h4>
-                  <p className="stat-value">{detailedAnalysis?.timeSpent || '0 minutes'}</p>
-                </div>
-                <div className="stat-card">
-                  <h4>Accuracy</h4>
-                  <p className="stat-value">{detailedAnalysis ? Math.round((detailedAnalysis.correctAnswers/detailedAnalysis.totalQuestions)*100) : 0}%</p>
-                </div>
-              </div>
-              <div className="feedback-section">
-                <h4>Feedback</h4>
-                <p>{detailedAnalysis?.feedback || 'No feedback available.'}</p>
-              </div>
+      <div className="scores-tab">
+        <h3>Your Test Scores</h3>
+        {testResults.length > 0 ? (
+          <div className="results-table">
+            <div className="table-header" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+              <div>Assessment Title</div>
+              <div>Score / Max</div>
+              <div>Percentage</div>
+              <div>Accuracy</div>
+              <div>Submitted At</div>
+              <div>Action</div>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'ranking' && (
-          <div className="ranking-tab">
-            <h3>Department Ranking Board</h3>
-            <div className="ranking-list">
-              {departmentRankings.map(student => (
-                <div 
-                  key={student.rank} 
-                  className={`ranking-item ${student.name === 'John Doe' ? 'current-student' : ''}`}
-                >
-                  <div className="rank">#{student.rank}</div>
-                  <div className="name">{student.name}</div>
-                  <div className="score">{student.score}%</div>
+            {testResults.map((result: any, index: number) => (
+              <div key={index} className="table-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                <div>{result.assessmentId || 'Assessment'}</div>
+                <div className="score">{result.score || 0} / {result.maxScore || 0}</div>
+                <div>{result.percentage || 0}%</div>
+                <div>{result.accuracy || 0}%</div>
+                <div>{result.submittedAt ? new Date(result.submittedAt).toLocaleString() : 'N/A'}</div>
+                <div>
+                  <button 
+                    onClick={() => handleViewResult(result)}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#9768E1',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    View Result
+                  </button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="no-results">
+            <p>No assessment results available yet.</p>
+            <p>Complete assessments to see your scores here.</p>
           </div>
         )}
       </div>

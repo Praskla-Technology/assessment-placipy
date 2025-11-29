@@ -17,6 +17,7 @@ const ptoRoutes = require('./routes/pto.routes');
 const codeEvaluationRoutes = require('./routes/codeEvaluation.routes');
 const resultsRoutes = require('./routes/results.routes');
 const studentAssessmentRoutes = require('./routes/student.assessment.routes');
+const studentSubmissionRoutes = require('./routes/student.submission.routes');
 
 console.log('Routes loaded successfully');
 
@@ -26,7 +27,7 @@ const { authenticateToken, authorizeRole } = require('./auth/auth.middleware');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3005;
 
 // Security middleware
 app.use(helmet());
@@ -61,6 +62,7 @@ app.use('/api/pto', ptoRoutes);
 app.use('/api/code-evaluation', codeEvaluationRoutes);
 app.use('/api/results', resultsRoutes);
 app.use('/api/student-assessments', studentAssessmentRoutes);
+app.use('/api/student', studentSubmissionRoutes);
 console.log('Routes registered successfully');
 
 // Health check endpoint

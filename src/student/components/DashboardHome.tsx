@@ -6,29 +6,18 @@ import ResultsService from '../../services/results.service';
 const DashboardHome: React.FC = () => {
   const { user } = useUser();
   const [activeAssessmentsCount, setActiveAssessmentsCount] = useState(0);
-  const [completedAssessmentsCount, setCompletedAssessmentsCount] = useState(0); // Changed from 12 to 0
+  const [completedAssessmentsCount, setCompletedAssessmentsCount] = useState(0);
+  const [averageScore, setAverageScore] = useState(0);
+  const [recentAssessments, setRecentAssessments] = useState<any[]>([]);
+  const [performanceData, setPerformanceData] = useState<Array<{subject: string, score: number}>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Dynamic stats data with all static numbers set to 0
+  // Dynamic stats data
   const stats = [
     { title: 'Active Tests', value: activeAssessmentsCount, change: '' },
     { title: 'Completed Tests', value: completedAssessmentsCount, change: '' },
-    { title: 'Average Score', value: '0%', change: '' },
-    { title: 'Ranking', value: '0th', change: '' },
-  ];
-
-  const assessments = [
-    { id: 1, name: 'Mathematics Quiz', status: 'active', progress: 60 },
-    { id: 2, name: 'Physics Test', status: 'upcoming', progress: 0 },
-    { id: 3, name: 'Chemistry Exam', status: 'completed', progress: 100 },
-  ];
-
-  const performanceData = [
-    { subject: 'Mathematics', score: 85 },
-    { subject: 'Physics', score: 78 },
-    { subject: 'Chemistry', score: 92 },
-    { subject: 'Biology', score: 88 },
+    { title: 'Average Score', value: `${averageScore}%`, change: '' },
   ];
 
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -37,48 +26,77 @@ const DashboardHome: React.FC = () => {
     day: 'numeric',
   });
 
-  // Fetch real assessments and calculate active count
+  // Fetch real-time dashboard data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Fetch all assessments
+        // Fetch all assessments to get active count
         const assessmentsResponse = await StudentAssessmentService.getAllAssessments();
         console.log('Fetched assessments:', assessmentsResponse);
         
-        // Filter active assessments
-        const activeCount = assessmentsResponse.data.filter((assessment: any) => 
-          assessment.status === 'ACTIVE'
-        ).length;
+        // Filter active assessments (currently active based on dates)
+        const now = new Date();
+        const activeCount = assessmentsResponse.data.filter((assessment: any) => {
+          const startDate = new Date(assessment.scheduling?.startDate || assessment.createdAt);
+          const endDate = new Date(assessment.scheduling?.endDate || new Date());
+          return assessment.status === 'ACTIVE' && startDate <= now && endDate >= now;
+        }).length;
         
         setActiveAssessmentsCount(activeCount);
         
-        // Fetch student's results to determine completed assessments
-        // Commented out since we removed the endpoint
-        /*
+        // Fetch dashboard statistics (completed tests, average score, recent assessments, performance)
         try {
-          const resultsResponse = await ResultsService.getMyResults();
-          console.log('Fetched results:', resultsResponse);
+          const statsResponse = await ResultsService.getDashboardStats();
+          console.log('Fetched dashboard stats:', statsResponse);
           
-          // Count completed assessments (default to 0 if no data)
-          const completedCount = resultsResponse.data && Array.isArray(resultsResponse.data) 
-            ? resultsResponse.data.length 
-            : 0;
-          setCompletedAssessmentsCount(completedCount);
-        } catch (resultsError: any) {
-          // If there's an error fetching results, set completed count to 0 and log the error
-          console.log('No completed assessments found or error fetching results:', resultsError);
-          console.error('Results fetch error details:', {
-            message: resultsError.message,
-            response: resultsError.response?.data,
-            status: resultsError.response?.status
-          });
+          if (statsResponse.success && statsResponse.data) {
+            setCompletedAssessmentsCount(statsResponse.data.completedTests || 0);
+            setAverageScore(statsResponse.data.averageScore || 0);
+            
+            // Set recent assessments
+            if (statsResponse.data.recentAssessments && Array.isArray(statsResponse.data.recentAssessments)) {
+              // Map assessment IDs to titles from assessments list
+              const assessmentsMap = new Map(
+                assessmentsResponse.data.map((a: any) => [a.assessmentId, a.title])
+              );
+              
+              const recentWithTitles = statsResponse.data.recentAssessments.map((result: any) => ({
+                ...result,
+                name: assessmentsMap.get(result.assessmentId) || result.assessmentId,
+                id: result.assessmentId
+              }));
+              
+              setRecentAssessments(recentWithTitles);
+            } else {
+              setRecentAssessments([]);
+            }
+            
+            // Set performance data (map assessment IDs to titles)
+            if (statsResponse.data.performanceData && Array.isArray(statsResponse.data.performanceData)) {
+              const assessmentsMap = new Map(
+                assessmentsResponse.data.map((a: any) => [a.assessmentId, a.title])
+              );
+              
+              const performanceWithTitles = statsResponse.data.performanceData.map((perf: any) => ({
+                ...perf,
+                subject: assessmentsMap.get(perf.assessmentId) || perf.assessmentId || perf.subject
+              }));
+              
+              setPerformanceData(performanceWithTitles);
+            } else {
+              setPerformanceData([]);
+            }
+          }
+        } catch (statsError: any) {
+          console.log('Error fetching dashboard stats:', statsError);
+          // Set defaults if stats fetch fails
           setCompletedAssessmentsCount(0);
+          setAverageScore(0);
+          setRecentAssessments([]);
+          setPerformanceData([]);
         }
-        */
-        // Set completed assessments to 0 since we can't fetch them
-        setCompletedAssessmentsCount(0);
         
         setError(null);
       } catch (err: any) {
@@ -95,6 +113,10 @@ const DashboardHome: React.FC = () => {
     };
 
     fetchData();
+    
+    // Refresh data every 30 seconds for real-time updates
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -157,71 +179,195 @@ const DashboardHome: React.FC = () => {
       <div className="assessments-section">
         <h2>Recent Assessments</h2>
         <div className="assessments-list">
-          {assessments.map(assessment => (
-            <div className="assessment-card" key={assessment.id}>
-              <div className="assessment-header">
-                <h3>{assessment.name}</h3>
-                <span className={`status-badge ${assessment.status}`}>
-                  {assessment.status.charAt(0).toUpperCase() + assessment.status.slice(1)}
-                </span>
-              </div>
-              <div className="progress-container">
-                <span>Progress:</span>
-                <div className="progress-bar">
-                  <div 
-                    className="progress-fill" 
-                    style={{ width: `${assessment.progress}%` }}
-                  ></div>
+          {loading ? (
+            <div style={{ padding: '20px', textAlign: 'center' }}>Loading recent assessments...</div>
+          ) : recentAssessments.length > 0 ? (
+            recentAssessments.map(assessment => (
+              <div className="assessment-card" key={assessment.id || assessment.assessmentId}>
+                <div className="assessment-header">
+                  <h3>{assessment.name || assessment.assessmentId}</h3>
+                  <span className={`status-badge ${assessment.status}`}>
+                    {assessment.status.charAt(0).toUpperCase() + assessment.status.slice(1)}
+                  </span>
                 </div>
-                <span>{assessment.progress}%</span>
+                <div className="progress-container">
+                  <span>Score: {assessment.score || 0} / {assessment.maxScore || 0} ({assessment.percentage || 0}%)</span>
+                  <div className="progress-bar">
+                    <div 
+                      className="progress-fill" 
+                      style={{ width: `${assessment.progress || 100}%` }}
+                    ></div>
+                  </div>
+                  <span>{assessment.progress || 100}%</span>
+                </div>
+                {assessment.submittedAt && (
+                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '8px' }}>
+                    Submitted: {new Date(assessment.submittedAt).toLocaleDateString()}
+                  </div>
+                )}
               </div>
+            ))
+          ) : (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+              No completed assessments yet. Complete assessments to see them here.
             </div>
-          ))}
+          )}
         </div>
       </div>
 
-      <div className="performance-section">
-        <h2>Performance Summary</h2>
-        <div
-          className="chart-container"
-          style={{ position: 'relative', padding: '0 0 8px 0' }}
-        >
-          {/* Bars */}
-          <div
-            className="performance-bars"
-            style={{ display: 'flex', alignItems: 'flex-end', gap: '20px', height: '260px' }}
-          >
-            {performanceData.map((subject, index) => {
-              const clamped = Math.max(0, Math.min(100, subject.score));
-              return (
-                <div
-                  key={index}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}
-                >
-                  {/* value label */}
-                  <div style={{ marginBottom: '6px', color: '#111827', fontSize: '12px' }}>{clamped}%</div>
+      <div className="performance-section" style={{ 
+        background: '#FFFFFF', 
+        borderRadius: '16px', 
+        padding: '24px', 
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        marginTop: '24px'
+      }}>
+        <h2 style={{ marginBottom: '24px', fontSize: '20px', fontWeight: 600, color: '#111827' }}>Performance Summary</h2>
+        {loading ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>Loading performance data...</div>
+        ) : performanceData.length > 0 ? (
+          <div style={{ width: '100%', padding: '20px 0' }}>
+            {/* Chart Container */}
+            <div style={{ 
+              position: 'relative', 
+              width: '100%', 
+              height: '300px',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-around',
+              padding: '20px 40px 40px 60px',
+              borderBottom: '2px solid #E5E7EB',
+              borderLeft: '2px solid #E5E7EB'
+            }}>
+              {/* Y-axis labels */}
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 40,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                width: '40px',
+                paddingRight: '10px',
+                alignItems: 'flex-end'
+              }}>
+                {[100, 80, 60, 40, 20, 0].map((value) => (
+                  <span key={value} style={{
+                    fontSize: '12px',
+                    color: '#6B7280',
+                    fontWeight: 500
+                  }}>
+                    {value}
+                  </span>
+                ))}
+              </div>
+
+              {/* Bars */}
+              {performanceData.map((subject, index) => {
+                const clamped = Math.max(0, Math.min(100, subject.score));
+                const barHeight = (clamped / 100) * 240; // Max height is 240px (300px - 60px padding)
+                const barWidth = Math.max(60, Math.min(120, 400 / performanceData.length));
+                
+                return (
                   <div
-                    className="bar-fill"
+                    key={index}
                     style={{
-                      height: `${clamped}%`,
-                      width: '48px',
-                      background: '#9768E1',
-                      borderRadius: '8px 8px 0 0',
-                      transition: 'transform 160ms ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      flex: 1,
+                      maxWidth: '150px',
+                      height: '100%',
+                      justifyContent: 'flex-end',
+                      position: 'relative'
                     }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                    }}
-                  ></div>
-                  <span className="subject-name" style={{ marginTop: '10px', fontSize: '13px', color: '#111827' }}>{subject.subject}</span>
-                </div>
-              );
-            })}
+                  >
+                    {/* Bar */}
+                    <div
+                      style={{
+                        width: `${barWidth}px`,
+                        height: `${barHeight}px`,
+                        minHeight: clamped > 0 ? '4px' : '0',
+                        background: '#9768E1',
+                        borderRadius: '4px 4px 0 0',
+                        transition: 'height 0.8s ease',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(151, 104, 225, 0.2)'
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLDivElement).style.opacity = '0.8';
+                        (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLDivElement).style.opacity = '1';
+                        (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1)';
+                      }}
+                    >
+                      {/* Value label on top of bar */}
+                      {clamped > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '-25px',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: '#111827',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {clamped}%
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* X-axis label */}
+                    <div style={{
+                      marginTop: '8px',
+                      fontSize: '12px',
+                      color: '#374151',
+                      fontWeight: 500,
+                      textAlign: 'center',
+                      wordBreak: 'break-word',
+                      maxWidth: `${barWidth}px`
+                    }}>
+                      {subject.subject}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginTop: '20px',
+              gap: '8px'
+            }}>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                background: '#9768E1',
+                borderRadius: '2px'
+              }}></div>
+              <span style={{
+                fontSize: '14px',
+                color: '#374151',
+                fontWeight: 500
+              }}>
+                Performance Score
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#666', background: '#F9FAFB', borderRadius: '12px' }}>
+            <p style={{ margin: 0, fontSize: '14px' }}>No performance data available yet.</p>
+            <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>Complete assessments to see your performance.</p>
+          </div>
+        )}
       </div>
     </div>
   );

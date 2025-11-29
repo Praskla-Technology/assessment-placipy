@@ -7,6 +7,8 @@ import Profile from '../components/Profile';
 import Notifications from '../components/Notifications';
 import AssessmentTaking from '../components/AssessmentTaking';
 import AssessmentSuccess from '../components/AssessmentSuccess';
+import AssessmentSubmitted from './AssessmentSubmitted';
+import ResultDetail from './ResultDetail';
 import '../styles/Dashboard.css';
 import AuthService from '../../services/auth.service';
 import { useUser } from '../../contexts/UserContext';
@@ -194,11 +196,13 @@ const StudentDashboard: React.FC = () => {
             <Route path="/" element={<DashboardHome />} />
             <Route path="/assessments" element={<Assessments />} />
             <Route path="/results" element={<ResultsReports />} />
+            <Route path="/results/:attemptId" element={<ResultDetail />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/assessment-taking" element={<AssessmentTaking />} />
             <Route path="/assessment-taking/:assessmentId" element={<AssessmentTakingWrapper />} />
             <Route path="/assessment-success" element={<AssessmentSuccess />} />
+            <Route path="/assessment-submitted" element={<AssessmentSubmitted />} />
           </Routes>
         </div>
       </main>

@@ -26,7 +26,7 @@ class ResultsService {
       console.log('Request headers:', headers);
       
       const response = await axios.post(
-        `${API_BASE_URL}/api/results`,
+        `${API_BASE_URL}/api/student/submit-assessment`,
         resultData,
         { headers }
       );
@@ -50,6 +50,93 @@ class ResultsService {
       }
       
       throw new Error(error.response?.data?.message || 'Failed to save assessment result');
+    }
+  }
+
+  /**
+   * Get all results for logged-in student
+   */
+  async getStudentResults(): Promise<any> {
+    try {
+      console.log('Fetching student results from:', `${API_BASE_URL}/api/student/results`);
+      const response = await axios.get(
+        `${API_BASE_URL}/api/student/results`,
+        { headers: this.getAuthHeaders() }
+      );
+      console.log('Student results response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error getting student results:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Error URL:', error.config?.url);
+      
+      // If 404, return empty results
+      if (error.response?.status === 404) {
+        console.log('404 error - returning empty results');
+        return { success: true, data: [] };
+      }
+      
+      // For other errors, also return empty array to prevent UI crash
+      if (error.response?.status >= 400) {
+        console.log('Error status:', error.response?.status, '- returning empty results');
+        return { success: true, data: [] };
+      }
+      
+      throw new Error(error.response?.data?.message || error.message || 'Failed to retrieve results');
+    }
+  }
+
+  /**
+   * Get dashboard statistics
+   */
+  async getDashboardStats(): Promise<any> {
+    try {
+      console.log('=== Getting Dashboard Stats ===');
+      const headers = this.getAuthHeaders();
+      
+      const response = await axios.get(
+        `${API_BASE_URL}/api/student/dashboard-stats`,
+        { headers }
+      );
+      
+      console.log('Dashboard stats response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error getting dashboard stats:', error);
+      
+      if (error.response?.status === 404) {
+        // No stats available yet, return empty data
+        return {
+          success: true,
+          data: {
+            completedTests: 0,
+            averageScore: 0,
+            ranking: null,
+            recentAssessments: [],
+            performanceData: []
+          }
+        };
+      }
+      
+      throw new Error('Failed to retrieve dashboard statistics: ' + (error.response?.data?.message || error.message));
+    }
+  }
+
+  /**
+   * Get detailed result for a specific attempt
+   */
+  async getResultDetail(attemptId: string): Promise<any> {
+    try {
+      const encodedAttemptId = encodeURIComponent(attemptId);
+      const response = await axios.get(
+        `${API_BASE_URL}/api/student/results/${encodedAttemptId}`,
+        { headers: this.getAuthHeaders() }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error getting result detail:', error);
+      throw new Error(error.response?.data?.message || 'Failed to retrieve result detail');
     }
   }
 

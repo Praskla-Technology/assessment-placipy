@@ -46,7 +46,9 @@ class AssessmentService {
      */
     private getDomainFromEmail(email: string): string {
         if (!email || !email.includes('@')) {
-            return 'ksrce.ac.in'; // Default domain
+            // For dynamic domains, don't use a default domain
+            // Return empty string to indicate no domain was provided
+            return '';
         }
         return email.split('@')[1];
     }
@@ -470,31 +472,9 @@ class AssessmentService {
             console.log('Query result:', JSON.stringify(queryResult, null, 2));
 
             if (!queryResult.Items || queryResult.Items.length === 0) {
-                console.log('No assessment found with ID:', assessmentId);
                 console.log('No assessment found with ID:', assessmentId, 'and domain:', domain);
-                // Let's also try with the default domain to see if that works
-                if (domain !== 'ksrce.ac.in') {
-                    console.log('Trying with default domain ksrce.ac.in');
-                    const defaultDomainQueryParams = {
-                        TableName: this.assessmentsTableName,
-                        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
-                        ExpressionAttributeValues: {
-                            ':pk': `CLIENT#ksrce.ac.in`,
-                            ':sk_prefix': `ASSESSMENT#${assessmentId}`
-                        }
-                    };
-                    const defaultDomainQueryResult = await dynamodb.query(defaultDomainQueryParams).promise();
-                    if (defaultDomainQueryResult.Items && defaultDomainQueryResult.Items.length > 0) {
-                        console.log('Found assessment with default domain');
-                        queryResult.Items = defaultDomainQueryResult.Items;
-                    } else {
-                        console.log('No assessment found with default domain either');
-                    }
-                }
-                
-                if (!queryResult.Items || queryResult.Items.length === 0) {
-                    return null;
-                }
+                // Don't scan, just return null when not found in specific domain
+                return null;
             }
 
             // Since we're using begins_with, we might get multiple items
@@ -507,6 +487,7 @@ class AssessmentService {
 
             if (!assessment) {
                 console.log('No exact assessment match found with ID:', assessmentId, 'and domain:', domain);
+                // Don't scan, just return null when not found in specific domain
                 return null;
             }
 
@@ -760,30 +741,8 @@ class AssessmentService {
             console.log('Assessment verification result:', JSON.stringify(mainAssessmentResult, null, 2));
 
             if (!mainAssessmentResult.Items || mainAssessmentResult.Items.length === 0) {
-                // Try with default domain as fallback
-                if (domain !== 'ksrce.ac.in') {
-                    console.log('Trying with default domain ksrce.ac.in for assessment verification');
-                    const defaultDomainParams = {
-                        TableName: this.assessmentsTableName,
-                        KeyConditionExpression: 'PK = :pk AND SK = :sk',
-                        ExpressionAttributeValues: {
-                            ':pk': `CLIENT#ksrce.ac.in`,
-                            ':sk': `ASSESSMENT#${assessmentId}`
-                        }
-                    };
-                    const defaultDomainResult = await dynamodb.query(defaultDomainParams).promise();
-                    console.log('Default domain assessment verification result:', JSON.stringify(defaultDomainResult, null, 2));
-                    
-                    if (defaultDomainResult.Items && defaultDomainResult.Items.length > 0) {
-                        console.log('Found assessment with default domain, using it for questions query');
-                        // Use the default domain for the rest of the query
-                        domain = 'ksrce.ac.in';
-                    } else {
-                        throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
-                    }
-                } else {
-                    throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
-                }
+                // Don't scan, just throw an error when not found in specific domain
+                throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
 
             // Now query for all question batch items with swapped PK/SK structure
@@ -886,6 +845,7 @@ class AssessmentService {
             
             if (!assessment) {
                 console.log(`Assessment ${assessmentId} not found for domain ${domain}`);
+                // Don't scan, just throw an error when not found in specific domain
                 throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
 
@@ -910,23 +870,23 @@ class AssessmentService {
             const timestamp = new Date().toISOString();
 
             // First, get the current item to understand its structure
-            // Use query instead of scan for better performance
+            // Use query with the specific domain
             const getCurrentItemParams = {
                 TableName: this.assessmentsTableName,
-                KeyConditionExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':sk': `ASSESSMENT#${assessmentId}`,
-                    ':pk_prefix': 'CLIENT#'
+                    ':pk': `CLIENT#${updates.domain || 'unknown'}`, // Use provided domain or unknown
+                    ':sk_prefix': `ASSESSMENT#${assessmentId}`
                 }
             };
 
-            // Since we don't know the exact domain, we'll need to use scan for this case
-            // In a production environment, you'd want to pass the domain as a parameter
-            const currentItemResult = await dynamodb.scan(getCurrentItemParams).promise();
+            // Execute the query with the specific domain
+            const currentItemResult = await dynamodb.query(getCurrentItemParams).promise();
             const currentItem = currentItemResult.Items && currentItemResult.Items[0];
 
+            // If not found with specific domain, throw an error instead of scanning
             if (!currentItem) {
-                throw new Error('Assessment not found');
+                throw new Error(`Assessment ${assessmentId} not found for domain ${updates.domain || 'unknown'}`);
             }
 
             // Build update expression
@@ -1112,24 +1072,23 @@ class AssessmentService {
         }
     }
 
-    async deleteAssessment(assessmentId: string): Promise<void> {
+    async deleteAssessment(assessmentId: string, domain: string): Promise<void> {
         try {
-            // First, find the assessment by scanning since we don't know the domain
-            // In a production environment, you'd want to pass the domain as a parameter
+            // First, find the assessment by querying with the specific domain
             const getAssessmentParams = {
                 TableName: this.assessmentsTableName,
-                FilterExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
+                KeyConditionExpression: 'PK = :pk AND SK = :sk',
                 ExpressionAttributeValues: {
-                    ':sk': `ASSESSMENT#${assessmentId}`,
-                    ':pk_prefix': 'CLIENT#'
+                    ':pk': `CLIENT#${domain}`,
+                    ':sk': `ASSESSMENT#${assessmentId}`
                 }
             };
 
-            const assessmentResult = await dynamodb.scan(getAssessmentParams).promise();
+            const assessmentResult = await dynamodb.query(getAssessmentParams).promise();
             const assessment = assessmentResult.Items && assessmentResult.Items[0];
 
             if (!assessment) {
-                throw new Error('Assessment not found');
+                throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
 
             // Delete main assessment from assessments table

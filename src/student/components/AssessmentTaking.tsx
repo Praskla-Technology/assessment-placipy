@@ -4,6 +4,8 @@ import './AssessmentTaking.css';
 import judge0Service, { type SubmissionResult } from '../../services/judge0.service';
 import StudentAssessmentService from '../../services/student.assessment.service';
 import ResultsService from '../../services/results.service';
+import { useUser } from '../../contexts/UserContext';
+import AuthService from '../../services/auth.service';
 
 // Define interfaces for assessment data
 interface MCQOption {
@@ -71,6 +73,8 @@ interface AssessmentData {
   mcqQuestions?: MCQQuestion[];
   codingQuestions?: CodingQuestion[];
   allQuestions?: (MCQQuestion | CodingQuestion)[];
+  department?: string; // Department chosen for the assessment
+  departmentCode?: string; // Department code (e.g., "CSE", "ALL")
   // Add other fields as needed
 }
 
@@ -78,6 +82,7 @@ const AssessmentTaking: React.FC = () => {
   // Get assessmentId from URL params
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
+  const { user } = useUser();
   
   // State for assessment data
   const [assessmentData, setAssessmentData] = useState<AssessmentData | null>(null);
@@ -115,6 +120,7 @@ const AssessmentTaking: React.FC = () => {
   const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState(false);
   const [mcqResults, setMcqResults] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -526,6 +532,32 @@ console.log("In a browser environment, this would render as HTML");
         setLoading(true);
         hasFetchedData.current = true; // Mark as fetched
         
+        // Check if student has already attempted this assessment
+        try {
+          const resultsResponse = await ResultsService.getStudentResults();
+          const results = resultsResponse?.data || resultsResponse || [];
+          const hasAttempted = Array.isArray(results) && results.some((r: any) => r.assessmentId === assessmentId);
+          
+          if (hasAttempted) {
+            setError('You have already completed this assessment. You can only attempt it once.');
+            setLoading(false);
+            // Redirect to results after 3 seconds
+            setTimeout(() => {
+              const assessmentResult = results.find((r: any) => r.assessmentId === assessmentId);
+              if (assessmentResult?.SK) {
+                const encodedSK = encodeURIComponent(assessmentResult.SK);
+                navigate(`/student/results/${encodedSK}`);
+              } else {
+                navigate('/student/results');
+              }
+            }, 3000);
+            return;
+          }
+        } catch (resultsError) {
+          // If we can't check results, allow access (might be first time)
+          console.log('Could not check previous attempts:', resultsError);
+        }
+        
         // Validate assessment ID before making API call
         if (!assessmentId) {
           setError('Assessment ID is required');
@@ -877,51 +909,210 @@ console.log("In a browser environment, this would render as HTML");
 
   // Handle submit
   const handleSubmit = async () => {
-    // Remove the test case check and allow submission for all assessments
+    // Prevent double submission
+    if (isSubmitting || submitted) {
+      return;
+    }
+
     try {
-      // Calculate scores
-      const { score: mcqScore, maxScore: mcqMaxScore, answers } = calculateMCQScore();
-      const codingScore = codingChallenges.length; // Simplified - 1 point per coding challenge
-      const codingMaxScore = codingChallenges.length;
+      setIsSubmitting(true);
       
+      // Get user info from context or token
+      let studentEmail = user?.email || '';
+      let studentName = user?.name || '';
+      
+      // If not in context, try to get from token
+      if (!studentEmail) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            const userProfile = await AuthService.getUserProfile(token);
+            studentEmail = userProfile.email || '';
+            studentName = userProfile.name || '';
+          }
+        } catch (err) {
+          console.error('Error getting user from token:', err);
+        }
+      }
+      
+      // Final fallback - decode JWT token to get email
+      if (!studentEmail) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            // Decode JWT token (simple base64 decode, no verification needed for email extraction)
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            studentEmail = payload.email || payload['cognito:username'] || payload.username || payload.sub || '';
+            studentName = payload.name || payload['cognito:name'] || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || studentEmail;
+          }
+        } catch (err) {
+          console.error('Error decoding token:', err);
+        }
+      }
+      
+      if (!studentEmail) {
+        alert('User email not found. Please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // If name is still empty, use email
+      if (!studentName) {
+        studentName = studentEmail;
+      }
+
+      // Calculate MCQ answers in exact format
+      const mcqAnswersArray: any[] = [];
+      let mcqScore = 0;
+      let mcqMaxScore = 0;
+      let mcqCorrect = 0;
+      let mcqIncorrect = 0;
+      let mcqUnattempted = 0;
+
+      mcqQuestions.forEach((question) => {
+        mcqMaxScore += question.points || 1;
+        const selectedIndex = mcqAnswers[question.questionId];
+        
+        // Get selected option IDs as array of strings
+        let selected: string[] = [];
+        if (selectedIndex !== undefined) {
+          const optionId = String.fromCharCode(65 + selectedIndex); // A, B, C, D
+          selected = [optionId];
+        }
+        
+        // Check if correct
+        let isCorrect = false;
+        if (selectedIndex !== undefined) {
+          const selectedOptionId = String.fromCharCode(65 + selectedIndex);
+          if (Array.isArray(question.correctAnswer)) {
+            isCorrect = question.correctAnswer.includes(selectedOptionId);
+          } else if (typeof question.correctAnswer === 'string') {
+            isCorrect = question.correctAnswer === selectedOptionId;
+          }
+          
+          if (isCorrect) {
+            mcqScore += question.points || 1;
+            mcqCorrect++;
+          } else {
+            mcqIncorrect++;
+          }
+        } else {
+          mcqUnattempted++;
+        }
+        
+        mcqAnswersArray.push({
+          questionId: question.questionId,
+          selected: selected,
+          isCorrect: isCorrect
+        });
+      });
+
+      // Calculate coding answers (simplified - assume all coding questions are attempted if code exists)
+      const codingAnswersArray: any[] = [];
+      let codingScore = 0;
+      let codingMaxScore = 0;
+      let codingCorrect = 0;
+      let codingIncorrect = 0;
+      let codingUnattempted = 0;
+
+      codingChallenges.forEach((challenge) => {
+        codingMaxScore += challenge.points || 1;
+        const challengeCode = code[challenge.questionId]?.[selectedLanguage] || '';
+        const hasCode = challengeCode.trim().length > 0;
+        const isSuccessful = successfulExecutions[challenge.questionId] || false;
+        
+        if (hasCode) {
+          if (isSuccessful) {
+            codingScore += challenge.points || 1;
+            codingCorrect++;
+          } else {
+            codingIncorrect++;
+          }
+        } else {
+          codingUnattempted++;
+        }
+        
+        codingAnswersArray.push({
+          questionId: challenge.questionId,
+          selected: hasCode ? [challengeCode] : [],
+          isCorrect: isSuccessful
+        });
+      });
+
+      // Combine all answers
+      const allAnswers = [...mcqAnswersArray, ...codingAnswersArray];
+      
+      // Calculate totals
       const totalScore = mcqScore + codingScore;
       const totalMaxScore = mcqMaxScore + codingMaxScore;
+      const totalQuestions = mcqQuestions.length + codingChallenges.length;
+      const numCorrect = mcqCorrect + codingCorrect;
+      const numIncorrect = mcqIncorrect + codingIncorrect;
+      const numUnattempted = mcqUnattempted + codingUnattempted;
+      const accuracy = totalQuestions > 0 ? Math.round((numCorrect / totalQuestions) * 100) : 0;
       const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+      const timeSpentSeconds = 3600 - timeLeft;
+
+      // Prepare result data in EXACT schema
+      // Get department from assessment first (the department chosen when creating the assessment)
+      // Then fallback to user's department, then departmentCode, then 'Unknown'
+      const department = assessmentData?.department || 
+                        assessmentData?.departmentCode || 
+                        user?.department || 
+                        'Unknown';
       
-      // Store MCQ results for UI feedback
-      setMcqResults(answers);
-      setSubmitted(true);
-      
-      // Get user info from context or local storage
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const studentId = user.sub || user.username || 'unknown_student';
-      const studentEmail = user.email || '';
-      const studentName = user.name || `${user.given_name || ''} ${user.family_name || ''}`.trim() || studentEmail || studentId;
-      
-      // Prepare result data
       const resultData = {
-        assessmentId: assessmentData?.assessmentId,
-        studentId,
-        studentEmail,
-        studentName,
-        answers,
+        assessmentId: assessmentData?.assessmentId || '',
+        email: studentEmail,
+        Name: studentName,
+        department: department,
+        answers: allAnswers,
         score: totalScore,
         maxScore: totalMaxScore,
-        percentage,
-        timeTaken: 3600 - timeLeft, // Time taken in seconds
-        codingSubmissions: code,
-        department: assessmentData?.entities?.[0]?.type || 'Unknown'
+        percentage: percentage,
+        accuracy: accuracy,
+        numCorrect: numCorrect,
+        numIncorrect: numIncorrect,
+        numUnattempted: numUnattempted,
+        entity_marks: {
+          MCQ: mcqScore,
+          CODING: codingScore
+        },
+        timeSpentSeconds: timeSpentSeconds,
+        submittedAt: new Date().toISOString()
       };
+
+      // Validate required fields
+      if (!resultData.assessmentId) {
+        alert('Assessment ID is missing. Cannot submit.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Store MCQ results for UI feedback
+      setMcqResults(mcqAnswersArray.reduce((acc, ans) => {
+        acc[ans.questionId] = ans;
+        return acc;
+      }, {} as any));
+      setSubmitted(true);
       
-      // Save result
-      await ResultsService.saveAssessmentResult(resultData);
+      console.log('Submitting assessment result...', resultData);
       
-      // Navigate to success page with assessment data
-      navigate('/student/assessment-success', {
+      // Save result to database
+      const saveResponse = await ResultsService.saveAssessmentResult(resultData);
+      console.log('Save response:', saveResponse);
+      
+      // Get the SK (attemptId) from the response
+      const attemptId = saveResponse?.data?.SK || saveResponse?.SK;
+      console.log('Attempt ID (SK):', attemptId);
+      
+      console.log('Assessment result saved successfully, navigating to success page...');
+      
+      // Navigate to submission success page with attemptId
+      navigate('/student/assessment-submitted', {
         state: {
-          assessmentTitle: assessmentData?.title,
-          score: totalScore,
-          totalScore: totalMaxScore
+          assessmentId: resultData.assessmentId,
+          attemptId: attemptId // Pass SK so we can navigate directly to detail page
         }
       });
       
@@ -935,22 +1126,38 @@ console.log("In a browser environment, this would render as HTML");
       console.error('Error details:', {
         message: error.message,
         response: error.response?.data,
-        status: error.response?.status
+        status: error.response?.status,
+        url: error.config?.url
       });
       
-      // Provide more specific error messages
-      let errorMessage = 'Assessment completed but there was an error saving your results. Please contact support.';
+      setIsSubmitting(false);
+      setSubmitted(false);
       
-      if (error.response?.status === 401) {
-        errorMessage = 'Your session has expired. Please log in again to save your results.';
-      } else if (error.response?.status === 500) {
-        errorMessage = 'Server error occurred while saving your results. Please try again or contact support.';
-      } else if (error.message?.includes('Network Error')) {
-        errorMessage = 'Network error occurred while saving your results. Please check your connection and try again.';
-      } else if (error.response?.data?.message) {
-        errorMessage = `Error saving results: ${error.response.data.message}`;
+      // Provide more specific error messages
+      let errorMessage = 'Assessment completed but there was an error saving your results.';
+      
+      if (error.response) {
+        // Server responded with error
+        const serverMessage = error.response.data?.message || error.response.data?.error || 'Unknown server error';
+        errorMessage = `Error: ${serverMessage}`;
+        
+        if (error.response.status === 401) {
+          errorMessage = 'Your session has expired. Please log in again to save your results.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'API endpoint not found. Please check if backend server is running.';
+        } else if (error.response.status === 500) {
+          errorMessage = `Server error: ${serverMessage}. Please check backend logs.`;
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'Cannot connect to server. Please check:\n1. Backend server is running on port 3000\n2. Your internet connection\n3. Check browser console for details';
+      } else if (error.message?.includes('Network Error') || error.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error. Please check:\n1. Backend server is running\n2. CORS is configured correctly\n3. Check browser console for details';
+      } else {
+        errorMessage = `Error: ${error.message || 'Unknown error occurred'}`;
       }
       
+      console.error('Final error message:', errorMessage);
       alert(errorMessage);
     }
   };
@@ -1134,10 +1341,17 @@ console.log("In a browser environment, this would render as HTML");
             {/* Save and Next button in the middle */}
             <button 
               className="nav-btn next save-next"
-              onClick={() => handleMCQNavigation('next')}
-              disabled={currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0}
+              onClick={() => {
+                // If on last MCQ question and no coding questions, submit
+                if (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0) {
+                  handleSubmit();
+                } else {
+                  handleMCQNavigation('next');
+                }
+              }}
+              disabled={isSubmitting || submitted}
             >
-              {currentMCQIndex === mcqQuestions.length - 1 ? 'Submit' : 'Save and Next'}
+              {isSubmitting ? 'Submitting...' : (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0 ? 'Submit' : 'Save and Next')}
             </button>
             
             {/* Submit button on right side corner - only show if no coding questions */}
@@ -1145,8 +1359,9 @@ console.log("In a browser environment, this would render as HTML");
               <button 
                 className="submit-btn small right-corner"
                 onClick={handleSubmit}
+                disabled={isSubmitting || submitted}
               >
-                Submit
+                {isSubmitting ? 'Submitting...' : 'Submit'}
               </button>
             )}
             
@@ -1429,8 +1644,9 @@ int main() {
                 <button 
                   className="submit-btn coding-submit auto-submit"
                   onClick={handleSubmit}
+                  disabled={isSubmitting || submitted}
                 >
-                  Submit Assessment
+                  {isSubmitting ? 'Submitting...' : 'Submit Assessment'}
                 </button>
               )}
             </div>

@@ -84,6 +84,14 @@ const login = async (req, res) => {
             ...result
         });
     } catch (error) {
+        // Log the full error for debugging
+        console.error('=== Login Error Details ===');
+        console.error('Error name:', error.name);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Full error:', error);
+        console.error('==========================');
+
         // Handle different types of errors
         if (error.code === 'UserNotFoundException' || error.code === 'NotAuthorizedException') {
             return res.status(401).json({
@@ -108,10 +116,34 @@ const login = async (req, res) => {
             });
         }
 
+        // Check for Cognito client initialization errors
+        if (error.message && error.message.includes('Cognito client is not initialized')) {
+            return res.status(500).json({
+                error: 'Internal Server Error',
+                message: 'Authentication service is not properly configured. Please contact the administrator.'
+            });
+        }
+
+        // Check for missing environment variables
+        if (error.message && error.message.includes('COGNITO_CLIENT_ID is not configured')) {
+            return res.status(500).json({
+                error: 'Internal Server Error',
+                message: 'Authentication service configuration error. Please contact the administrator.'
+            });
+        }
+
+        // Check for AWS connection errors
+        if (error.name === 'UnknownEndpoint' || error.message?.includes('ENOTFOUND') || error.message?.includes('getaddrinfo')) {
+            return res.status(500).json({
+                error: 'Internal Server Error',
+                message: 'Unable to connect to authentication service. Please check your network connection and try again.'
+            });
+        }
+
         // Generic error response
         return res.status(500).json({
             error: 'Internal Server Error',
-            message: 'Login failed: ' + error.message
+            message: 'Login failed: ' + (error.message || 'Unknown error occurred')
         });
     }
 };

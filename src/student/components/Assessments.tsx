@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import StudentAssessmentService from '../../services/student.assessment.service';
+import ResultsService from '../../services/results.service';
 
 // Define the Assessment interface based on the provided schema
 interface Assessment {
@@ -56,20 +57,42 @@ const Assessments: React.FC = () => {
   
   // State for real assessments
   const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
+  const [attemptedAssessments, setAttemptedAssessments] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Fetch real assessments from the backend
+  // Fetch real assessments from the backend and check for attempts
   useEffect(() => {
     const fetchAssessments = async () => {
       try {
         setLoading(true);
-        const response = await StudentAssessmentService.getAllAssessments();
-        console.log('Fetched assessments:', response);
+        
+        // Fetch assessments and results in parallel
+        const [assessmentsResponse, resultsResponse] = await Promise.all([
+          StudentAssessmentService.getAllAssessments(),
+          ResultsService.getStudentResults().catch(() => ({ success: true, data: [] })) // Gracefully handle errors
+        ]);
+        
+        console.log('Fetched assessments:', assessmentsResponse);
+        console.log('Fetched results:', resultsResponse);
+        
+        // Get list of attempted assessment IDs
+        const results = resultsResponse?.data || resultsResponse || [];
+        const attemptedIds = new Set<string>();
+        
+        if (Array.isArray(results)) {
+          results.forEach((result: any) => {
+            if (result.assessmentId) {
+              attemptedIds.add(result.assessmentId);
+            }
+          });
+        }
+        
+        setAttemptedAssessments(attemptedIds);
         
         // Transform the data to match our interface
-        const transformedAssessments = response.data.map((item: any) => ({
+        const transformedAssessments = assessmentsResponse.data.map((item: any) => ({
           id: item.assessmentId,
           assessmentId: item.assessmentId,
           title: item.title,
@@ -134,6 +157,26 @@ const Assessments: React.FC = () => {
   );
 
   const handleAttendTest = (assessment: Assessment) => {
+    // Check if already attempted
+    if (attemptedAssessments.has(assessment.assessmentId)) {
+      // Navigate to results page instead
+      const result = Array.from(attemptedAssessments).find(id => id === assessment.assessmentId);
+      // Find the result SK for this assessment
+      ResultsService.getStudentResults().then((response: any) => {
+        const results = response?.data || response || [];
+        const assessmentResult = results.find((r: any) => r.assessmentId === assessment.assessmentId);
+        if (assessmentResult?.SK) {
+          const encodedSK = encodeURIComponent(assessmentResult.SK);
+          navigate(`/student/results/${encodedSK}`);
+        } else {
+          navigate('/student/results');
+        }
+      }).catch(() => {
+        navigate('/student/results');
+      });
+      return;
+    }
+    
     // Navigate to the assessment taking page with the assessment ID
     navigate(`/student/assessment-taking/${assessment.assessmentId}`);
   };
@@ -153,9 +196,20 @@ const Assessments: React.FC = () => {
     }
   };
 
-  // Get button style and text based on status
-  const getButtonConfig = (status: string, isPublished: boolean) => {
+  // Get button style and text based on status and attempt status
+  const getButtonConfig = (assessment: Assessment) => {
+    const isAttempted = attemptedAssessments.has(assessment.assessmentId);
+    const { status, isPublished } = assessment;
     const now = new Date();
+    
+    // If already attempted, show "Completed" or "View Result"
+    if (isAttempted) {
+      return { 
+        text: 'Completed - View Result', 
+        style: { background: '#9768E1', color: 'white' },
+        disabled: false
+      };
+    }
     
     // For testing purposes, allow access to assessments even if not published
     // In production, you might want to uncomment the following lines:
@@ -375,7 +429,8 @@ const Assessments: React.FC = () => {
       ) : (
         filteredAssessments.map(assessment => {
           const statusStyle = getStatusBadgeStyle(assessment.status);
-          const buttonConfig = getButtonConfig(assessment.status, assessment.isPublished);
+          const buttonConfig = getButtonConfig(assessment);
+          const isAttempted = attemptedAssessments.has(assessment.assessmentId);
           
           return (
             <div key={assessment.id} style={{
@@ -400,9 +455,9 @@ const Assessments: React.FC = () => {
                   borderRadius: '9999px',
                   fontSize: '12px',
                   fontWeight: 600,
-                  ...statusStyle
+                  ...(isAttempted ? { background: '#DBEAFE', color: '#1E40AF' } : statusStyle)
                 }}>
-                  {assessment.status.charAt(0).toUpperCase() + assessment.status.slice(1).toLowerCase()}
+                  {isAttempted ? 'Completed' : (assessment.status.charAt(0).toUpperCase() + assessment.status.slice(1).toLowerCase())}
                 </span>
               </div>
 
