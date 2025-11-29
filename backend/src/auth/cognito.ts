@@ -35,7 +35,7 @@ function initializeCognitoClient() {
             throw new Error(errorMsg);
         }
 
-        cognitoRegion = process.env.COGNITO_REGION || process.env.AWS_REGION || 'us-east-1';
+        cognitoRegion = process.env.COGNITO_REGION || process.env.AWS_REGION;
         
         console.log(`Initializing Cognito client for region: ${cognitoRegion}`);
         console.log(`COGNITO_USER_POOL_ID: ${process.env.COGNITO_USER_POOL_ID ? 'Set' : 'Missing'}`);
