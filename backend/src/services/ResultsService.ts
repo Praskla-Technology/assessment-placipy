@@ -7,15 +7,18 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 
 class ResultsService {
     private resultsTableName: string;
+    private studentsTableName: string;
 
     constructor() {
         // Use dedicated results table - EXACT table name as specified by user
         // Results are stored with PK: CLIENT#<domain> and SK: RESULT#ASSESSMENT#<id>#<email>
         // User specified table: Assessment_placipy_asseessment_result
-        this.resultsTableName = 'Assessment_placipy_asseessment_result';
+        this.resultsTableName = process.env.RESULTS_TABLE_NAME || 'Assessment_placipy_asseessment_result';
+        this.studentsTableName = process.env.DYNAMODB_TABLE_NAME || 'Assesment_placipy';
         console.log('========================================');
         console.log('ResultsService initialized');
-        console.log('Table name:', this.resultsTableName);
+        console.log('Results table name:', this.resultsTableName);
+        console.log('Students table name:', this.studentsTableName);
         console.log('AWS Region:', process.env.AWS_REGION || 'not set');
         console.log('========================================');
     }
@@ -25,9 +28,12 @@ class ResultsService {
      */
     private getDomainFromEmail(email: string): string {
         if (!email || !email.includes('@')) {
+            console.log('Invalid email format, using default domain:', email);
             return 'ksrce.ac.in'; // Default domain
         }
-        return email.split('@')[1];
+        const domain = email.split('@')[1];
+        console.log('Extracted domain from email:', email, '=>', domain);
+        return domain;
     }
 
     /**
@@ -369,6 +375,206 @@ class ResultsService {
         } catch (error) {
             console.error('Error getting top performers:', error);
             throw new Error('Failed to retrieve top performers: ' + error.message);
+        }
+    }
+    
+    /**
+     * Get student data by email
+     */
+    async getStudentByEmail(email: string): Promise<any> {
+        try {
+            // Validate email
+            if (!email || !email.includes('@')) {
+                console.log('Invalid email format:', email);
+                return null;
+            }
+            
+            console.log('=== Getting Student By Email ===');
+            console.log('Student Email:', email);
+
+            // Get domain from email
+            const collegeDomain = this.getDomainFromEmail(email);
+            const PK = `CLIENT#${collegeDomain}`;
+            const SK = `STUDENT#${email}`;
+
+            const params = {
+                TableName: this.studentsTableName,
+                Key: {
+                    PK,
+                    SK
+                }
+            };
+
+            console.log('Get params:', JSON.stringify(params, null, 2));
+            const result = await dynamodb.get(params).promise();
+            
+            if (!result.Item) {
+                console.log('Student not found for email:', email);
+                return null;
+            }
+
+            console.log('Found student:', JSON.stringify(result.Item, null, 2));
+            return result.Item;
+        } catch (error) {
+            console.error('Error getting student by email:', error);
+            // Don't throw error here as it's optional data enrichment
+            return null;
+        }
+    }
+    
+    /**
+     * Get comprehensive analytics data for PTS dashboard
+     * Filtered by the domain of the requesting PTS user
+     */
+    async getPTSOverview(requesterEmail: string): Promise<any> {
+        try {
+            console.log('=== Getting PTS Overview Analytics ===');
+            console.log('Requester email:', requesterEmail);
+            
+            // Validate requester email
+            if (!requesterEmail) {
+                throw new Error('Requester email is required for domain-based filtering');
+            }
+            
+            // Validate email format
+            if (!requesterEmail.includes('@')) {
+                throw new Error('Invalid email format for requester: ' + requesterEmail);
+            }
+            
+            // Extract domain from requester's email
+            const requesterDomain = this.getDomainFromEmail(requesterEmail);
+            console.log('Requester domain:', requesterDomain);
+            
+            // Validate table name
+            if (!this.resultsTableName) {
+                throw new Error('Results table name is not configured');
+            }
+            
+            // Query results for this domain only
+            const resultsParams = {
+                TableName: this.resultsTableName,
+                KeyConditionExpression: 'PK = :pk',
+                ExpressionAttributeValues: {
+                    ':pk': `CLIENT#${requesterDomain}`
+                }
+            };
+            
+            console.log('Query params:', JSON.stringify(resultsParams, null, 2));
+            const resultsResult = await dynamodb.query(resultsParams).promise();
+            const results = resultsResult.Items || [];
+            console.log('Found results:', results.length);
+            
+            // Enrich results with student data (roll numbers, etc.)
+            const enrichedResults = [];
+            for (const result of results) {
+                // Skip results without email
+                if (!result.email) {
+                    console.log('Skipping result without email:', result);
+                    continue;
+                }
+                
+                // Validate result email format
+                if (!result.email.includes('@')) {
+                    console.log('Skipping result with invalid email format:', result.email);
+                    continue;
+                }
+                
+                const studentData = await this.getStudentByEmail(result.email);
+                enrichedResults.push({
+                    ...result,
+                    rollNumber: studentData?.rollNumber || 'N/A'
+                });
+            }
+            
+            console.log('Enriched results count:', enrichedResults.length);
+            
+            // Group results by department
+            const departmentStats: any = {};
+            
+            enrichedResults.forEach((result: any) => {
+                const dept = result.department || 'Unknown';
+                if (!departmentStats[dept]) {
+                    departmentStats[dept] = {
+                        department: dept,
+                        totalStudents: 0,
+                        activeStudents: 0,
+                        assessmentsCompleted: 0,
+                        averageScore: 0,
+                        totalScore: 0,
+                        scoreCount: 0
+                    };
+                }
+                departmentStats[dept].assessmentsCompleted++;
+                departmentStats[dept].totalScore += result.percentage || 0;
+                departmentStats[dept].scoreCount++;
+            });
+            
+            // Calculate average scores
+            Object.values(departmentStats).forEach((dept: any) => {
+                if (dept.scoreCount > 0) {
+                    dept.averageScore = Math.round((dept.totalScore / dept.scoreCount) * 100) / 100;
+                }
+                // We don't have actual student counts, so we'll estimate based on results
+                dept.totalStudents = dept.assessmentsCompleted;
+                dept.activeStudents = dept.assessmentsCompleted;
+            });
+            
+            // Get recent assessments
+            const recentAssessments = enrichedResults
+                .sort((a: any, b: any) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+                .slice(0, 10)
+                .map((result: any) => ({
+                    assessmentTitle: `Assessment ${result.assessmentId}`,
+                    date: result.submittedAt,
+                    totalParticipants: 1,
+                    averageScore: result.percentage,
+                    highestScore: result.percentage,
+                    lowestScore: result.percentage,
+                    completionRate: 100
+                }));
+            
+            // Calculate overall average score
+            let totalScore = 0;
+            let scoreCount = 0;
+            enrichedResults.forEach((result: any) => {
+                totalScore += result.percentage || 0;
+                scoreCount++;
+            });
+            const overallAvgScore = scoreCount > 0 ? Math.round((totalScore / scoreCount) * 100) / 100 : 0;
+            
+            // Get top performers with roll numbers
+            const topPerformers = enrichedResults
+                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+                .slice(0, 5)
+                .map((result: any, index: number) => ({
+                    id: index + 1,
+                    name: result.Name || result.email,
+                    rollNo: result.rollNumber || 'N/A',
+                    department: result.department || 'Unknown',
+                    batch: 'N/A',
+                    assessmentsTaken: 1,
+                    averageScore: result.percentage || 0,
+                    totalMarks: result.score || 0,
+                    rank: index + 1,
+                    lastActive: result.submittedAt
+                }));
+
+            return {
+                overview: {
+                    totalStudents: enrichedResults.length,
+                    activeStudents: enrichedResults.length,
+                    totalAssessments: enrichedResults.length,
+                    avgScore: overallAvgScore,
+                    participationRate: 100
+                },
+                departmentStats: Object.values(departmentStats),
+                recentAssessments,
+                topPerformers
+            };
+        } catch (error) {
+            console.error('Error getting PTS overview analytics:', error);
+            console.error('Error stack:', error.stack);
+            throw new Error('Failed to retrieve PTS overview analytics: ' + error.message);
         }
     }
 }

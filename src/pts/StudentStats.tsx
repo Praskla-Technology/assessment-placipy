@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
-import { Download, Upload } from 'lucide-react';
+import { Download } from 'lucide-react';
 import AnalyticsService from '../services/analytics.service';
 
 interface StudentPerformance {
@@ -51,57 +51,46 @@ const StudentStats: React.FC = () => {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
+        setError(null);
         
-        // Fetch department stats
-        const deptResponse = await AnalyticsService.getDepartmentStats();
-        const deptData = deptResponse.data || [];
+        // Fetch PTS overview data
+        const overviewResponse = await AnalyticsService.getPTSOverview();
+        const overviewData = overviewResponse.data || {};
         
-        const formattedDeptStats = deptData.map((dept: any) => ({
-          department: dept.department,
-          totalStudents: dept.totalStudents,
-          activeStudents: dept.activeStudents,
-          averageScore: 0, // No assessment scores yet
-          assessmentsCompleted: 0,
-          participationRate: dept.totalStudents > 0 ? (dept.activeStudents / dept.totalStudents) * 100 : 0
-        }));
+        // Set department stats
+        const deptStats = overviewData.departmentStats || [];
+        setDepartmentStats(deptStats);
         
         // Create chart data for PieChart
-        const chartData = deptData.map((dept: any) => ({
+        const chartData = deptStats.map((dept: any) => ({
           name: dept.department,
           value: dept.totalStudents
         }));
-        
-        setDepartmentStats(formattedDeptStats);
         setDepartmentChartData(chartData);
         
-        // Mock data for other components since we don't have real API endpoints yet
-        setTopPerformers([
-          { id: 1, name: 'John Doe', rollNo: 'CS2024001', department: 'Computer Science', batch: '2024', assessmentsTaken: 5, averageScore: 85, totalMarks: 425, rank: 1, lastActive: '2023-06-15' },
-          { id: 2, name: 'Jane Smith', rollNo: 'CS2024002', department: 'Computer Science', batch: '2024', assessmentsTaken: 4, averageScore: 82, totalMarks: 328, rank: 2, lastActive: '2023-06-14' },
-          { id: 3, name: 'Robert Johnson', rollNo: 'EC2024001', department: 'Electronics', batch: '2024', assessmentsTaken: 6, averageScore: 78, totalMarks: 468, rank: 3, lastActive: '2023-06-12' },
-          { id: 4, name: 'Emily Davis', rollNo: 'ME2024001', department: 'Mechanical', batch: '2024', assessmentsTaken: 3, averageScore: 75, totalMarks: 225, rank: 4, lastActive: '2023-06-10' },
-          { id: 5, name: 'Michael Wilson', rollNo: 'CS2024003', department: 'Computer Science', batch: '2024', assessmentsTaken: 5, averageScore: 72, totalMarks: 360, rank: 5, lastActive: '2023-06-08' }
-        ]);
+        // Set top performers
+        setTopPerformers(overviewData.topPerformers || []);
         
-        setAssessmentAnalytics([
-          { assessmentTitle: 'Java Programming Test 1', date: '2023-06-01', totalParticipants: 45, averageScore: 72, highestScore: 95, lowestScore: 42, completionRate: 95 },
-          { assessmentTitle: 'Database Management Quiz', date: '2023-05-25', totalParticipants: 42, averageScore: 68, highestScore: 92, lowestScore: 38, completionRate: 90 },
-          { assessmentTitle: 'Data Structures Final', date: '2023-05-18', totalParticipants: 40, averageScore: 75, highestScore: 98, lowestScore: 45, completionRate: 88 }
-        ]);
+        // Set assessment analytics
+        setAssessmentAnalytics(overviewData.recentAssessments || []);
         
-        setPerformanceTrends([
-          { month: 'Jan', averageScore: 65 },
-          { month: 'Feb', averageScore: 68 },
-          { month: 'Mar', averageScore: 72 },
-          { month: 'Apr', averageScore: 70 },
-          { month: 'May', averageScore: 75 },
-          { month: 'Jun', averageScore: 78 }
-        ]);
+        // Create performance trends data
+        // For now, we'll create mock trend data based on the average score
+        const avgScore = overviewData.overview?.avgScore || 0;
+        const trendData = [
+          { month: 'Jan', averageScore: Math.max(0, avgScore - 15) },
+          { month: 'Feb', averageScore: Math.max(0, avgScore - 12) },
+          { month: 'Mar', averageScore: Math.max(0, avgScore - 8) },
+          { month: 'Apr', averageScore: Math.max(0, avgScore - 5) },
+          { month: 'May', averageScore: Math.max(0, avgScore - 2) },
+          { month: 'Jun', averageScore: avgScore }
+        ];
+        setPerformanceTrends(trendData);
         
         setLoading(false);
       } catch (error: any) {
         console.error('Error fetching analytics:', error);
-        setError(error.message);
+        setError(error.message || 'Failed to load analytics data');
         setLoading(false);
       }
     };
@@ -113,14 +102,14 @@ const StudentStats: React.FC = () => {
     const totalStudents = departmentStats.reduce((sum, dept) => sum + dept.totalStudents, 0);
     const totalActive = departmentStats.reduce((sum, dept) => sum + dept.activeStudents, 0);
     const totalAssessments = departmentStats.reduce((sum, dept) => sum + dept.assessmentsCompleted, 0);
-    const avgScore = departmentStats.reduce((sum, dept) => sum + dept.averageScore, 0) / departmentStats.length;
+    const avgScore = departmentStats.length > 0 ? departmentStats.reduce((sum, dept) => sum + dept.averageScore, 0) / departmentStats.length : 0;
     
     return {
       totalStudents,
       totalActive,
       totalAssessments,
       avgScore: Math.round(avgScore * 10) / 10,
-      participationRate: Math.round((totalActive / totalStudents) * 100 * 10) / 10
+      participationRate: totalStudents > 0 ? Math.round((totalActive / totalStudents) * 100 * 10) / 10 : 0
     };
   };
 
@@ -129,13 +118,44 @@ const StudentStats: React.FC = () => {
   const COLORS = ['#9768E1', '#523C48', '#A4878D', '#E4D5F8', '#D0BFE7'];
 
   const handleExportStudents = () => {
-    alert('Exporting student data...');
-    // TODO: Implement CSV/Excel export functionality
-  };
-
-  const handleImportStudents = () => {
-    alert('Import functionality coming soon!');
-    // TODO: Implement file upload and import functionality
+    try {
+      // Create CSV content
+      let csvContent = "Department,Total Students,Active Students,Average Score,Assessments Completed\n";
+      
+      departmentStats.forEach(dept => {
+        csvContent += `${dept.department},${dept.totalStudents},${dept.activeStudents},${dept.averageScore},${dept.assessmentsCompleted}\n`;
+      });
+      
+      // Add top performers section
+      csvContent += "\nTop Performers\n";
+      csvContent += "Rank,Name,Roll No,Department,Average Score,Assessments Taken\n";
+      
+      topPerformers.forEach(student => {
+        csvContent += `${student.rank},${student.name},${student.rollNo},${student.department},${student.averageScore},${student.assessmentsTaken}\n`;
+      });
+      
+      // Add assessment analytics section
+      csvContent += "\nAssessment Analytics\n";
+      csvContent += "Assessment Title,Date,Participants,Average Score,Highest Score,Lowest Score\n";
+      
+      assessmentAnalytics.forEach(assessment => {
+        csvContent += `${assessment.assessmentTitle},${assessment.date},${assessment.totalParticipants},${assessment.averageScore},${assessment.highestScore},${assessment.lowestScore}\n`;
+      });
+      
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'student_analytics.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data. Please try again.');
+    }
   };
 
   const renderOverviewTab = () => (
@@ -335,6 +355,28 @@ const StudentStats: React.FC = () => {
     </div>
   );
 
+  if (loading) {
+    return (
+      <div className="pts-fade-in" style={{ padding: "20px", textAlign: "center" }}>
+        <div>Loading analytics data...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="pts-fade-in" style={{ padding: "20px", textAlign: "center", color: "red" }}>
+        <div>Error loading analytics: {error}</div>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{ marginTop: "10px", padding: "8px 16px", backgroundColor: "#9768E1", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="pts-fade-in">
       {/* Tab Navigation */}
@@ -354,12 +396,9 @@ const StudentStats: React.FC = () => {
               {tab.label}
             </button>
           ))}
-          {/* Export/Import Buttons */}
+          {/* Export Button */}
           <button className="pts-btn-secondary" onClick={handleExportStudents} style={{ marginBottom: "10px", marginLeft: "auto" }}>
             <Download size={18} /> Export Data
-          </button>
-          <button className="pts-btn-secondary" onClick={handleImportStudents} style={{ marginBottom: "10px" }}>
-            <Upload size={18} /> Import Students
           </button>
         </div>
       </div>

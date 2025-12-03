@@ -2,8 +2,39 @@
 const express = require('express');
 const authMiddleware = require('../auth/auth.middleware');
 const studentAssessmentService = require('../services/StudentAssessmentService');
+const { getUserAttributes } = require('../auth/cognito');
 
 const router = express.Router();
+
+/**
+ * Helper function to get user email from Cognito profile
+ * Always fetches the actual email from the user's profile
+ */
+async function getEmailFromRequest(req) {
+    // Get user ID from JWT token
+    const userId = req.user?.['cognito:username'] || req.user?.username || req.user?.sub;
+    
+    if (!userId) {
+        throw new Error('User ID not found in authentication token');
+    }
+    
+    try {
+        console.log('Fetching email from Cognito profile for user ID:', userId);
+        // Always fetch email from Cognito profile to ensure accuracy
+        const userInfo = await getUserAttributes(userId);
+        const email = userInfo?.attributes?.email;
+        
+        if (!email) {
+            throw new Error('Email not found in user profile');
+        }
+        
+        console.log('Got email from Cognito profile:', email);
+        return email.toLowerCase();
+    } catch (error) {
+        console.error('Error fetching email from Cognito profile:', error);
+        throw new Error('Failed to fetch user email from profile: ' + error.message);
+    }
+}
 
 console.log('Student assessment routes loaded');
 
@@ -25,8 +56,8 @@ router.get('/:assessmentId/with-questions', authMiddleware.authenticateToken, as
             });
         }
         
-        // Get requester email for domain-based filtering
-        const requesterEmail = req.user?.email || req.user?.username || req.user?.sub || '';
+        // Get requester email for domain-based filtering using robust extraction
+        const requesterEmail = await getEmailFromRequest(req);
         console.log(`Fetching assessment ${assessmentId} with questions for user: ${requesterEmail}`);
         const result = await studentAssessmentService.getAssessmentWithQuestions(assessmentId, requesterEmail);
         

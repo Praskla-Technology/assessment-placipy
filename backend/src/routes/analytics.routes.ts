@@ -2,6 +2,8 @@
 const express = require('express');
 const authMiddleware = require('../auth/auth.middleware');
 const AWS = require('aws-sdk');
+const resultsService = require('../services/ResultsService');
+const { getUserAttributes } = require('../auth/cognito');
 
 const router = express.Router();
 const dynamodb = new AWS.DynamoDB.DocumentClient({
@@ -9,6 +11,59 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 });
 
 const TABLE_NAME = process.env.DYNAMODB_TABLE_NAME || 'Assesment_placipy';
+
+/**
+ * Helper function to get user email from Cognito profile
+ * Always fetches the actual email from the user's profile
+ */
+async function getEmailFromRequest(req) {
+    // Get user ID from JWT token
+    const userId = req.user?.['cognito:username'] || req.user?.username || req.user?.sub;
+    
+    console.log('Extracted user ID from token:', userId);
+    
+    if (!userId) {
+        // Fallback: try to get email directly from token
+        const email = req.user?.email || req.user?.['cognito:email'];
+        if (email) {
+            console.log('Using email from token directly:', email);
+            return email.toLowerCase();
+        }
+        throw new Error('User ID not found in authentication token');
+    }
+    
+    try {
+        console.log('Fetching email from Cognito profile for user ID:', userId);
+        // Always fetch email from Cognito profile to ensure accuracy
+        const userInfo = await getUserAttributes(userId);
+        const email = userInfo?.attributes?.email;
+        
+        if (!email) {
+            // Fallback: try to get email from token if not in profile
+            const tokenEmail = req.user?.email || req.user?.['cognito:email'];
+            if (tokenEmail) {
+                console.log('Using email from token as fallback:', tokenEmail);
+                return tokenEmail.toLowerCase();
+            }
+            throw new Error('Email not found in user profile');
+        }
+        
+        console.log('Got email from Cognito profile:', email);
+        return email.toLowerCase();
+    } catch (error) {
+        console.error('Error fetching email from Cognito profile:', error);
+        console.error('Error stack:', error.stack);
+        
+        // Fallback: try to get email from token
+        const tokenEmail = req.user?.email || req.user?.['cognito:email'];
+        if (tokenEmail) {
+            console.log('Using email from token as final fallback:', tokenEmail);
+            return tokenEmail.toLowerCase();
+        }
+        
+        throw new Error('Failed to fetch user email from profile: ' + error.message);
+    }
+}
 
 // Get student analytics
 router.get('/students', authMiddleware.authenticateToken, async (req, res) => {
@@ -134,6 +189,39 @@ router.get('/assessments', authMiddleware.authenticateToken, async (req, res) =>
         res.status(500).json({
             success: false,
             message: 'Failed to retrieve assessment analytics',
+            error: error.message
+        });
+    }
+});
+
+// Get comprehensive analytics data for PTS dashboard
+router.get('/pts-overview', authMiddleware.authenticateToken, async (req, res) => {
+    try {
+        console.log('=== Getting PTS Overview Analytics ===');
+        console.log('Request object:', JSON.stringify(req.user, null, 2));
+        
+        // Get requester email for domain-based filtering
+        const requesterEmail = await getEmailFromRequest(req);
+        console.log('Requester email:', requesterEmail);
+        
+        // Validate email format
+        if (!requesterEmail || !requesterEmail.includes('@')) {
+            throw new Error('Invalid email format: ' + requesterEmail);
+        }
+        
+        // Use the results service to get PTS overview data, passing the requester's domain
+        const ptsOverview = await resultsService.getPTSOverview(requesterEmail);
+        
+        res.json({
+            success: true,
+            data: ptsOverview
+        });
+    } catch (error) {
+        console.error('Error getting PTS overview analytics:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve PTS overview analytics',
             error: error.message
         });
     }

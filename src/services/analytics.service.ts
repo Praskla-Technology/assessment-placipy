@@ -24,6 +24,7 @@ class AnalyticsService {
       return response.data;
     } catch (error: any) {
       console.error('Error getting student analytics:', error);
+      console.error('Error response:', error.response);
       throw new Error(error.response?.data?.message || 'Failed to retrieve analytics');
     }
   }
@@ -40,6 +41,7 @@ class AnalyticsService {
       return response.data;
     } catch (error: any) {
       console.error('Error getting department stats:', error);
+      console.error('Error response:', error.response);
       throw new Error(error.response?.data?.message || 'Failed to retrieve department stats');
     }
   }
@@ -56,7 +58,28 @@ class AnalyticsService {
       return response.data;
     } catch (error: any) {
       console.error('Error getting assessment analytics:', error);
+      console.error('Error response:', error.response);
       throw new Error(error.response?.data?.message || 'Failed to retrieve assessment analytics');
+    }
+  }
+
+  /**
+   * Get PTS overview analytics
+   */
+  async getPTSOverview(): Promise<any> {
+    try {
+      console.log('Making request to PTS overview endpoint');
+      const response = await axios.get(
+        `${API_BASE_URL}/analytics/pts-overview`,
+        { headers: this.getAuthHeaders() }
+      );
+      console.log('Received response from PTS overview endpoint:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error getting PTS overview:', error);
+      console.error('Error response:', error.response);
+      console.error('Error request:', error.request);
+      throw new Error(error.response?.data?.message || error.message || 'Failed to retrieve PTS overview');
     }
   }
 }
