@@ -83,7 +83,7 @@ class NotificationService {
      */
     async createNotificationsForStudents(
         studentEmails: string[],
-        type: 'assessment_published' | 'result_published' | 'reminder' | 'announcement',
+        type: 'assessment_published' | 'result_published' | 'announcement',
         title: string,
         message: string,
         link: string,
@@ -313,34 +313,7 @@ class NotificationService {
         }
     }
 
-    /**
-     * Check if a reminder notification was already sent
-     */
-    async hasReminderBeenSent(
-        assessmentId: string,
-        studentEmail: string,
-        reminderType: '24H' | '1H' | '10M'
-    ): Promise<boolean> {
-        try {
-            const domain = this.getDomainFromEmail(studentEmail);
-            const PK = `CLIENT#${domain}`;
-            const reminderSK = `NOTIF_SENT#${reminderType}#${assessmentId}#${studentEmail}`;
 
-            const params = {
-                TableName: this.notificationsTableName,
-                Key: {
-                    PK,
-                    SK: reminderSK
-                }
-            };
-
-            const result = await dynamodb.get(params).promise();
-            return !!result.Item;
-        } catch (error) {
-            console.error('Error checking reminder status:', error);
-            return false;
-        }
-    }
 
     /**
      * Mark a reminder as sent

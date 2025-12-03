@@ -28,6 +28,9 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
             });
         }
 
+        // Ensure the email in the payload matches the authenticated student
+        req.body.email = studentEmail;
+
         // Validate required fields
         if (!req.body.assessmentId) {
             console.error('Assessment ID missing in request body');
@@ -37,15 +40,7 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
             });
         }
 
-        if (!req.body.email) {
-            console.error('Email missing in request body');
-            return res.status(400).json({
-                success: false,
-                message: 'Email is required in request body'
-            });
-        }
-
-        console.log('Calling ResultService.saveAssessmentResult...');
+        console.log('Calling ResultService.saveAssessmentResult with normalized email:', req.body.email);
         // Call ResultService to save the result
         const result = await resultsService.saveAssessmentResult(req.body);
         

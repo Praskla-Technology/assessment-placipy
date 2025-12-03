@@ -190,18 +190,10 @@ async function deleteOldNotifications() {
 
 /**
  * Start the cron job
- * Runs reminder check every 1 minute
  * Runs cleanup daily at midnight
  */
 function startNotificationCron() {
     console.log('[CRON] Starting notification cron jobs...');
-    
-    // Run reminder check every 1 minute
-    setInterval(() => {
-        checkAndSendReminders().catch(error => {
-            console.error('[CRON] Unhandled error in reminder check:', error);
-        });
-    }, 60 * 1000); // 1 minute
 
     // Run cleanup daily at midnight (in server timezone)
     const now = new Date();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, AlertCircle, CheckCircle, Clock, Megaphone } from 'lucide-react';
-import { Notification } from '../../services/notification.service';
+import { X, AlertCircle, CheckCircle, Megaphone } from 'lucide-react';
+import type { Notification } from '../../services/notification.service';
 
 interface NotificationPopupProps {
     notification: Notification;
@@ -59,8 +59,7 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({ notification, onC
                 return <AlertCircle size={20} color={getPriorityStyles().iconColor} />;
             case 'result_published':
                 return <CheckCircle size={20} color={getPriorityStyles().iconColor} />;
-            case 'reminder':
-                return <Clock size={20} color={getPriorityStyles().iconColor} />;
+
             case 'announcement':
                 return <Megaphone size={20} color={getPriorityStyles().iconColor} />;
             default:
