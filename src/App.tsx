@@ -8,49 +8,52 @@ import PTODashboard from "./pto/pages/Dashboard";
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { UserProvider } from './contexts/UserContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 function App() {
   return (
     <Router>
       <UserProvider>
-        <div className="App">
-          <Routes>
-            <Route path="/" element={<LoginPage />} />
-            <Route
-              path="/student/*"
-              element={
-                <ProtectedRoute allowedRoles={['Student']}>
-                  <StudentDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/pto/*"
-              element={
-                <ProtectedRoute allowedRoles={['Placement Training Officer']}>
-                  <PTODashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/pts/*"
-              element={
-                <ProtectedRoute allowedRoles={['Placement Training Staff']}>
-                  <PTSModule />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/company-admin/*"
-              element={
-                <ProtectedRoute allowedRoles={['Administrator']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/unauthorized" element={<UnauthorizedPage />} />
-          </Routes>
-        </div>
+        <NotificationProvider>
+          <div className="App">
+            <Routes>
+              <Route path="/" element={<LoginPage />} />
+              <Route
+                path="/student/*"
+                element={
+                  <ProtectedRoute allowedRoles={['Student']}>
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/pto/*"
+                element={
+                  <ProtectedRoute allowedRoles={['Placement Training Officer']}>
+                    <PTODashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/pts/*"
+                element={
+                  <ProtectedRoute allowedRoles={['Placement Training Staff']}>
+                    <PTSModule />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/company-admin/*"
+                element={
+                  <ProtectedRoute allowedRoles={['Administrator']}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
+            </Routes>
+          </div>
+        </NotificationProvider>
       </UserProvider>
     </Router>
   );

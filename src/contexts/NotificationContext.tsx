@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import NotificationService, { Notification } from '../services/notification.service';
+import NotificationService from '../services/notification.service';
+import type { Notification } from '../services/notification.service';
 
 interface NotificationContextType {
     notifications: Notification[];

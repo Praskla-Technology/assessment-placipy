@@ -18,6 +18,7 @@ const codeEvaluationRoutes = require('./routes/codeEvaluation.routes');
 const resultsRoutes = require('./routes/results.routes');
 const studentAssessmentRoutes = require('./routes/student.assessment.routes');
 const studentSubmissionRoutes = require('./routes/student.submission.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 console.log('Routes loaded successfully');
 
@@ -39,13 +40,16 @@ app.use(cors({
     allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 }));
 
-// Rate limiting
+// Rate limiting (disabled in development to avoid local 429 errors)
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // limit each IP to 100 requests per windowMs
     message: 'Too many requests from this IP, please try again later.'
 });
-app.use(limiter);
+
+if (process.env.NODE_ENV !== 'development') {
+    app.use(limiter);
+}
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -63,6 +67,7 @@ app.use('/api/code-evaluation', codeEvaluationRoutes);
 app.use('/api/results', resultsRoutes);
 app.use('/api/student-assessments', studentAssessmentRoutes);
 app.use('/api/student', studentSubmissionRoutes);
+app.use('/api/student/notifications', notificationRoutes);
 console.log('Routes registered successfully');
 
 // Health check endpoint

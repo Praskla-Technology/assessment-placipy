@@ -1,5 +1,6 @@
 // @ts-nocheck
 const DynamoDBService = require('./DynamoDBService');
+const notificationService = require('./NotificationService');
 const { registerUser, addUserToGroup } = require('../auth/cognito');
 const { v4: uuidv4 } = require('uuid');
 const { CognitoIdentityProviderClient, AdminDisableUserCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminUpdateUserAttributesCommand, AdminRemoveUserFromGroupCommand } = require('@aws-sdk/client-cognito-identity-provider');
@@ -799,6 +800,41 @@ class PTOService {
       })) : []
     };
     try { await this.announcementsTable.putItem(item); } catch (_) { await this.dynamoService.putItem(item); }
+
+    // Create low-priority announcement notifications for all students in this client's domain
+    try {
+      const domain = String(email || '').split('@')[1] || '';
+      if (domain) {
+        const studentEmails = await (async () => {
+          try {
+            const ns = notificationService;
+            if (typeof ns.getStudentsByDomain === 'function') {
+              return await ns.getStudentsByDomain(domain);
+            }
+          } catch (e) {
+            console.error('Error fetching students for announcement notifications:', e);
+          }
+          return [];
+        })();
+
+        const uniqueEmails = Array.from(new Set(studentEmails));
+        if (uniqueEmails.length > 0) {
+          await notificationService.createNotificationsForStudents(
+            uniqueEmails,
+            'announcement',
+            item.title || 'New Announcement',
+            item.message || '',
+            '/student/notifications',
+            'low',
+            { announcementId: id }
+          );
+          console.log(`Created announcement notifications for ${uniqueEmails.length} students`);
+        }
+      }
+    } catch (notifError) {
+      console.error('Error creating announcement notifications for students:', notifError);
+    }
+
     return item;
   }
 

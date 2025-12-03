@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, AlertCircle, CheckCircle, Clock, Megaphone } from 'lucide-react';
-import { Notification } from '../../services/notification.service';
+import type { Notification } from '../../services/notification.service';
 
 interface NotificationPopupProps {
     notification: Notification;

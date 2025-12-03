@@ -1,151 +1,216 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle, CheckCircle, Clock, Megaphone } from 'lucide-react';
+import { useNotifications } from '../../contexts/NotificationContext';
+import type { Notification } from '../../services/notification.service';
+
+type TabKey = 'all' | 'assessments' | 'results' | 'general';
 
 const Notifications: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('alerts');
-  
-  // Mock notifications data
-  const alerts = [
-    { id: 1, title: 'New Assessment Available', message: 'Mathematics Quiz is now available. Deadline: 2025-11-15', time: '2 hours ago', unread: true },
-    { id: 2, title: 'Results Published', message: 'Your Physics Test results are now available.', time: '1 day ago', unread: true },
-    { id: 3, title: 'System Maintenance', message: 'Scheduled maintenance on Sunday 2 AM - 4 AM.', time: '3 days ago', unread: false },
-  ];
+  const { notifications, markAsRead, markAllAsRead, loading } = useNotifications();
+  const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const navigate = useNavigate();
 
-  const announcements = [
-    { id: 1, title: 'College Fest Announcement', message: 'Annual college fest will be held on December 15th.', time: '1 week ago', author: 'Admin' },
-    { id: 2, title: 'Library Hours Extended', message: 'Library will be open until 10 PM during exam weeks.', time: '2 weeks ago', author: 'Librarian' },
-  ];
-
-  const messages = [
-    { id: 1, sender: 'Dr. Smith', title: 'Regarding Mathematics Quiz', message: 'Please review the quiz instructions carefully.', time: '1 day ago', unread: true },
-    { id: 2, sender: 'Placement Officer', title: 'Internship Opportunities', message: 'New internship opportunities posted on the portal.', time: '3 days ago', unread: false },
-  ];
-
-  const markAsRead = (id: number) => {
-    // In a real app, this would update the notification status
-    alert(`Marked notification #${id} as read`);
+  const getPriorityColor = (priority: Notification['priority']) => {
+    switch (priority) {
+      case 'high':
+        return '#EF4444';
+      case 'medium':
+        return '#F59E0B';
+      case 'low':
+      default:
+        return '#6B7280';
+    }
   };
 
-  const deleteNotification = (id: number) => {
-    // In a real app, this would delete the notification
-    alert(`Deleted notification #${id}`);
+  const getRelativeTime = (createdAt: string) => {
+    const created = new Date(createdAt).getTime();
+    if (isNaN(created)) return '';
+    const diffMs = Date.now() - created;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} min ago`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours} hr ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    const diffWeeks = Math.floor(diffDays / 7);
+    return `${diffWeeks} week${diffWeeks > 1 ? 's' : ''} ago`;
+  };
+
+  const filteredNotifications = useMemo(() => {
+    if (activeTab === 'all') return notifications;
+    if (activeTab === 'assessments') {
+      return notifications.filter((n) => n.type === 'assessment_published');
+    }
+    if (activeTab === 'results') {
+      return notifications.filter((n) => n.type === 'result_published');
+    }
+    if (activeTab === 'reminders') {
+      return notifications.filter((n) => n.type === 'reminder');
+    }
+    if (activeTab === 'general') {
+      return notifications.filter((n) => n.type === 'announcement');
+    }
+    return notifications;
+  }, [notifications, activeTab]);
+
+  const getIcon = (notification: Notification, color: string) => {
+    switch (notification.type) {
+      case 'assessment_published':
+        return <AlertCircle size={20} color={color} />;
+      case 'result_published':
+        return <CheckCircle size={20} color={color} />;
+
+      case 'announcement':
+      default:
+        return <Megaphone size={20} color={color} />;
+    }
+  };
+
+  const handleView = (notification: Notification) => {
+    if (notification.link) {
+      navigate(notification.link);
+    }
+  };
+
+  const handleMarkAsRead = async (notification: Notification) => {
+    const id = notification.SK ? String(notification.SK).replace('NOTIF#', '') : notification.createdAt;
+    await markAsRead(id);
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await markAllAsRead();
   };
 
   return (
     <div className="notifications-page">
-      <h2>Notifications</h2>
-      
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px',
+        }}
+      >
+        <h2>Notifications</h2>
+        {notifications.length > 0 && (
+          <button
+            className="mark-read-btn"
+            onClick={handleMarkAllAsRead}
+            style={{ padding: '6px 12px', fontSize: '14px' }}
+          >
+            Mark all as read
+          </button>
+        )}
+      </div>
+
       <div className="tabs">
-        <button 
-          className={`tab-btn ${activeTab === 'alerts' ? 'active' : ''}`}
-          onClick={() => setActiveTab('alerts')}
+        <button
+          className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+          onClick={() => setActiveTab('all')}
         >
-          Alerts
+          All
         </button>
-        <button 
-          className={`tab-btn ${activeTab === 'announcements' ? 'active' : ''}`}
-          onClick={() => setActiveTab('announcements')}
+        <button
+          className={`tab-btn ${activeTab === 'assessments' ? 'active' : ''}`}
+          onClick={() => setActiveTab('assessments')}
         >
-          Announcements
+          Assessments
         </button>
-        <button 
-          className={`tab-btn ${activeTab === 'messages' ? 'active' : ''}`}
-          onClick={() => setActiveTab('messages')}
+        <button
+          className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
+          onClick={() => setActiveTab('results')}
         >
-          Messages
+          Results
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'general' ? 'active' : ''}`}
+          onClick={() => setActiveTab('general')}
+        >
+          General
         </button>
       </div>
 
       <div className="tab-content">
-        {activeTab === 'alerts' && (
-          <div className="alerts-tab">
-            <h3>Assessment Alerts</h3>
-            <div className="notifications-list">
-              {alerts.map(alert => (
-                <div key={alert.id} className={`notification-item ${alert.unread ? 'unread' : ''}`}>
-                  <div className="notification-content">
-                    <h4>{alert.title}</h4>
-                    <p>{alert.message}</p>
-                    <div className="notification-meta">
-                      <span className="time">{alert.time}</span>
-                      {alert.unread && <span className="unread-indicator">Unread</span>}
-                    </div>
-                  </div>
-                  <div className="notification-actions">
-                    {alert.unread && (
-                      <button 
-                        className="mark-read-btn"
-                        onClick={() => markAsRead(alert.id)}
-                      >
-                        Mark as Read
-                      </button>
-                    )}
-                    <button 
-                      className="delete-btn"
-                      onClick={() => deleteNotification(alert.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+        {loading && (
+          <div className="notifications-list">
+            <div className="notification-item">
+              <div className="notification-content">
+                <p>Loading notifications...</p>
+              </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'announcements' && (
-          <div className="announcements-tab">
-            <h3>College-wide Announcements</h3>
-            <div className="notifications-list">
-              {announcements.map(announcement => (
-                <div key={announcement.id} className="notification-item">
-                  <div className="notification-content">
-                    <h4>{announcement.title}</h4>
-                    <p>{announcement.message}</p>
-                    <div className="notification-meta">
-                      <span className="time">{announcement.time}</span>
-                      <span className="author">By {announcement.author}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+        {!loading && filteredNotifications.length === 0 && (
+          <div className="notifications-list">
+            <div className="notification-item">
+              <div className="notification-content">
+                <p>No notifications found in this category.</p>
+              </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'messages' && (
-          <div className="messages-tab">
-            <h3>Messages from Staff</h3>
-            <div className="notifications-list">
-              {messages.map(message => (
-                <div key={message.id} className={`notification-item ${message.unread ? 'unread' : ''}`}>
-                  <div className="notification-content">
-                    <h4>{message.title}</h4>
-                    <p><strong>From: {message.sender}</strong></p>
-                    <p>{message.message}</p>
-                    <div className="notification-meta">
-                      <span className="time">{message.time}</span>
-                      {message.unread && <span className="unread-indicator">Unread</span>}
+        {!loading && filteredNotifications.length > 0 && (
+          <div className="notifications-list">
+            {filteredNotifications.map((notification) => {
+              const borderColor = getPriorityColor(notification.priority);
+              const iconColor = borderColor;
+              const isUnread = !notification.isRead;
+
+              return (
+                <div
+                  key={notification.SK || notification.createdAt}
+                  className={`notification-item ${isUnread ? 'unread' : ''}`}
+                  style={{
+                    borderLeft: `4px solid ${borderColor}`,
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <div style={{ marginTop: '4px' }}>{getIcon(notification, iconColor)}</div>
+                  <div className="notification-content" style={{ flex: 1 }}>
+                    <h4 style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{notification.title}</span>
+                      {isUnread && (
+                        <span className="unread-indicator" style={{ fontSize: '11px' }}>
+                          Unread
+                        </span>
+                      )}
+                    </h4>
+                    <p style={{ marginTop: 0, marginBottom: '4px' }}>{notification.message}</p>
+                    <div
+                      className="notification-meta"
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      <span className="time">{getRelativeTime(notification.createdAt)}</span>
+                      <div className="notification-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="mark-read-btn"
+                          onClick={() => handleView(notification)}
+                          style={{ padding: '4px 10px', fontSize: '13px' }}
+                        >
+                          View
+                        </button>
+                        {isUnread && (
+                          <button
+                            className="mark-read-btn"
+                            onClick={() => handleMarkAsRead(notification)}
+                            style={{ padding: '4px 10px', fontSize: '13px' }}
+                          >
+                            Mark as read
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="notification-actions">
-                    {message.unread && (
-                      <button 
-                        className="mark-read-btn"
-                        onClick={() => markAsRead(message.id)}
-                      >
-                        Mark as Read
-                      </button>
-                    )}
-                    <button 
-                      className="delete-btn"
-                      onClick={() => deleteNotification(message.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         )}
       </div>

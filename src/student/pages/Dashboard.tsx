@@ -10,6 +10,8 @@ import AssessmentSuccess from '../components/AssessmentSuccess';
 import AssessmentSubmitted from './AssessmentSubmitted';
 import ResultDetail from './ResultDetail';
 import '../styles/Dashboard.css';
+import NotificationPopup from '../components/NotificationPopup';
+import type { Notification } from '../../services/notification.service';
 import AuthService from '../../services/auth.service';
 import { useUser } from '../../contexts/UserContext';
 
@@ -27,6 +29,7 @@ const StudentDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isAssessmentActive, setIsAssessmentActive] = useState(false);
+  const [activePopup, setActivePopup] = useState<Notification | null>(null);
 
   // Navigation items (removed profile)
   const navItems = useMemo(() => [
@@ -46,6 +49,20 @@ const StudentDashboard: React.FC = () => {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Listen for newNotification events from NotificationContext to show popup
+  useEffect(() => {
+    const handleNewNotification = (event: any) => {
+      if (event && event.detail) {
+        setActivePopup(event.detail as Notification);
+      }
+    };
+
+    window.addEventListener('newNotification', handleNewNotification as EventListener);
+    return () => {
+      window.removeEventListener('newNotification', handleNewNotification as EventListener);
+    };
   }, []);
 
   // Check if we're on the assessment taking page
@@ -206,6 +223,13 @@ const StudentDashboard: React.FC = () => {
           </Routes>
         </div>
       </main>
+
+      {activePopup && (
+        <NotificationPopup
+          notification={activePopup}
+          onClose={() => setActivePopup(null)}
+        />
+      )}
     </div>
   );
 };

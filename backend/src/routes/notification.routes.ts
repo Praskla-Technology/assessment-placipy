@@ -8,32 +8,42 @@ const router = express.Router();
 
 /**
  * Helper function to extract email from request
+ * Uses multiple possible JWT fields and falls back to Cognito profile lookup.
  */
 async function getEmailFromRequest(req: any): Promise<string> {
-    let email = req.user?.email;
-    
+    const u = req.user || {};
+
+    // Try the most common locations first
+    const candidates = [
+        u.email,
+        u['custom:email'],
+        (u.username && String(u.username).includes('@')) ? String(u.username) : '',
+        (u['cognito:username'] && String(u['cognito:username']).includes('@')) ? String(u['cognito:username']) : '',
+        (u.sub && String(u.sub).includes('@')) ? String(u.sub) : ''
+    ];
+
+    let email = candidates.find((c: any) => typeof c === 'string' && c.includes('@'));
+
+    // Fallback: fetch from Cognito using userId
     if (!email) {
-        // Try username if it contains @
-        if (req.user?.username && req.user.username.includes('@')) {
-            email = req.user.username;
-        } else if (req.user?.sub && req.user.sub.includes('@')) {
-            email = req.user.sub;
-        } else {
-            // Fetch from Cognito
+        const userId = u['cognito:username'] || u.username || u.sub;
+        if (userId) {
             try {
-                const attributes = await getUserAttributes(req.user?.sub || req.user?.username);
-                email = attributes.find((attr: any) => attr.Name === 'email')?.Value;
+                const userInfo = await getUserAttributes(userId);
+                if (userInfo && userInfo.attributes && userInfo.attributes.email) {
+                    email = userInfo.attributes.email;
+                }
             } catch (error) {
-                console.error('Error fetching user attributes:', error);
+                console.error('Error fetching user attributes for notifications:', error);
             }
         }
     }
-    
+
     if (!email) {
         throw new Error('User email not found. Please log in again.');
     }
-    
-    return email.toLowerCase();
+
+    return String(email).toLowerCase();
 }
 
 /**

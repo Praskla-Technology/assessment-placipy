@@ -7,7 +7,7 @@ export interface Notification {
     SK?: string;
     userId?: string;
     email?: string;
-    type: 'assessment_published' | 'result_published' | 'reminder' | 'announcement';
+    type: 'assessment_published' | 'result_published' | 'announcement';
     title: string;
     message: string;
     link: string;

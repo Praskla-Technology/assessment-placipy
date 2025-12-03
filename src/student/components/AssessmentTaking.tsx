@@ -96,7 +96,7 @@ const AssessmentTaking: React.FC = () => {
   const [showLanguageAlert, setShowLanguageAlert] = useState<boolean>(true);
   
   // State for timer
-  const [timeLeft, setTimeLeft] = useState<number>(60 * 60); // 60 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState<number>(60 * 60); // default 60 minutes in seconds, will be overridden by assessment config
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   
   // State for MCQ section
@@ -609,9 +609,42 @@ console.log("In a browser environment, this would render as HTML");
           
           setAssessmentData(transformedData);
           
-          // Set timer based on assessment configuration
+          // Set timer based on assessment configuration with persistence across reloads
           if (assessment?.configuration?.duration) {
-            setTimeLeft(assessment.configuration.duration * 60); // Convert minutes to seconds
+            const durationSeconds = assessment.configuration.duration * 60; // minutes to seconds
+            const storageKey = `assessment_timer_${assessmentId}`;
+            const now = Date.now();
+
+            try {
+              const stored = localStorage.getItem(storageKey);
+              if (stored) {
+                const parsed = JSON.parse(stored) as { startedAt: number; durationSeconds: number };
+                const elapsed = Math.floor((now - parsed.startedAt) / 1000);
+                const remaining = parsed.durationSeconds - elapsed;
+
+                if (remaining > 0) {
+                  setTimeLeft(remaining);
+                } else {
+                  // Time already elapsed while away – force 0 and submit on mount
+                  setTimeLeft(0);
+                  // Auto-submit after state settles
+                  setTimeout(() => {
+                    handleSubmit();
+                  }, 0);
+                }
+              } else {
+                // First time starting this assessment: store start time
+                localStorage.setItem(
+                  storageKey,
+                  JSON.stringify({ startedAt: now, durationSeconds })
+                );
+                setTimeLeft(durationSeconds);
+              }
+            } catch (e) {
+              console.error('Error handling persisted assessment timer:', e);
+              // Fallback: simple in-memory timer
+              setTimeLeft(durationSeconds);
+            }
           }
         } else {
           // Handle specific error cases
@@ -1051,7 +1084,8 @@ console.log("In a browser environment, this would render as HTML");
       const numUnattempted = mcqUnattempted + codingUnattempted;
       const accuracy = totalQuestions > 0 ? Math.round((numCorrect / totalQuestions) * 100) : 0;
       const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
-      const timeSpentSeconds = 3600 - timeLeft;
+      const durationSeconds = (assessmentData?.configuration?.duration || 60) * 60;
+      const timeSpentSeconds = Math.max(0, durationSeconds - timeLeft);
 
       // Prepare result data in EXACT schema
       // Get department from assessment first (the department chosen when creating the assessment)
@@ -1117,6 +1151,16 @@ console.log("In a browser environment, this would render as HTML");
       });
       
       setIsAssessmentCompleted(true);
+
+      // Clear persisted timer for this assessment now that it is completed
+      try {
+        if (assessmentData?.assessmentId) {
+          const storageKey = `assessment_timer_${assessmentData.assessmentId}`;
+          localStorage.removeItem(storageKey);
+        }
+      } catch (e) {
+        console.error('Error clearing persisted timer after submission:', e);
+      }
       // Notify parent component that assessment is completed
       if (window.parent) {
         window.parent.postMessage({ type: 'ASSESSMENT_COMPLETED' }, '*');

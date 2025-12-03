@@ -791,8 +791,10 @@ const AssessmentCreation: React.FC = () => {
       }
 
       // Update totalQuestions in configuration before submitting
+      // Treat created assessments as published so student notifications are triggered
       const assessmentDataToSend = {
         ...assessmentData,
+        isPublished: true,
         configuration: {
           ...assessmentData.configuration,
           totalQuestions: assessmentData.questions.length
@@ -803,8 +805,8 @@ const AssessmentCreation: React.FC = () => {
           createdBy: user.email,
           createdByName: user.name
         }),
-        // Add publishedAt if the assessment is published
-        ...(assessmentData.isPublished && { publishedAt: new Date().toISOString() })
+        // Add publishedAt since assessment is published on creation
+        publishedAt: new Date().toISOString()
       };
 
       // Log the data being sent
