@@ -139,7 +139,7 @@ const Profile: React.FC = () => {
       setEditing(false);
       await refreshUser();
       const updated = await PTOService.getProfile();
-      const parts = String(updated.name || '').trim().split(' ');
+      const parts = String(updated.name || `${firstName} ${lastName}`).trim().split(' ');
         setProfileData({
           firstName: parts[0] || '',
           lastName: parts.slice(1).join(' ') || '',
@@ -150,7 +150,7 @@ const Profile: React.FC = () => {
           department: String(updated.department || ''),
           employeeId: String((updated.employeeId || (String(updated.SK || '').startsWith('PTO#') ? String(updated.SK || '').replace('PTO#','') : '')) || '')
         });
-      setTimeout(() => setSuccess(''), 2500);
+        setTimeout(() => setSuccess(''), 2500);
     } catch (e: any) {
       setError(e.message || 'Failed to update profile');
     }

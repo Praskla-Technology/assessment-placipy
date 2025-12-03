@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FaFileExcel, FaFilePdf, FaFilter } from 'react-icons/fa';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import PTOService from '../../services/pto.service';
-import AnalyticsService from '../../services/analytics.service';
+// Removed external analytics service; using PTOService real-time endpoints
 
 const ReportsAnalytics: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
@@ -11,35 +11,34 @@ const ReportsAnalytics: React.FC = () => {
   const [departments, setDepartments] = useState<string[]>(['all']);
 
   const [departmentPerformanceData, setDeptPerf] = useState<Array<{ name: string; students: number; avgScore: number; completed: number }>>([]);
-  const [studentAnalyticsData, setStudentAnalyticsData] = useState<Array<{ name: string; accuracy: number; attempts: number }>>([]);
+  const [studentAnalyticsData, setStudentAnalyticsData] = useState<Array<{ name: string; accuracy: number; attempts: number; department: string }>>([]);
   const [attendanceData, setAttendanceData] = useState<Array<{ assessment: string; total: number; attended: number; completion: number }>>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
         const dash = await PTOService.getDashboard();
-        const perf = dash.departmentPerformance.map((d: any) => ({ name: String(d?.code ?? d?.name ?? ''), students: Number(d?.students ?? 0), avgScore: Number(d?.avgScore ?? 0), completed: Number(d?.completed ?? 0) }));
+        const perf = dash.departmentPerformance.map((d: { code?: string; name?: string; students?: number; avgScore?: number; completed?: number }) => ({ name: String(d?.name ?? d?.code ?? ''), students: Number(d?.students ?? 0), avgScore: Number(d?.avgScore ?? 0), completed: Number(d?.completed ?? 0) }));
         setDeptPerf(perf);
         const names = Array.from(new Set(perf.map(p => p.name))).map(n => String(n));
         setDepartments(['all', ...names]);
 
-        const studentsResp = await AnalyticsService.getStudentAnalytics();
-        const studentsRows = Array.isArray((studentsResp as any)?.data) ? (studentsResp as any).data : (Array.isArray(studentsResp) ? studentsResp : []);
-        setStudentAnalyticsData(studentsRows.map((row: any) => ({
-          name: String(row?.name ?? row?.week ?? row?.label ?? ''),
-          accuracy: Number(row?.accuracy ?? row?.avgAccuracy ?? row?.score ?? 0),
-          attempts: Number(row?.attempts ?? row?.totalAttempts ?? row?.count ?? 0)
+        const studentsRows = await PTOService.getStudentAnalytics();
+        setStudentAnalyticsData(studentsRows.map((row: { name?: string; accuracy?: number; attempts?: number; department?: string }) => ({
+          name: String(row?.name ?? ''),
+          accuracy: Number(row?.accuracy ?? 0),
+          attempts: Number(row?.attempts ?? 0),
+          department: String(row?.department ?? '')
         })));
 
-        const assessResp = await AnalyticsService.getAssessmentAnalytics();
-        const assessRows = Array.isArray((assessResp as any)?.data) ? (assessResp as any).data : (Array.isArray(assessResp) ? assessResp : []);
-        setAttendanceData(assessRows.map((row: any) => ({
-          assessment: String(row?.assessment ?? row?.title ?? row?.name ?? ''),
-          total: Number(row?.total ?? row?.totalStudents ?? 0),
-          attended: Number(row?.attended ?? row?.present ?? row?.participants ?? 0),
-          completion: Number(row?.completion ?? row?.completionRate ?? 0)
+        const assessRows = await PTOService.getAssessmentAnalytics();
+        setAttendanceData(assessRows.map((row: { assessment?: string; total?: number; attended?: number; completion?: number }) => ({
+          assessment: String(row?.assessment ?? ''),
+          total: Number(row?.total ?? 0),
+          attended: Number(row?.attended ?? 0),
+          completion: Number(row?.completion ?? 0)
         })));
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e);
       } finally {
         // no-op
@@ -48,13 +47,39 @@ const ReportsAnalytics: React.FC = () => {
     load();
   }, []);
 
-  const topPerformers = [
-    { rank: 1, name: 'Alice Johnson', department: 'CS', score: 95, tests: 5 },
-    { rank: 2, name: 'Diana Prince', department: 'ME', score: 92, tests: 6 },
-    { rank: 3, name: 'Bob Williams', department: 'CS', score: 88, tests: 4 },
-    { rank: 4, name: 'Charlie Brown', department: 'ECE', score: 85, tests: 3 },
-    { rank: 5, name: 'Eve Davis', department: 'CE', score: 82, tests: 2 },
-  ];
+  const deptCodeFromValue = (value: string) => {
+    const upper = String(value || '').trim().toUpperCase();
+    const map: Record<string, string> = {
+      CSE: 'CSE',
+      CS: 'CSE',
+      'COMPUTER SCIENCE': 'CSE',
+      'COMPUTER SCIENCE ENGINEERING': 'CSE',
+      'COMPUTER SCIENCE AND ENGINEERING': 'CSE',
+      IT: 'IT',
+      'INFORMATION TECHNOLOGY': 'IT',
+      ECE: 'ECE',
+      ELECTRONICS: 'ECE',
+      'ELECTRONICS AND COMMUNICATION': 'ECE',
+      EEE: 'EEE',
+      'ELECTRICAL AND ELECTRONICS ENGINEERING': 'EEE',
+      ME: 'ME',
+      MECHANICAL: 'ME',
+      'MECHANICAL ENGINEERING': 'ME',
+      CE: 'CE',
+      CIVIL: 'CE',
+      'CIVIL ENGINEERING': 'CE'
+    };
+    if (!upper) return '';
+    if (map[upper]) return map[upper];
+    if (/^[A-Z]{2,4}$/.test(upper)) return upper;
+    return upper.substring(0, 3);
+  };
+
+  const topPerformers = studentAnalyticsData
+    .slice()
+    .sort((a, b) => b.accuracy - a.accuracy)
+    .slice(0, 10)
+    .map((s, idx) => ({ rank: idx + 1, name: s.name, department: s.department, score: s.accuracy, tests: s.attempts }));
 
   const handleExport = (format: 'excel' | 'pdf') => {
     if (format === 'excel') {
@@ -217,7 +242,7 @@ const ReportsAnalytics: React.FC = () => {
 
   const filteredData = selectedDepartment === 'all' 
     ? departmentPerformanceData 
-    : departmentPerformanceData.filter(d => d.name === selectedDepartment);
+    : departmentPerformanceData.filter(d => deptCodeFromValue(d.name) === deptCodeFromValue(selectedDepartment));
 
   return (
     <div className="pto-component-page">

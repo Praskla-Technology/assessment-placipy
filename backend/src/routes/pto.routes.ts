@@ -370,6 +370,48 @@ router.get('/students', async (req, res) => {
   }
 });
 
+router.get('/students/metrics', async (req, res) => {
+  try {
+    const email = await getEmail(req);
+    const data = await ptoService.getScoresMapForDomain(email);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch student metrics', error: error.message });
+  }
+});
+
+router.get('/analytics/students', async (req, res) => {
+  try {
+    const email = await getEmail(req);
+    const department = req.query?.department ? String(req.query.department) : undefined;
+    const data = await ptoService.getStudentAnalytics(email, department);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch student analytics', error: error.message });
+  }
+});
+
+router.get('/analytics/assessments', async (req, res) => {
+  try {
+    const email = await getEmail(req);
+    const department = req.query?.department ? String(req.query.department) : undefined;
+    const data = await ptoService.getAssessmentAnalytics(email, department);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch assessment analytics', error: error.message });
+  }
+});
+
+router.get('/analytics/departments', async (req, res) => {
+  try {
+    const email = await getEmail(req);
+    const data = await ptoService.getDepartmentAnalytics(email);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch department analytics', error: error.message });
+  }
+});
+
 // PTO Profile update
 router.put('/profile', async (req, res) => {
   try {
