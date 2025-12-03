@@ -13,9 +13,37 @@ interface Student {
 }
 
 const StudentManagement: React.FC = () => {
+  const deptCodeFromValue = (value: string) => {
+    const upper = String(value || '').trim().toUpperCase();
+    const map: Record<string, string> = {
+      CSE: 'CSE',
+      CS: 'CSE',
+      'COMPUTER SCIENCE': 'CSE',
+      'COMPUTER SCIENCE ENGINEERING': 'CSE',
+      'COMPUTER SCIENCE AND ENGINEERING': 'CSE',
+      IT: 'IT',
+      'INFORMATION TECHNOLOGY': 'IT',
+      ECE: 'ECE',
+      ELECTRONICS: 'ECE',
+      'ELECTRONICS AND COMMUNICATION': 'ECE',
+      EEE: 'EEE',
+      'ELECTRICAL AND ELECTRONICS ENGINEERING': 'EEE',
+      ME: 'ME',
+      MECHANICAL: 'ME',
+      'MECHANICAL ENGINEERING': 'ME',
+      CE: 'CE',
+      CIVIL: 'CE',
+      'CIVIL ENGINEERING': 'CE'
+    };
+    if (!upper) return '';
+    if (map[upper]) return map[upper];
+    if (/^[A-Z]{2,4}$/.test(upper)) return upper;
+    return upper.substring(0, 3);
+  };
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState<boolean>(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
@@ -83,16 +111,37 @@ const StudentManagement: React.FC = () => {
     load();
   }, []);
 
+  const refreshMetrics = async () => {
+    try {
+      setMetricsLoading(true);
+      const metrics = await PTOService.getStudentMetrics();
+      setStudents(prev => prev.map(st => {
+        const info = metrics[String(st.email || '').toLowerCase()];
+        if (!info) return st;
+        return {
+          ...st,
+          testsParticipated: Number(info.tests || 0),
+          avgScore: Math.round(Number(info.avg || 0))
+        };
+      }));
+    } catch (err) {
+      const msg = (err as Error)?.message || 'Failed to refresh metrics';
+      setError(msg);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
+
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          student.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = filterDepartment === 'all' || student.department === filterDepartment;
+    const matchesDepartment = filterDepartment === 'all' || deptCodeFromValue(student.department) === deptCodeFromValue(filterDepartment);
     let matchesAssessment = true;
     if (filterAssessment !== 'all') {
       const selected = assessments.find(a => a.id === filterAssessment);
       const dept = selected?.department || '';
-      matchesAssessment = !dept || student.department === dept;
+      matchesAssessment = !dept || deptCodeFromValue(student.department) === deptCodeFromValue(dept);
     }
     return matchesSearch && matchesDepartment && matchesAssessment;
   });
@@ -217,6 +266,13 @@ const StudentManagement: React.FC = () => {
           disabled={selectedStudents.length === 0}
         >
           <FaEnvelope /> Send Message ({selectedStudents.length})
+        </button>
+        <button
+          className="secondary-btn"
+          onClick={refreshMetrics}
+          disabled={metricsLoading}
+        >
+          {metricsLoading ? 'Refreshing…' : 'Refresh Metrics'}
         </button>
         <button
           className="secondary-btn"

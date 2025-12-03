@@ -11,6 +11,7 @@ import {
   FaSignOutAlt,
 } from "react-icons/fa";
 import { useUser } from "../../contexts/UserContext";
+import AuthService from "../../services/auth.service";
 
 import DashboardHome from "../components/DashboardHome";
 import DepartmentManagement from "../components/DepartmentManagement";
@@ -90,6 +91,26 @@ const PTODashboard: React.FC = () => {
   }, []);
 
 
+  const displayName = useMemo(() => {
+    if (loading) return 'Loading...';
+    const token = AuthService.getAccessToken();
+    if (token && typeof token === 'string') {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        try {
+          const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          const json = JSON.parse(atob(base64));
+          const given = String(json.given_name || '').trim();
+          const family = String(json.family_name || '').trim();
+          const fullFromParts = [given, family].filter(Boolean).join(' ').trim();
+          const name = String(json.name || fullFromParts || '').trim();
+          if (name) return name;
+        } catch (e) { void e; }
+      }
+    }
+    return user?.name || 'PTO Administrator';
+  }, [loading, user]);
+
   return (
     <div className="pto-dashboard">
       {/* ✅ Mobile Hamburger */}
@@ -167,7 +188,7 @@ const PTODashboard: React.FC = () => {
               className="pto-user-avatar"
             />
             <div className="pto-user-details">
-              <p className="pto-user-name">{loading ? 'Loading...' : (user?.name || 'PTO Administrator')}</p>
+              <p className="pto-user-name">{displayName}</p>
               <p className="pto-user-role">PTO</p>
             </div>
           </div>

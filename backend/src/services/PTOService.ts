@@ -12,6 +12,9 @@ class PTOService {
     this.announcementsTable = new DynamoDBService(process.env.DYNAMODB_ANNOUNCEMENTS_TABLE_NAME || 'Assesment_placipy_announcements');
     this.messagesTable = new DynamoDBService(process.env.DYNAMODB_MESSAGES_TABLE_NAME || 'Assesment_placipy_messages');
     this.resultsTable = new DynamoDBService(process.env.DYNAMODB_RESULTS_TABLE_NAME || 'assessment_placipy_assessment_result');
+    this.resultsTableAlt = new DynamoDBService('Assessment_placipy_assessment_result');
+    this.resultsTableThird = new DynamoDBService(process.env.RESULTS_TABLE_NAME || 'Assessment_placipy_results');
+    this.resultsTableFourth = new DynamoDBService('Assessment_placipy_asseessment_result');
     this.cognitoClient = new CognitoIdentityProviderClient({
       region: process.env.COGNITO_REGION || process.env.AWS_REGION,
       credentials: fromEnv()
@@ -40,6 +43,48 @@ class PTOService {
     const domain = (email || '').split('@')[1];
     if (!domain) throw new Error('Invalid email for client resolution');
     return `CLIENT#${domain}`;
+  }
+
+  deptCodeFromValue(value) {
+    const raw = String(value || '').trim();
+    const upper = raw.toUpperCase();
+    const map = new Map([
+      ['CSE', 'CSE'],
+      ['CS', 'CSE'],
+      ['COMPUTER SCIENCE', 'CSE'],
+      ['COMPUTER SCIENCE ENGINEERING', 'CSE'],
+      ['COMPUTER SCIENCE AND ENGINEERING', 'CSE'],
+      ['IT', 'IT'],
+      ['INFORMATION TECHNOLOGY', 'IT'],
+      ['ECE', 'ECE'],
+      ['ELECTRONICS', 'ECE'],
+      ['ELECTRONICS AND COMMUNICATION', 'ECE'],
+      ['EEE', 'EEE'],
+      ['ELECTRICAL AND ELECTRONICS ENGINEERING', 'EEE'],
+      ['ME', 'ME'],
+      ['MECHANICAL', 'ME'],
+      ['MECHANICAL ENGINEERING', 'ME'],
+      ['CE', 'CE'],
+      ['CIVIL', 'CE'],
+      ['CIVIL ENGINEERING', 'CE']
+    ]);
+    if (!upper) return '';
+    if (map.has(upper)) return map.get(upper);
+    if (/^[A-Z]{2,4}$/.test(upper)) return upper;
+    return upper.substring(0, 3);
+  }
+
+  deptDisplayNameFromValue(value) {
+    const code = this.deptCodeFromValue(value);
+    const names = new Map([
+      ['CSE', 'Computer Science and Engineering'],
+      ['IT', 'Information Technology'],
+      ['ECE', 'Electronics and Communication Engineering'],
+      ['EEE', 'Electrical and Electronics Engineering'],
+      ['ME', 'Mechanical Engineering'],
+      ['CE', 'Civil Engineering']
+    ]);
+    return names.get(code) || String(value || code || '').trim();
   }
 
   async getDashboard(email) {
@@ -76,15 +121,15 @@ class PTOService {
     const activeDepartments = deptItems.filter(d => d && d.active !== false);
 
     const deptStats = activeDepartments.map(d => {
-      const code = String(d.code || '').trim();
-      const deptStudents = students.filter(s => (s.department || '').toUpperCase() === code.toUpperCase());
+      const code = this.deptCodeFromValue(d.code || d.name || '');
+      const deptStudents = students.filter(s => this.deptCodeFromValue(s.department) === code);
       const avgScore = deptStudents.length
         ? (deptStudents.reduce((sum, s) => sum + (Number(s.avgScore) || 0), 0) / deptStudents.length)
         : 0;
-      const completed = assessments.filter(a => (a.department || '').toUpperCase() === code.toUpperCase()).length;
+      const completed = assessments.filter(a => this.deptCodeFromValue(a.department) === code).length;
       return {
         code,
-        name: String(d.name || code),
+        name: this.deptDisplayNameFromValue(d.name || code),
         active: d.active !== false,
         students: deptStudents.length,
         avgScore: Math.round(avgScore),
@@ -138,13 +183,13 @@ class PTOService {
     const staff = [...staffNew, ...staffLegacy];
     const assessments = await this.getAssessments(email);
     return deptItems.map(d => {
-      const code = String(d.code || '').trim();
-      const studentsCount = students.filter(s => (s.department || '').toUpperCase() === code.toUpperCase()).length;
-      const staffCount = staff.filter(st => (st.department || '').toUpperCase() === code.toUpperCase()).length;
-      const assessmentsCount = assessments.filter(a => (a.department || '').toUpperCase() === code.toUpperCase()).length;
+      const code = this.deptCodeFromValue(d.code || d.name || '');
+      const studentsCount = students.filter(s => this.deptCodeFromValue(s.department) === code).length;
+      const staffCount = staff.filter(st => this.deptCodeFromValue(st.department) === code).length;
+      const assessmentsCount = assessments.filter(a => this.deptCodeFromValue(a.department) === code).length;
       return {
         id: d.id || `DEPARTMENT#${code}`,
-        name: d.name || code,
+        name: this.deptDisplayNameFromValue(d.name || d.code || code),
         code,
         active: d.active !== false,
         createdAt: d.createdAt || '',
@@ -537,7 +582,7 @@ class PTOService {
     const mappedClient = items.map(i => ({
       id: i.SK,
       name: i.name,
-      department: i.department || 'All Departments',
+      department: this.deptCodeFromValue(i.department || 'All Departments'),
       type: i.type || 'college-wide',
       duration: i.duration || 60,
       date: i.scheduling?.startDate || i.date || '',
@@ -558,7 +603,7 @@ class PTOService {
     const mappedAlt = (all.items || []).map(m => ({
       id: String(m.SK || ''),
       name: m.title || m.name || '',
-      department: m.department || 'All Departments',
+      department: this.deptCodeFromValue(m.department || 'All Departments'),
       type: (m.department && m.department !== 'All Departments') ? 'department-wise' : 'college-wide',
       duration: m.configuration?.duration || m.duration || 60,
       date: m.scheduling?.startDate || m.createdAt || m.date || '',
@@ -573,9 +618,28 @@ class PTOService {
       createdByName: m.createdByName
     }));
     const byId = new Map();
-    for (const a of [...mappedClient, ...mappedAlt]) {
+    const mergeSafe = (prev, cur) => {
+      const merged = {
+        ...(prev || {}),
+        ...(cur || {})
+      };
+      merged.name = String((cur && cur.name) || (prev && prev.name) || '');
+      merged.department = (cur && cur.department) || (prev && prev.department) || 'All Departments';
+      merged.timeWindow = {
+        start: (cur && cur.timeWindow && cur.timeWindow.start) || (prev && prev.timeWindow && prev.timeWindow.start) || '',
+        end: (cur && cur.timeWindow && cur.timeWindow.end) || (prev && prev.timeWindow && prev.timeWindow.end) || ''
+      };
+      merged.attempts = typeof (cur && cur.attempts) === 'number' ? cur.attempts : (prev && prev.attempts);
+      merged.questions = typeof (cur && cur.questions) === 'number' && cur.questions > 0 ? cur.questions : (prev && prev.questions);
+      merged.createdBy = (cur && cur.createdBy) || (prev && prev.createdBy);
+      merged.createdByName = (cur && cur.createdByName) || (prev && prev.createdByName);
+      merged.status = (cur && cur.status) || (prev && prev.status) || 'inactive';
+      return merged;
+    };
+    for (const a of [...mappedAlt, ...mappedClient]) {
       const key = a.id || '';
-      if (!byId.has(key)) byId.set(key, a);
+      const prev = byId.get(key) || null;
+      byId.set(key, mergeSafe(prev, a));
     }
     return Array.from(byId.values());
   }
@@ -775,7 +839,8 @@ class PTOService {
     const assessmentId = cleaned.replace(/^ASSESSMENT#/, '');
     try {
       const assessmentService = require('./AssessmentService');
-      await assessmentService.deleteAssessment(assessmentId);
+      const domain = (String(email || '').split('@')[1] || '').trim();
+      await assessmentService.deleteAssessment(assessmentId, domain);
     } catch (_) {}
     return true;
   }
@@ -979,7 +1044,7 @@ class PTOService {
         id: i.SK,
         name: i.name,
         rollNumber: i.rollNumber,
-        department: i.department,
+        department: this.deptCodeFromValue(i.department),
         email: i.email,
         testsParticipated: Number(i.testsParticipated || scoreInfo.tests || 0),
         avgScore: Math.round(Number(i.avgScore || scoreInfo.avg || 0))
@@ -990,28 +1055,95 @@ class PTOService {
   async getScoresMapForDomain(email) {
     const domain = String(email).split('@')[1] || '';
     const out = {};
-    // Try scanning results table; aggregate by student email
-    const params = { };
-    try {
-      const res = await this.resultsTable.scanTable(params);
-      const items = res.Items || [];
-      for (const it of items) {
-        const em = String(it.studentEmail || it.recipientId || it.email || '').toLowerCase();
+    const seenTestsByEmail = {};
+    const bestScoresByEmail = {};
+    const mergeItems = (items) => {
+      for (const it of (items || [])) {
+        const em = String(it.studentEmail || it.email || it.recipientId || it.userEmail || '').toLowerCase();
         if (!em || (domain && !em.endsWith(`@${domain}`))) continue;
-        const totalMarks = Number(it.totalMarks || 0);
-        const obtainedMarks = Number(it.obtainedMarks || 0);
-        let score = Number(it.score || it.accuracy || 0);
-        if (!score && totalMarks > 0) score = (obtainedMarks / totalMarks) * 100;
+        const totalMarks = Number(it.maxScore || it.totalMarks || it.total || 0);
+        const obtainedMarks = Number(it.score || it.obtainedMarks || it.marks || 0);
+        let percentage = Number(it.percentage || it.accuracy || 0);
+        if ((!percentage || isNaN(percentage)) && totalMarks > 0) percentage = (obtainedMarks / totalMarks) * 100;
+        percentage = Math.max(0, Math.min(100, isNaN(percentage) ? 0 : percentage));
+        const tkCandidates = [
+          it.assessmentId, it.assessment_id, it.assessment,
+          it.testId, it.test_id, it.test,
+          it.resultId, it.result_id, it.id,
+          (typeof it.SK === 'string' ? it.SK : ''),
+          (typeof it.sortKey === 'string' ? it.sortKey : '')
+        ].map(x => String(x || '').trim()).filter(Boolean);
+        let testKey = tkCandidates[0] || '';
+        if (!testKey) {
+          const sk = String(it.SK || '');
+          if (sk) {
+            const parts = sk.split('#');
+            testKey = parts.length >= 3 ? `${parts[0]}#${parts[1]}#${parts[2]}` : sk;
+          }
+        }
         if (!out[em]) out[em] = { tests: 0, avg: 0, sum: 0 };
-        out[em].tests += 1;
-        out[em].sum += (isNaN(score) ? 0 : score);
+        if (!seenTestsByEmail[em]) seenTestsByEmail[em] = new Set();
+        if (!bestScoresByEmail[em]) bestScoresByEmail[em] = new Map();
+        if (testKey) seenTestsByEmail[em].add(testKey);
+        const prevBest = bestScoresByEmail[em].get(testKey) || 0;
+        bestScoresByEmail[em].set(testKey, Math.max(prevBest, percentage));
       }
-      Object.keys(out).forEach(k => {
-        const v = out[k];
-        v.avg = v.tests ? (v.sum / v.tests) : 0;
-      });
-    } catch (_) {}
+    };
+    try { const r1 = await this.resultsTable.scanTable({}); mergeItems(r1.Items || []); } catch (_) {}
+    try { const r2 = await this.resultsTableAlt.scanTable({}); mergeItems(r2.Items || []); } catch (_) {}
+    try { const r3 = await this.resultsTableThird.scanTable({}); mergeItems(r3.Items || []); } catch (_) {}
+    try { const r4 = await this.resultsTableFourth.scanTable({}); mergeItems(r4.Items || []); } catch (_) {}
+    Object.keys(out).forEach(em => {
+      const testsSet = seenTestsByEmail[em] || new Set();
+      const bestMap = bestScoresByEmail[em] || new Map();
+      let sum = 0;
+      for (const val of bestMap.values()) sum += val;
+      const tests = testsSet.size;
+      out[em].tests = tests;
+      out[em].sum = sum;
+      out[em].avg = tests ? (sum / tests) : 0;
+    });
     return out;
+  }
+
+  async getStudentAnalytics(email, department) {
+    const list = await this.getStudents(email);
+    const filtered = department && department !== 'all' ? list.filter(s => String(s.department || '') === department) : list;
+    const rows = filtered.map(s => ({ name: s.name || s.email, accuracy: Number(s.avgScore || 0), attempts: Number(s.testsParticipated || 0), department: s.department || '' }));
+    return rows.sort((a, b) => b.accuracy - a.accuracy);
+  }
+
+  async getAssessmentAnalytics(email, department) {
+    const domain = String(email).split('@')[1] || '';
+    const students = await this.getStudents(email);
+    const totalStudents = department && department !== 'all' ? students.filter(s => String(s.department || '') === department).length : students.length;
+    const mergeItems = (items, byAssess) => {
+      for (const it of (items || [])) {
+        const em = String(it.studentEmail || it.email || '').toLowerCase();
+        if (!em || (domain && !em.endsWith(`@${domain}`))) continue;
+        const aid = String(it.assessmentId || it.assessment_id || '').trim();
+        if (!aid) continue;
+        if (!byAssess[aid]) byAssess[aid] = new Set();
+        byAssess[aid].add(em);
+      }
+    };
+    const byAssess = {};
+    try { const r1 = await this.resultsTable.scanTable({}); mergeItems(r1.Items || [], byAssess); } catch (_) {}
+    try { const r2 = await this.resultsTableAlt.scanTable({}); mergeItems(r2.Items || [], byAssess); } catch (_) {}
+    try { const r3 = await this.resultsTableThird.scanTable({}); mergeItems(r3.Items || [], byAssess); } catch (_) {}
+    const assessments = await this.getAssessments(email);
+    const nameMap = new Map((assessments || []).map(a => [String(a.id || a.assessmentId || a.SK || ''), String(a.name || a.title || '')]));
+    const rows = Object.keys(byAssess).map(aid => {
+      const attended = (byAssess[aid] || new Set()).size;
+      const completion = totalStudents ? Math.round((attended / totalStudents) * 100) : 0;
+      return { assessment: nameMap.get(aid) || aid, total: totalStudents, attended, completion };
+    });
+    return rows.sort((a, b) => b.attended - a.attended);
+  }
+
+  async getDepartmentAnalytics(email) {
+    const dash = await this.getDashboard(email);
+    return dash.departmentPerformance || [];
   }
 
   async queryByPrefix(pk, skPrefix) {

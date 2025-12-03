@@ -25,7 +25,7 @@ class CodeEvaluationController {
     /**
      * Evaluate coding question
      */
-    async evaluateCodingQuestion(req: any, res: any) {
+  async evaluateCodingQuestion(req: any, res: any) {
         try {
             console.log('=== Evaluate Coding Question Request ===');
             console.log('Body:', req.body);
@@ -119,8 +119,12 @@ class CodeEvaluationController {
                 success: false,
                 message: error.message || 'Failed to evaluate coding question'
             });
-        }
-    }
+  }
+  }
+
+  evaluateCode = async (req: any, res: any) => {
+    return this.evaluateCodingQuestion(req, res);
+  }
 }
 
 module.exports = new CodeEvaluationController();

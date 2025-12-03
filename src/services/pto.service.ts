@@ -182,6 +182,26 @@ class PTOService {
     const res = await api.get('/students');
     return res.data.data;
   }
+  async getStudentMetrics(): Promise<Record<string, { tests: number; avg: number }>> {
+    const res = await api.get('/students/metrics');
+    return res.data.data;
+  }
+  async getStudentAnalytics(params?: { department?: string }): Promise<any[]> {
+    const qs = new URLSearchParams();
+    if (params?.department) qs.append('department', params.department);
+    const res = await api.get(`/analytics/students${qs.toString() ? `?${qs.toString()}` : ''}`);
+    return res.data.data;
+  }
+  async getAssessmentAnalytics(params?: { department?: string }): Promise<any[]> {
+    const qs = new URLSearchParams();
+    if (params?.department) qs.append('department', params.department);
+    const res = await api.get(`/analytics/assessments${qs.toString() ? `?${qs.toString()}` : ''}`);
+    return res.data.data;
+  }
+  async getDepartmentAnalytics(): Promise<any[]> {
+    const res = await api.get('/analytics/departments');
+    return res.data.data;
+  }
   async updateProfile(payload: { firstName: string; lastName: string; email: string; phone?: string; designation?: string; department?: string }): Promise<any> {
     const res = await api.put('/profile', payload);
     return res.data.data;
