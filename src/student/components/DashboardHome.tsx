@@ -195,10 +195,10 @@ const DashboardHome: React.FC = () => {
                   <div className="progress-bar">
                     <div 
                       className="progress-fill" 
-                      style={{ width: `${assessment.progress || 100}%` }}
+                      style={{ width: `${assessment.percentage || 0}%` }}
                     ></div>
                   </div>
-                  <span>{assessment.progress || 100}%</span>
+                  <span>{assessment.percentage || 0}%</span>
                 </div>
                 {assessment.submittedAt && (
                   <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '8px' }}>

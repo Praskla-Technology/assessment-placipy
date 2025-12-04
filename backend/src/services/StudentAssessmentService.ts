@@ -5,6 +5,9 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
     region: process.env.AWS_REGION
 });
 
+// Import ResultsService to check for previous attempts
+const resultsService = require('./ResultsService');
+
 class StudentAssessmentService {
     private assessmentsTableName: string;
     private questionsTableName: string;
@@ -16,6 +19,18 @@ class StudentAssessmentService {
             assessments: this.assessmentsTableName,
             questions: this.questionsTableName
         });
+    }
+
+    /**
+     * Shuffle array using Fisher-Yates algorithm
+     */
+    private shuffleArray(array: any[]): any[] {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
     }
 
     /**
@@ -40,10 +55,19 @@ class StudentAssessmentService {
                 throw new Error(`Assessment ${assessmentId} not found`);
             }
 
+            // Check if randomization is enabled for this assessment
+            const randomizeQuestions = assessment.configuration?.randomizeQuestions || false;
+            
             // Get all questions for this assessment
             console.log('Calling getAssessmentQuestions...');
-            const questions = await this.getAssessmentQuestions(assessmentId, requesterEmail);
+            let questions = await this.getAssessmentQuestions(assessmentId, requesterEmail);
             console.log('Questions result:', questions);
+
+            // If randomization is enabled, always randomize questions for every student and every attempt
+            if (randomizeQuestions) {
+                console.log('Randomization is enabled, randomizing questions for all students and all attempts...');
+                questions = this.shuffleArray(questions);
+            }
 
             // Return assessment with questions combined
             return {

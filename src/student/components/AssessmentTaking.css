@@ -26,6 +26,8 @@
   background-color: #fff;
   border-bottom: 1px solid #eee;
   margin-bottom: 0;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .timer-section {
@@ -100,6 +102,46 @@
 
 .fullscreen-btn:hover {
   background-color: #7d52c9;
+}
+
+/* Header controls */
+.header-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  z-index: 9999;
+  position: relative;
+  overflow: visible; /* Ensure children are not clipped */
+  flex-wrap: wrap;
+}
+
+/* Submit button in header */
+.submit-btn.small {
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
+  font-size: 0.9rem;
+  min-width: 120px;
+  text-align: center;
+}
+
+.submit-btn.small:hover:not(:disabled) {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4);
+}
+
+.submit-btn.small:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 /* Tab navigation removed - using header buttons instead */
@@ -655,6 +697,9 @@ input:checked + .slider:before {
   height: 100%;
   box-sizing: border-box;
   min-height: 0;
+  overflow: visible; /* Ensure content is visible */
+  position: relative;
+  z-index: 100;
 }
 
 .editor-section {
@@ -662,7 +707,7 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   border: none;
-  overflow: hidden;
+  overflow: visible; /* Allow content to be visible */
   min-height: 1450px; /* Slightly larger than editor to accommodate header */
 }
 
@@ -694,19 +739,14 @@ input:checked + .slider:before {
   padding: 15px 20px;
   background-color: transparent;
   border-bottom: 1px solid #e0e0e0;
-  z-index: 10;
+  z-index: 1000;
   position: relative;
   flex-shrink: 0; /* Prevent header from shrinking */
   min-height: 60px; /* Ensure minimum height for header */
+  overflow: visible; /* Ensure children are not clipped */
 }
 
-.editor-controls {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-  z-index: 10;
-  position: relative;
-}
+
 
 /* Updated language selector styling */
 .language-selector {
@@ -721,6 +761,7 @@ input:checked + .slider:before {
   transition: all 0.3s ease;
   box-shadow: 0 2px 4px rgba(151, 104, 225, 0.2);
   outline: none;
+  min-width: 120px;
 }
 
 .language-selector:hover {
@@ -754,8 +795,11 @@ input:checked + .slider:before {
   background-color: #4CAF50;
   color: white;
   box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
-  z-index: 10; /* Ensure button is visible above other elements */
+  z-index: 1000; /* Ensure button is visible above other elements */
   position: relative; /* Needed for z-index to work */
+  display: inline-block; /* Ensure button is always displayed */
+  visibility: visible; /* Ensure button is visible */
+  opacity: 1 !important; /* Override any opacity settings */
 }
 
 .run-btn:disabled {
@@ -763,12 +807,17 @@ input:checked + .slider:before {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+  /* Even when disabled, keep button visible */
+  display: inline-block;
+  visibility: visible;
 }
 
 /* Ensure the button looks enabled when not disabled */
 .run-btn:not(:disabled) {
-  opacity: 1;
+  opacity: 1 !important;
   cursor: pointer;
+  display: inline-block !important;
+  visibility: visible !important;
 }
 
 .run-btn:not(:disabled):hover {
@@ -782,6 +831,19 @@ input:checked + .slider:before {
   position: relative;
   z-index: 10;
 }
+
+/* Ensure run button is always visible and clickable */
+.control-btn.run-btn {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 9999 !important;
+  position: relative;
+  pointer-events: auto !important;
+  min-width: 120px;
+}
+
+
 
 /* Adjust layout proportions */
 .problem-section {
@@ -804,6 +866,9 @@ input:checked + .slider:before {
   height: 100%;
   box-sizing: border-box;
   min-height: 0;
+  overflow: visible; /* Ensure content is visible */
+  position: relative;
+  z-index: 100;
 }
 
 /* Updated navigation buttons styling */
@@ -847,6 +912,21 @@ input:checked + .slider:before {
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
+}
+
+/* Specific styling for submit button in coding navigation */
+.navigation-buttons .submit-btn.small {
+  background-color: #4CAF50;
+  color: white;
+  box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
+  margin: 0 15px;
+  min-width: 100px;
+}
+
+.navigation-buttons .submit-btn.small:hover:not(:disabled) {
+  background-color: #45a049;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
 }
 
 .nav-btn.prev {
@@ -1204,11 +1284,7 @@ input:checked + .slider:before {
   border-bottom: 1px solid #e0e0e0;
 }
 
-.editor-controls {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-}
+
 
 /* Separate output section */
 .output-section {

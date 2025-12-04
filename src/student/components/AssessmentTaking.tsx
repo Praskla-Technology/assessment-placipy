@@ -96,9 +96,8 @@ const AssessmentTaking: React.FC = () => {
   const [showLanguageAlert, setShowLanguageAlert] = useState<boolean>(true);
 
   // State for timer
-  const [timeLeft, setTimeLeft] = useState<number>(60 * 60); // default 60 minutes in seconds, will be overridden by assessment config
+  const [timeLeft, setTimeLeft] = useState<number>(0); // Start with 0, will be set by assessment config
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-
   // State for MCQ section
   const [currentMCQIndex, setCurrentMCQIndex] = useState<number>(0);
   const [mcqAnswers, setMcqAnswers] = useState<{ [key: string]: number }>({});
@@ -121,6 +120,18 @@ const AssessmentTaking: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [mcqResults, setMcqResults] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // State for showing submit button after 20 minutes
+  const [showSubmitButton, setShowSubmitButton] = useState<boolean>(false);
+  
+  // Debug log for showSubmitButton state changes
+  useEffect(() => {
+    console.log('showSubmitButton state changed:', showSubmitButton);
+  }, [showSubmitButton]);
+  
+  // Debug log for timeLeft state changes
+  useEffect(() => {
+    console.log('timeLeft state changed:', timeLeft);
+  }, [timeLeft]);
 
   // State for showing test cases dropdown
   const [showTestCases, setShowTestCases] = useState<boolean>(false);
@@ -130,6 +141,13 @@ const AssessmentTaking: React.FC = () => {
   const codeEditorRef = useRef<HTMLTextAreaElement>(null);
   const autoRunTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasFetchedData = useRef(false); // To prevent multiple API calls
+
+  // Add new state for time validation
+  const [isAssessmentStarted, setIsAssessmentStarted] = useState<boolean>(false);
+  const [isAssessmentEnded, setIsAssessmentEnded] = useState<boolean>(false);
+  const [serverTime, setServerTime] = useState<Date | null>(null);
+
+
 
   // Memoized function to extract questions
   const { mcqQuestions, codingChallenges } = React.useMemo(() => {
@@ -147,6 +165,279 @@ const AssessmentTaking: React.FC = () => {
 
     return { mcqQuestions, codingChallenges };
   }, [assessmentData]);
+
+  // Handle submit
+  const handleSubmit = useCallback(async () => {
+    // Prevent double submission
+    if (isSubmitting || submitted) {
+      console.log('Preventing double submission - already submitting or submitted');
+      return;
+    }
+    
+    // Ensure we have valid assessment data
+    if (!assessmentData || !assessmentId) {
+      console.log('Cannot submit - no assessment data or ID');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Get user info from context or token
+      let studentEmail = user?.email || '';
+      let studentName = user?.name || '';
+
+      // If not in context, try to get from token
+      if (!studentEmail) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            const userProfile = await AuthService.getUserProfile(token);
+            studentEmail = userProfile.email || '';
+            studentName = userProfile.name || '';
+          }
+        } catch (err) {
+          console.error('Error getting user from token:', err);
+        }
+      }
+
+      // Final fallback - decode JWT token to get email
+      if (!studentEmail) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            // Decode JWT token (simple base64 decode, no verification needed for email extraction)
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            studentEmail = payload.email || payload['cognito:username'] || payload.username || payload.sub || '';
+            studentName = payload.name || payload['cognito:name'] || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || studentEmail;
+          }
+        } catch (err) {
+          console.error('Error decoding token:', err);
+        }
+      }
+
+      if (!studentEmail) {
+        alert('User email not found. Please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // If name is still empty, use email
+      if (!studentName) {
+        studentName = studentEmail;
+      }
+
+      // Calculate MCQ answers in exact format
+      const mcqAnswersArray: any[] = [];
+      let mcqScore = 0;
+      let mcqMaxScore = 0;
+      let mcqCorrect = 0;
+      let mcqIncorrect = 0;
+      let mcqUnattempted = 0;
+
+      mcqQuestions.forEach((question) => {
+        mcqMaxScore += question.points || 1;
+        const selectedIndex = mcqAnswers[question.questionId];
+
+        // Get selected option IDs as array of strings
+        let selected: string[] = [];
+        if (selectedIndex !== undefined) {
+          const optionId = String.fromCharCode(65 + selectedIndex); // A, B, C, D
+          selected = [optionId];
+        }
+
+        // Check if correct
+        let isCorrect = false;
+        if (selectedIndex !== undefined) {
+          const selectedOptionId = String.fromCharCode(65 + selectedIndex);
+          if (Array.isArray(question.correctAnswer)) {
+            isCorrect = question.correctAnswer.includes(selectedOptionId);
+          } else if (typeof question.correctAnswer === 'string') {
+            isCorrect = question.correctAnswer === selectedOptionId;
+          }
+
+          if (isCorrect) {
+            mcqScore += question.points || 1;
+            mcqCorrect++;
+          } else {
+            mcqIncorrect++;
+          }
+        } else {
+          mcqUnattempted++;
+        }
+
+        mcqAnswersArray.push({
+          questionId: question.questionId,
+          selected: selected,
+          isCorrect: isCorrect
+        });
+      });
+
+      // Calculate coding answers (simplified - assume all coding questions are attempted if code exists)
+      const codingAnswersArray: any[] = [];
+      let codingScore = 0;
+      let codingMaxScore = 0;
+      let codingCorrect = 0;
+      let codingIncorrect = 0;
+      let codingUnattempted = 0;
+
+      codingChallenges.forEach((challenge) => {
+        codingMaxScore += challenge.points || 1;
+        const challengeCode = code[challenge.questionId]?.[selectedLanguage] || '';
+        const hasCode = challengeCode.trim().length > 0;
+        const isSuccessful = successfulExecutions[challenge.questionId] || false;
+
+        if (hasCode) {
+          if (isSuccessful) {
+            codingScore += challenge.points || 1;
+            codingCorrect++;
+          } else {
+            codingIncorrect++;
+          }
+        } else {
+          codingUnattempted++;
+        }
+
+        codingAnswersArray.push({
+          questionId: challenge.questionId,
+          selected: hasCode ? [challengeCode] : [],
+          isCorrect: isSuccessful
+        });
+      });
+
+      // Combine all answers
+      const allAnswers = [...mcqAnswersArray, ...codingAnswersArray];
+
+      // Calculate totals
+      const totalScore = mcqScore + codingScore;
+      const totalMaxScore = mcqMaxScore + codingMaxScore;
+      const totalQuestions = mcqQuestions.length + codingChallenges.length;
+      const numCorrect = mcqCorrect + codingCorrect;
+      const numIncorrect = mcqIncorrect + codingIncorrect;
+      const numUnattempted = mcqUnattempted + codingUnattempted;
+      const accuracy = totalQuestions > 0 ? Math.round((numCorrect / totalQuestions) * 100) : 0;
+      const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+      const durationSeconds = (assessmentData?.configuration?.duration || 60) * 60;
+      const timeSpentSeconds = Math.max(0, durationSeconds - timeLeft);
+
+      // Prepare result data in EXACT schema
+      // Get department from assessment first (the department chosen when creating the assessment)
+      // Then fallback to user's department, then departmentCode, then 'Unknown'
+      const department = assessmentData?.department ||
+        assessmentData?.departmentCode ||
+        user?.department ||
+        'Unknown';
+
+      const resultData = {
+        assessmentId: assessmentId || assessmentData?.assessmentId || '',
+        email: studentEmail,
+        Name: studentName,
+        department: department,
+        answers: allAnswers,
+        score: totalScore,
+        maxScore: totalMaxScore,
+        percentage: percentage,
+        accuracy: accuracy,
+        numCorrect: numCorrect,
+        numIncorrect: numIncorrect,
+        numUnattempted: numUnattempted,
+        entity_marks: {
+          MCQ: mcqScore,
+          CODING: codingScore
+        },
+        timeSpentSeconds: timeSpentSeconds,
+        submittedAt: new Date().toISOString()
+      };
+
+      // Validate required fields
+      if (!resultData.assessmentId) {
+        alert('Assessment ID is missing. Cannot submit.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Store MCQ results for UI feedback
+      setMcqResults(mcqAnswersArray.reduce((acc, ans) => {
+        acc[ans.questionId] = ans;
+        return acc;
+      }, {} as any));
+      setSubmitted(true);
+
+      console.log('Submitting assessment result...', resultData);
+
+      // Save result to database
+      const saveResponse = await ResultsService.saveAssessmentResult(resultData);
+      console.log('Save response:', saveResponse);
+
+      // Get the SK (attemptId) from the response
+      const attemptId = saveResponse?.data?.SK || saveResponse?.SK;
+      console.log('Attempt ID (SK):', attemptId);
+
+      console.log('Assessment result saved successfully, navigating to success page...');
+
+      // Navigate to submission success page with attemptId
+      navigate('/student/assessment-submitted', {
+        state: {
+          assessmentId: resultData.assessmentId,
+          attemptId: attemptId // Pass SK so we can navigate directly to detail page
+        }
+      });
+
+      setIsAssessmentCompleted(true);
+
+      // Clear persisted timer for this assessment now that it is completed
+      try {
+        if (assessmentData?.assessmentId) {
+          const storageKey = `assessment_timer_${assessmentData.assessmentId}`;
+          localStorage.removeItem(storageKey);
+        }
+      } catch (e) {
+        console.error('Error clearing persisted timer after submission:', e);
+      }
+      // Notify parent component that assessment is completed
+      if (window.parent) {
+        window.parent.postMessage({ type: 'ASSESSMENT_COMPLETED' }, '*');
+      }
+    } catch (error: any) {
+      console.error('Error saving assessment result:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url
+      });
+
+      setIsSubmitting(false);
+      setSubmitted(false);
+
+      // Provide more specific error messages
+      let errorMessage = 'Assessment completed but there was an error saving your results.';
+
+      if (error.response) {
+        // Server responded with error
+        const serverMessage = error.response.data?.message || error.response.data?.error || 'Unknown server error';
+        errorMessage = `Error: ${serverMessage}`;
+
+        if (error.response.status === 401) {
+          errorMessage = 'Your session has expired. Please log in again to save your results.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'API endpoint not found. Please check if backend server is running.';
+        } else if (error.response.status === 500) {
+          errorMessage = `Server error: ${serverMessage}. Please check backend logs.`;
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'Cannot connect to server. Please check:\n1. Backend server is running on port 3000\n2. Your internet connection\n3. Check browser console for details';
+      } else if (error.message?.includes('Network Error') || error.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error. Please check:\n1. Backend server is running\n2. CORS is configured correctly\n3. Check browser console for details';
+      } else {
+        errorMessage = `Error: ${error.message || 'Unknown error occurred'}`;
+      }
+
+      console.error('Final error message:', errorMessage);
+      alert(errorMessage);
+    }
+  }, [assessmentData, assessmentId, code, codingChallenges, isSubmitting, mcqAnswers, navigate, selectedLanguage, submitted, successfulExecutions, timeLeft, user]);
 
   // Get current challenge safely
   const currentChallenge = codingChallenges[currentCodingIndex];
@@ -518,7 +809,7 @@ console.log("In a browser environment, this would render as HTML");
     } finally {
       setIsLoading(false);
     }
-  }, [codingChallenges, currentCodingIndex, selectedLanguage]);
+  }, [currentCodingIndex, selectedLanguage]);
 
   // Fetch assessment data when component mounts or assessmentId changes
   useEffect(() => {
@@ -552,24 +843,60 @@ console.log("In a browser environment, this would render as HTML");
             throw new Error('Invalid assessment data received from server');
           }
 
-          // Set assessment data
-          setAssessmentData(response.data);
+          // Handle nested assessment data structure from the service
+          const assessmentSource = response.data.assessment || response.data;
+          
+          // Set assessment data - ensure proper structure
+          const assessmentDataFormatted = {
+            ...response.data,
+            // Ensure we have the right structure for assessment data
+            assessmentId: assessmentSource.assessmentId || response.data.assessmentId || response.data.id || assessmentId,
+            title: assessmentSource.title || response.data.title || response.data.name || 'Untitled Assessment',
+            configuration: assessmentSource.configuration || response.data.configuration || {
+              duration: assessmentSource.configuration?.duration || response.data.configuration?.duration || assessmentSource.duration || response.data.duration || 60,
+              maxAttempts: assessmentSource.configuration?.maxAttempts || response.data.configuration?.maxAttempts || assessmentSource.maxAttempts || response.data.maxAttempts || 1,
+              passingScore: assessmentSource.configuration?.passingScore || response.data.configuration?.passingScore || assessmentSource.passingScore || response.data.passingScore || 50,
+              randomizeQuestions: assessmentSource.configuration?.randomizeQuestions || response.data.configuration?.randomizeQuestions || assessmentSource.randomizeQuestions || response.data.randomizeQuestions || false,
+              totalQuestions: assessmentSource.configuration?.totalQuestions || response.data.configuration?.totalQuestions || assessmentSource.totalQuestions || response.data.totalQuestions || (assessmentSource.questions || response.data.questions ? (assessmentSource.questions || response.data.questions).length : 0)
+            },
+            scheduling: assessmentSource.scheduling || response.data.scheduling || {
+              startDate: assessmentSource.scheduling?.startDate || response.data.scheduling?.startDate || assessmentSource.startDate || response.data.startDate || new Date().toISOString(),
+              endDate: assessmentSource.scheduling?.endDate || response.data.scheduling?.endDate || assessmentSource.endDate || response.data.endDate || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+              timezone: assessmentSource.scheduling?.timezone || response.data.scheduling?.timezone || assessmentSource.timezone || response.data.timezone || 'Asia/Kolkata'
+            },
+            questions: assessmentSource.questions || response.data.questions || []
+          };
+          
+          // Log timezone information for debugging
+          const startDate = new Date(assessmentDataFormatted.scheduling?.startDate);
+          const endDate = new Date(assessmentDataFormatted.scheduling?.endDate);
+          console.log('Assessment timezone info:', {
+            timezone: assessmentDataFormatted.scheduling?.timezone,
+            startDate: assessmentDataFormatted.scheduling?.startDate,
+            endDate: assessmentDataFormatted.scheduling?.endDate,
+            startDateParsed: startDate.toISOString(),
+            endDateParsed: endDate.toISOString(),
+            startDateIndia: convertToIndiaTime(startDate).toLocaleString('en-US'),
+            endDateIndia: convertToIndiaTime(endDate).toLocaleString('en-US')
+          });
+          
+          console.log('Raw response data:', response.data);
+          console.log('Formatted assessment data:', assessmentDataFormatted);
+          console.log('Configuration duration:', assessmentDataFormatted.configuration?.duration);
+          console.log('Calculated duration seconds:', (assessmentDataFormatted.configuration?.duration || 60) * 60);
+          
+          setAssessmentData(assessmentDataFormatted);
           
           // Set initial time from assessment configuration
-          if (response.data.configuration?.duration) {
-            setTimeLeft(response.data.configuration.duration * 60); // Convert minutes to seconds
+          if (assessmentDataFormatted.configuration?.duration !== undefined && assessmentDataFormatted.configuration?.duration !== null) {
+            const durationMinutes = assessmentDataFormatted.configuration.duration;
+            const durationSeconds = durationMinutes * 60;
+            console.log('Setting timeLeft from configuration duration:', durationMinutes, 'minutes =', durationSeconds, 'seconds');
+            setTimeLeft(durationSeconds); // Convert minutes to seconds
           } else {
+            console.log('Setting default timeLeft: 3600 seconds (60 minutes)');
             setTimeLeft(3600); // Default to 60 minutes
-          }
-          
-          // Set initial language
-          if (response.data.codingChallenges && response.data.codingChallenges.length > 0) {
-            const firstChallenge = response.data.codingChallenges[0];
-            if (firstChallenge.preferredLanguage) {
-              setSelectedLanguage(firstChallenge.preferredLanguage);
-            }
-          }
-          
+          }          
           setLoading(false);
         } else {
           throw new Error(response.message || 'Failed to fetch assessment data');
@@ -583,7 +910,6 @@ console.log("In a browser environment, this would render as HTML");
 
     fetchData();
   }, [assessmentId, navigate]);
-
   // Set the active tab based on available questions
   useEffect(() => {
     if (assessmentData) {
@@ -660,33 +986,292 @@ console.log("In a browser environment, this would render as HTML");
     }
   }, [code, currentCodingIndex, selectedLanguage, codingChallenges]);
 
-  // Timer effect
+  // Timer effect - handle the actual timer countdown
   useEffect(() => {
+    console.log('Timer effect triggered', {
+      assessmentData: !!assessmentData,
+      isAssessmentStarted,
+      isAssessmentEnded,
+      timeLeft,
+      serverTime: serverTime?.toISOString()
+    });
+    
+    // Only start timer if we have assessment data, assessment has started and hasn't ended
+    if (!assessmentData || !isAssessmentStarted || isAssessmentEnded || submitted) {
+      console.log('Not starting timer - no assessment data, not started, already ended, or already submitted');
+      if (timerRef.current) {
+        console.log('Clearing existing timer');
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    // Don't start timer if timeLeft is 0 or negative, or if assessment hasn't started
+    if (timeLeft <= 0 || !isAssessmentStarted) {
+      console.log('Not starting timer - timeLeft is 0 or negative, or assessment has not started');
+      // Clear any existing timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    console.log('Starting timer interval with timeLeft:', timeLeft);
+    
+    // Clear any existing timer
+    if (timerRef.current) {
+      console.log('Clearing existing timer interval');
+      clearInterval(timerRef.current);
+    }
+    
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
+        // Persist timer state to localStorage
+        if (assessmentData?.assessmentId) {
+          try {
+            const storageKey = `assessment_timer_${assessmentData.assessmentId}`;
+            const timerData = {
+              timeLeft: prev - 1,
+              timestamp: Date.now()
+            };
+            localStorage.setItem(storageKey, JSON.stringify(timerData));
+          } catch (e) {
+            console.error('Error persisting timer to localStorage:', e);
+          }
+        }
+        
         if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
-          // Auto-submit when time is up
-          handleSubmit();
+          console.log('Timer reached zero');
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          // Auto-submit if the assessment is actually started and being taken,
+          // or if the assessment has ended but was never marked as started (edge case)
+          if ((isAssessmentStarted && !isAssessmentEnded && !submitted) || (!isAssessmentStarted && !submitted)) {
+            console.log('Auto-submitting assessment because time is up');
+            handleSubmit();
+          } else {
+            console.log('Not auto-submitting - assessment already submitted');
+          }
           return 0;
         }
+        console.log('Timer tick, new timeLeft:', prev - 1);
         return prev - 1;
       });
     }, 1000);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        console.log('Clearing timer interval on cleanup');
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       if (autoRunTimeoutRef.current) {
         clearTimeout(autoRunTimeoutRef.current);
       }
     };
+  }, [assessmentData, isAssessmentStarted, isAssessmentEnded, submitted, timeLeft, handleSubmit]);  // Add useEffect to periodically sync with server time
+  useEffect(() => {
+    const syncTime = async () => {
+      try {
+        // In a real implementation, you would call an API endpoint to get server time
+        // For now, we'll use client time but in production you should sync with server
+        setServerTime(new Date());
+      } catch (error) {
+        console.warn('Could not sync with server time, using client time');
+        setServerTime(new Date());
+      }
+    };
+
+    // Sync immediately
+    syncTime();
+
+    // Sync every 5 minutes
+    const interval = setInterval(syncTime, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
+  // Add useEffect to show submit button after 20 minutes
+  useEffect(() => {
+    if (!assessmentData || loading) return;
+    
+    // Calculate 20 minutes in seconds
+    const twentyMinutesInSeconds = 20 * 60;
+    
+    // Get assessment duration in seconds
+    const assessmentDuration = (assessmentData.configuration?.duration || 60) * 60;
+    
+    console.log('Submit button logic:', { assessmentDuration, twentyMinutesInSeconds });
+    
+    // Always show submit button after 20 minutes regardless of assessment duration
+    // This ensures consistent behavior across all assessments
+    const timer = setTimeout(() => {
+      console.log('Showing submit button after 20 minutes');
+      setShowSubmitButton(true);
+    }, twentyMinutesInSeconds * 1000);
+    
+    return () => clearTimeout(timer);
+  }, [assessmentData, loading]);
+
+  // Add useEffect to handle assessment timing logic
+  useEffect(() => {
+    if (!assessmentData || loading) return;
+    
+    // Check for persisted timer state
+    let persistedTimeLeft = null;
+    let persistedTimestamp = null;
+    if (assessmentData.assessmentId) {
+      try {
+        const storageKey = `assessment_timer_${assessmentData.assessmentId}`;
+        const storedTimer = localStorage.getItem(storageKey);
+        if (storedTimer) {
+          const timerData = JSON.parse(storedTimer);
+          // Check if the stored timer is still valid (not older than 1 hour)
+          if (Date.now() - timerData.timestamp < 60 * 60 * 1000) {
+            persistedTimeLeft = timerData.timeLeft;
+            persistedTimestamp = timerData.timestamp;
+            console.log('Loaded persisted timer state:', persistedTimeLeft);
+          } else {
+            // Clear expired timer
+            localStorage.removeItem(storageKey);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading persisted timer state:', e);
+      }
+    }    
+    const now = serverTime || new Date();    
+    // Handle scheduling if present
+    if (assessmentData.scheduling) {
+      // Parse dates - they're already in ISO format with timezone info
+      let startDate = new Date(assessmentData.scheduling.startDate);
+      let endDate = new Date(assessmentData.scheduling.endDate);
+      
+      console.log('Assessment timing check:', {
+        now: now.toISOString(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        nowLocale: convertToIndiaTime(now).toLocaleString('en-US'),
+        startLocale: convertToIndiaTime(startDate).toLocaleString('en-US'),
+        endLocale: convertToIndiaTime(endDate).toLocaleString('en-US'),
+        hasStarted: now >= startDate,
+        hasEnded: now >= endDate
+      });
+      
+      // If assessment hasn't started yet (with 1 second tolerance)
+      if (now < new Date(startDate.getTime() - 1000)) {
+        console.log('Assessment has not started yet');
+        if (isAssessmentStarted) {
+          setIsAssessmentStarted(false);
+        }
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+        setTimeLeft(0);
+        return;
+      }
+      
+      // If assessment has ended
+      if (now >= endDate) {
+        console.log('Assessment has ended');
+        if (!isAssessmentEnded) {
+          setIsAssessmentEnded(true);
+          setTimeLeft(0);
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          // Auto-submit if the assessment was started and not yet submitted, 
+          // or if the assessment has ended but was never marked as started (edge case)
+          if ((isAssessmentStarted && !submitted) || (!isAssessmentStarted && !submitted)) {
+            console.log('Auto-submitting assessment because time has ended');
+            handleSubmit();
+          } else {
+            console.log('Not auto-submitting - assessment already submitted');
+          }
+        }
+        return;
+      }
+      
+      // Assessment should be active now (with 1 second tolerance)
+      if (!isAssessmentStarted && now >= new Date(startDate.getTime() - 1000)) {
+        console.log('Starting assessment now');
+        setIsAssessmentStarted(true);
+        
+        // If we have a persisted timer state, use it adjusted for elapsed time
+        if (persistedTimeLeft !== null && persistedTimestamp !== null) {
+          // Calculate elapsed time since timer was persisted
+          const elapsedTime = Math.floor((Date.now() - persistedTimestamp) / 1000);
+          // Adjust the persisted time left by elapsed time, but don't go below 0
+          const adjustedTimeLeft = Math.max(0, persistedTimeLeft - elapsedTime);
+          console.log('Resuming timer from persisted state:', {
+            persistedTimeLeft,
+            elapsedTime,
+            adjustedTimeLeft
+          });
+          setTimeLeft(adjustedTimeLeft);
+        } else {
+          // Set timer based on configuration duration
+          if (assessmentData.configuration?.duration !== undefined && assessmentData.configuration?.duration !== null) {
+            const durationMinutes = assessmentData.configuration.duration;
+            const durationSeconds = durationMinutes * 60;
+            console.log('Setting timer to configured duration:', durationMinutes, 'minutes =', durationSeconds, 'seconds');
+            setTimeLeft(durationSeconds);
+          } else {
+            // Calculate remaining time based on end time
+            const timeUntilEnd = Math.floor((endDate.getTime() - now.getTime()) / 1000);
+            console.log('Setting timer based on end time:', timeUntilEnd);
+            setTimeLeft(Math.min(timeUntilEnd, 3600)); // Cap at 60 minutes
+          }
+        }
+      }
+    } else {
+      // No scheduling, just use configuration duration
+      if (!isAssessmentStarted) {
+        setIsAssessmentStarted(true);
+        // If we have a persisted timer state, use it adjusted for elapsed time
+        if (persistedTimeLeft !== null && persistedTimestamp !== null) {
+          // Calculate elapsed time since timer was persisted
+          const elapsedTime = Math.floor((Date.now() - persistedTimestamp) / 1000);
+          // Adjust the persisted time left by elapsed time, but don't go below 0
+          const adjustedTimeLeft = Math.max(0, persistedTimeLeft - elapsedTime);
+          console.log('Resuming timer from persisted state (no scheduling):', {
+            persistedTimeLeft,
+            elapsedTime,
+            adjustedTimeLeft
+          });
+          setTimeLeft(adjustedTimeLeft);
+        } else {
+          if (assessmentData.configuration?.duration !== undefined && assessmentData.configuration?.duration !== null) {
+            const durationMinutes = assessmentData.configuration.duration;
+            const durationSeconds = durationMinutes * 60;
+            console.log('Setting timer to configured duration (no scheduling):', durationMinutes, 'minutes =', durationSeconds, 'seconds');
+            setTimeLeft(durationSeconds);
+          } else {
+            console.log('Setting default timer (no scheduling): 3600 seconds');
+            setTimeLeft(3600); // Default to 60 minutes
+          }
+        }
+      }
+    }
+  }, [assessmentData, loading, isAssessmentStarted, isAssessmentEnded, serverTime]);  // Helper function to convert UTC date to Asia/Kolkata time
+  const convertToIndiaTime = (date: Date): Date => {
+    // India Standard Time is UTC+5:30
+    return new Date(date.getTime() + (date.getTimezoneOffset() * 60000) + (5.5 * 3600000));
+  };
+  
   // Format time for display
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    const formattedTime = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    console.log('Formatting time:', { seconds, mins, secs, formattedTime });
+    return formattedTime;
   };
 
   // Handle fullscreen toggle
@@ -850,271 +1435,7 @@ console.log("In a browser environment, this would render as HTML");
     return { score, maxScore, answers };
   };
 
-  // Handle submit
-  const handleSubmit = async () => {
-    // Prevent double submission
-    if (isSubmitting || submitted) {
-      return;
-    }
 
-    try {
-      setIsSubmitting(true);
-
-      // Get user info from context or token
-      let studentEmail = user?.email || '';
-      let studentName = user?.name || '';
-
-      // If not in context, try to get from token
-      if (!studentEmail) {
-        try {
-          const token = AuthService.getAccessToken();
-          if (token) {
-            const userProfile = await AuthService.getUserProfile(token);
-            studentEmail = userProfile.email || '';
-            studentName = userProfile.name || '';
-          }
-        } catch (err) {
-          console.error('Error getting user from token:', err);
-        }
-      }
-
-      // Final fallback - decode JWT token to get email
-      if (!studentEmail) {
-        try {
-          const token = AuthService.getAccessToken();
-          if (token) {
-            // Decode JWT token (simple base64 decode, no verification needed for email extraction)
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            studentEmail = payload.email || payload['cognito:username'] || payload.username || payload.sub || '';
-            studentName = payload.name || payload['cognito:name'] || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || studentEmail;
-          }
-        } catch (err) {
-          console.error('Error decoding token:', err);
-        }
-      }
-
-      if (!studentEmail) {
-        alert('User email not found. Please log in again.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // If name is still empty, use email
-      if (!studentName) {
-        studentName = studentEmail;
-      }
-
-      // Calculate MCQ answers in exact format
-      const mcqAnswersArray: any[] = [];
-      let mcqScore = 0;
-      let mcqMaxScore = 0;
-      let mcqCorrect = 0;
-      let mcqIncorrect = 0;
-      let mcqUnattempted = 0;
-
-      mcqQuestions.forEach((question) => {
-        mcqMaxScore += question.points || 1;
-        const selectedIndex = mcqAnswers[question.questionId];
-
-        // Get selected option IDs as array of strings
-        let selected: string[] = [];
-        if (selectedIndex !== undefined) {
-          const optionId = String.fromCharCode(65 + selectedIndex); // A, B, C, D
-          selected = [optionId];
-        }
-
-        // Check if correct
-        let isCorrect = false;
-        if (selectedIndex !== undefined) {
-          const selectedOptionId = String.fromCharCode(65 + selectedIndex);
-          if (Array.isArray(question.correctAnswer)) {
-            isCorrect = question.correctAnswer.includes(selectedOptionId);
-          } else if (typeof question.correctAnswer === 'string') {
-            isCorrect = question.correctAnswer === selectedOptionId;
-          }
-
-          if (isCorrect) {
-            mcqScore += question.points || 1;
-            mcqCorrect++;
-          } else {
-            mcqIncorrect++;
-          }
-        } else {
-          mcqUnattempted++;
-        }
-
-        mcqAnswersArray.push({
-          questionId: question.questionId,
-          selected: selected,
-          isCorrect: isCorrect
-        });
-      });
-
-      // Calculate coding answers (simplified - assume all coding questions are attempted if code exists)
-      const codingAnswersArray: any[] = [];
-      let codingScore = 0;
-      let codingMaxScore = 0;
-      let codingCorrect = 0;
-      let codingIncorrect = 0;
-      let codingUnattempted = 0;
-
-      codingChallenges.forEach((challenge) => {
-        codingMaxScore += challenge.points || 1;
-        const challengeCode = code[challenge.questionId]?.[selectedLanguage] || '';
-        const hasCode = challengeCode.trim().length > 0;
-        const isSuccessful = successfulExecutions[challenge.questionId] || false;
-
-        if (hasCode) {
-          if (isSuccessful) {
-            codingScore += challenge.points || 1;
-            codingCorrect++;
-          } else {
-            codingIncorrect++;
-          }
-        } else {
-          codingUnattempted++;
-        }
-
-        codingAnswersArray.push({
-          questionId: challenge.questionId,
-          selected: hasCode ? [challengeCode] : [],
-          isCorrect: isSuccessful
-        });
-      });
-
-      // Combine all answers
-      const allAnswers = [...mcqAnswersArray, ...codingAnswersArray];
-
-      // Calculate totals
-      const totalScore = mcqScore + codingScore;
-      const totalMaxScore = mcqMaxScore + codingMaxScore;
-      const totalQuestions = mcqQuestions.length + codingChallenges.length;
-      const numCorrect = mcqCorrect + codingCorrect;
-      const numIncorrect = mcqIncorrect + codingIncorrect;
-      const numUnattempted = mcqUnattempted + codingUnattempted;
-      const accuracy = totalQuestions > 0 ? Math.round((numCorrect / totalQuestions) * 100) : 0;
-      const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
-      const durationSeconds = (assessmentData?.configuration?.duration || 60) * 60;
-      const timeSpentSeconds = Math.max(0, durationSeconds - timeLeft);
-
-      // Prepare result data in EXACT schema
-      // Get department from assessment first (the department chosen when creating the assessment)
-      // Then fallback to user's department, then departmentCode, then 'Unknown'
-      const department = assessmentData?.department ||
-        assessmentData?.departmentCode ||
-        user?.department ||
-        'Unknown';
-
-      const resultData = {
-        assessmentId: assessmentId || assessmentData?.assessmentId || '',
-        email: studentEmail,
-        Name: studentName,
-        department: department,
-        answers: allAnswers,
-        score: totalScore,
-        maxScore: totalMaxScore,
-        percentage: percentage,
-        accuracy: accuracy,
-        numCorrect: numCorrect,
-        numIncorrect: numIncorrect,
-        numUnattempted: numUnattempted,
-        entity_marks: {
-          MCQ: mcqScore,
-          CODING: codingScore
-        },
-        timeSpentSeconds: timeSpentSeconds,
-        submittedAt: new Date().toISOString()
-      };
-
-      // Validate required fields
-      if (!resultData.assessmentId) {
-        alert('Assessment ID is missing. Cannot submit.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Store MCQ results for UI feedback
-      setMcqResults(mcqAnswersArray.reduce((acc, ans) => {
-        acc[ans.questionId] = ans;
-        return acc;
-      }, {} as any));
-      setSubmitted(true);
-
-      console.log('Submitting assessment result...', resultData);
-
-      // Save result to database
-      const saveResponse = await ResultsService.saveAssessmentResult(resultData);
-      console.log('Save response:', saveResponse);
-
-      // Get the SK (attemptId) from the response
-      const attemptId = saveResponse?.data?.SK || saveResponse?.SK;
-      console.log('Attempt ID (SK):', attemptId);
-
-      console.log('Assessment result saved successfully, navigating to success page...');
-
-      // Navigate to submission success page with attemptId
-      navigate('/student/assessment-submitted', {
-        state: {
-          assessmentId: resultData.assessmentId,
-          attemptId: attemptId // Pass SK so we can navigate directly to detail page
-        }
-      });
-
-      setIsAssessmentCompleted(true);
-
-      // Clear persisted timer for this assessment now that it is completed
-      try {
-        if (assessmentData?.assessmentId) {
-          const storageKey = `assessment_timer_${assessmentData.assessmentId}`;
-          localStorage.removeItem(storageKey);
-        }
-      } catch (e) {
-        console.error('Error clearing persisted timer after submission:', e);
-      }
-      // Notify parent component that assessment is completed
-      if (window.parent) {
-        window.parent.postMessage({ type: 'ASSESSMENT_COMPLETED' }, '*');
-      }
-    } catch (error: any) {
-      console.error('Error saving assessment result:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        url: error.config?.url
-      });
-
-      setIsSubmitting(false);
-      setSubmitted(false);
-
-      // Provide more specific error messages
-      let errorMessage = 'Assessment completed but there was an error saving your results.';
-
-      if (error.response) {
-        // Server responded with error
-        const serverMessage = error.response.data?.message || error.response.data?.error || 'Unknown server error';
-        errorMessage = `Error: ${serverMessage}`;
-
-        if (error.response.status === 401) {
-          errorMessage = 'Your session has expired. Please log in again to save your results.';
-        } else if (error.response.status === 404) {
-          errorMessage = 'API endpoint not found. Please check if backend server is running.';
-        } else if (error.response.status === 500) {
-          errorMessage = `Server error: ${serverMessage}. Please check backend logs.`;
-        }
-      } else if (error.request) {
-        // Request was made but no response received
-        errorMessage = 'Cannot connect to server. Please check:\n1. Backend server is running on port 3000\n2. Your internet connection\n3. Check browser console for details';
-      } else if (error.message?.includes('Network Error') || error.code === 'ERR_NETWORK') {
-        errorMessage = 'Network error. Please check:\n1. Backend server is running\n2. CORS is configured correctly\n3. Check browser console for details';
-      } else {
-        errorMessage = `Error: ${error.message || 'Unknown error occurred'}`;
-      }
-
-      console.error('Final error message:', errorMessage);
-      alert(errorMessage);
-    }
-  };
 
   // Render loading state
   if (loading) {
@@ -1158,6 +1479,63 @@ console.log("In a browser environment, this would render as HTML");
     );
   }
 
+  // Check if assessment has started
+  if (assessmentData.scheduling) {
+    const now = serverTime || new Date();
+    // Parse dates - they're already in ISO format with timezone info
+    let startDate = new Date(assessmentData.scheduling.startDate);
+    let endDate = new Date(assessmentData.scheduling.endDate);
+    
+    console.log('Timezone-aware date comparison:', {
+      now: now.toISOString(),
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      nowLocale: convertToIndiaTime(now).toLocaleString('en-US'),
+      startLocale: convertToIndiaTime(startDate).toLocaleString('en-US'),
+      endLocale: convertToIndiaTime(endDate).toLocaleString('en-US')
+    });
+    
+    // If assessment hasn't started yet (with 1 second tolerance)
+    if (now < new Date(startDate.getTime() - 1000)) {
+      const timeUntilStart = Math.floor((startDate.getTime() - now.getTime()) / 1000);
+      const hours = Math.floor(timeUntilStart / 3600);
+      const minutes = Math.floor((timeUntilStart % 3600) / 60);
+      const seconds = timeUntilStart % 60;
+      
+      return (
+        <div className="assessment-taking-container">
+          <div className="info-container">
+            <h2>Assessment Not Started</h2>
+            <p>This assessment will start on {convertToIndiaTime(startDate).toLocaleString('en-US')}.</p>
+            <p>Time until start: {hours.toString().padStart(2, '0')}:{minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}</p>
+          </div>
+        </div>
+      );
+    }
+    
+    // If assessment has ended
+    if (now >= endDate) {
+      // Auto-submit if the assessment was started and not yet submitted, 
+      // or if the assessment has ended but was never marked as started (edge case)
+      if ((isAssessmentStarted && !submitted) || (!isAssessmentStarted && !submitted)) {
+        console.log('Auto-submitting assessment in render section because time has ended');
+        handleSubmit();
+      } else {
+        console.log('Not auto-submitting in render section - assessment already submitted');
+      }
+      
+      return (
+        <div className="assessment-taking-container">
+          <div className="info-container">
+            <h2>Assessment Ended</h2>
+            <p>This assessment ended on {convertToIndiaTime(endDate).toLocaleString('en-US')}.</p>
+            <p>You can no longer take this assessment.</p>
+          </div>
+        </div>
+      );
+    }
+  }
+
   // Render if no questions
   if (assessmentData && (!assessmentData.questions || assessmentData.questions.length === 0)) {
     return (
@@ -1178,7 +1556,7 @@ console.log("In a browser environment, this would render as HTML");
 
   return (
     <div className={`assessment-taking ${isFullscreen ? 'fullscreen' : ''}`}>
-      {/* Header with timer and navigation buttons */}
+      {/* Header with timer, navigation buttons, and coding controls */}
       <div className="assessment-header">
         <div className="timer-section">
           <span className={`timer ${timeLeft < 300 ? 'warning' : ''}`}>
@@ -1202,6 +1580,39 @@ console.log("In a browser environment, this would render as HTML");
           >
             Coding
           </button>
+
+          {/* Language selector and Run button for coding challenges */}
+          {activeTab === 'coding' && (
+            <>
+              <select
+                className="language-selector"
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+              >
+                {languages.map(lang => (
+                  <option key={lang.id} value={lang.id}>{lang.name}</option>
+                ))}
+              </select>
+              <button
+                className="control-btn run-btn"
+                onClick={() => runCode('test')}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Running...' : 'Run Code'}
+              </button>
+            </>
+          )}
+
+          {/* Submit button - visible after 20 minutes */}
+          {showSubmitButton && (
+            <button
+              className="submit-btn small"
+              onClick={handleSubmit}
+              disabled={isSubmitting || submitted}
+            >
+              {isSubmitting ? 'Submitting...' : 'Submit'}
+            </button>
+          )}
 
           <button
             className="fullscreen-btn"
@@ -1308,16 +1719,7 @@ console.log("In a browser environment, this would render as HTML");
               {isSubmitting ? 'Submitting...' : (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0 ? 'Submit' : 'Save and Next')}
             </button>
 
-            {/* Submit button on right side corner - only show if no coding questions */}
-            {codingChallenges.length === 0 && (
-              <button
-                className="submit-btn small right-corner"
-                onClick={handleSubmit}
-                disabled={isSubmitting || submitted}
-              >
-                {isSubmitting ? 'Submitting...' : 'Submit'}
-              </button>
-            )}
+
           </div>
         ) : (
           <div className="coding-section">
@@ -1460,24 +1862,6 @@ console.log("In a browser environment, this would render as HTML");
                 <div className="editor-section">
                   <div className="editor-header">
                     <div>Code Editor</div>
-                    <div className="editor-controls">
-                      <select
-                        className="language-selector"
-                        value={selectedLanguage}
-                        onChange={(e) => setSelectedLanguage(e.target.value)}
-                      >
-                        {languages.map(lang => (
-                          <option key={lang.id} value={lang.id}>{lang.name}</option>
-                        ))}
-                      </select>
-                      <button
-                        className="control-btn run-btn"
-                        onClick={() => runCode('test')}
-                        disabled={isLoading || !code || !code[codingChallenges[currentCodingIndex]?.questionId] || !code[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage] || code[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage].trim() === ''}
-                      >
-                        {isLoading ? 'Running...' : 'Run Code'}
-                      </button>
-                    </div>
                   </div>
                   <textarea
                     ref={codeEditorRef}
@@ -1562,14 +1946,18 @@ int main() {
                 >
                   Previous Challenge
                 </button>
-                {/* Small submit button that is always visible but only enabled when code runs successfully */}
-                <button
-                  className="submit-btn small"
-                  onClick={handleSubmit}
-                  disabled={!successfulExecutions[codingChallenges[currentCodingIndex]?.questionId]}
-                >
-                  Submit
-                </button>
+
+                {/* Small submit button that is visible after 20 minutes */}
+                {showSubmitButton && (
+                  <button
+                    className="submit-btn small"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting || submitted}
+                  >
+                    Submit
+                  </button>
+                )}
+
                 <button
                   className="nav-btn next"
                   onClick={() => handleCodingNavigation('next')}

@@ -151,15 +151,18 @@ class StudentAssessmentService {
           return question;
         });
         
+        // Return flattened data structure expected by the frontend component
         return {
           success: true,
           data: {
-            assessment,
-            questions: processedQuestions
+            ...assessment,
+            questions: processedQuestions,
+            // Flatten the assessment object to ensure all properties are at the top level
+            ...Object.fromEntries(Object.entries(assessment).filter(([key]) => 
+              !["questions"].includes(key)))
           }
         };
-      }
-      
+      }      
       return response.data;
     } catch (error: any) {
       console.error('Error getting assessment with questions:', error);

@@ -272,7 +272,7 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
                 assessmentId: result.assessmentId,
                 title: result.assessmentId, // Will be replaced with actual title from assessment
                 status: 'completed',
-                progress: 100,
+                progress: result.percentage || 0,
                 score: result.score || 0,
                 maxScore: result.maxScore || 0,
                 percentage: result.percentage || 0,
