@@ -52,6 +52,12 @@ const StudentAssessments: React.FC = () => {
           user?.department ? { department: user.department } : undefined
         );
         console.log('Fetched assessments:', assessmentsResponse);
+        console.log('Assessment data:', assessmentsResponse.data);
+        console.log('Number of assessments:', assessmentsResponse.data?.length || 0);
+        if (assessmentsResponse.data?.length > 0) {
+          console.log('Sample assessment:', assessmentsResponse.data[0]);
+          console.log('Departments found:', [...new Set(assessmentsResponse.data.map((a: any) => a.department))]);
+        }
         
         // Fetch student's results to determine completed assessments
         // Commented out since we removed the endpoint
@@ -61,6 +67,21 @@ const StudentAssessments: React.FC = () => {
         */
         
         // Transform assessments data
+        if (!assessmentsResponse.data || !Array.isArray(assessmentsResponse.data)) {
+          console.error('Invalid response format:', assessmentsResponse);
+          setError('Invalid response from server');
+          setAllAssessments([]);
+          setFilteredAssessments([]);
+          return;
+        }
+
+        if (assessmentsResponse.data.length === 0) {
+          console.log('No assessments found in database');
+          setAllAssessments([]);
+          setFilteredAssessments([]);
+          return;
+        }
+
         const transformedAssessments = assessmentsResponse.data.map((item: any) => ({
           id: item.assessmentId || item.id,
           assessmentId: item.assessmentId || item.id,
@@ -203,7 +224,14 @@ const StudentAssessments: React.FC = () => {
       <div className="assessments-grid">
         {filteredAssessments.length === 0 ? (
           <div className="no-assessments">
-            No assessments found.
+            <p>No assessments found.</p>
+            {user?.department && (
+              <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
+                No assessments are currently available for {user.department} department.
+                <br />
+                Please check back later or contact your instructor.
+              </p>
+            )}
           </div>
         ) : (
           filteredAssessments.map((assessment) => (

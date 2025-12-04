@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle, Clock, Megaphone } from 'lucide-react';
 import { useNotifications } from '../../contexts/NotificationContext';
 import type { Notification } from '../../services/notification.service';
 
-type TabKey = 'all' | 'assessments' | 'results' | 'general';
+type TabKey = 'all' | 'assessments' | 'general';
 
 const Notifications: React.FC = () => {
   const { notifications, markAsRead, markAllAsRead, loading } = useNotifications();
@@ -43,10 +43,6 @@ const Notifications: React.FC = () => {
     if (activeTab === 'assessments') {
       return notifications.filter((n) => n.type === 'assessment_published');
     }
-    if (activeTab === 'results') {
-      return notifications.filter((n) => n.type === 'result_published');
-    }
-
     if (activeTab === 'general') {
       return notifications.filter((n) => n.type === 'announcement');
     }
@@ -116,13 +112,6 @@ const Notifications: React.FC = () => {
         >
           Assessments
         </button>
-        <button
-          className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
-          onClick={() => setActiveTab('results')}
-        >
-          Results
-        </button>
-
         <button
           className={`tab-btn ${activeTab === 'general' ? 'active' : ''}`}
           onClick={() => setActiveTab('general')}

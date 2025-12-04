@@ -83,6 +83,9 @@ class AuthService {
                 if (error.response.status === 401) {
                     throw new Error('Invalid email or password. Please check your credentials and try again.');
                 }
+                if (error.response.status === 429) {
+                    throw new Error('Too many login attempts. Please wait a few minutes before trying again. If the issue persists, contact your administrator.');
+                }
                 throw new Error(`Login failed: ${message} (${error.response.status})`);
             } else if (error.request) {
                 console.error('No response received:', error.request);

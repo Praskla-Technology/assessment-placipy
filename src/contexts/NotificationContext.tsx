@@ -25,12 +25,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const [lastNotificationId, setLastNotificationId] = useState<string | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const popupShownRef = useRef<Set<string>>(new Set());
+    const retryCountRef = useRef(0);
+    const pollingDelayRef = useRef(20000); // Start with 20 seconds
 
     // Fetch notifications
     const fetchNotifications = useCallback(async () => {
         try {
             const result = await NotificationService.getNotifications(50);
             const fetchedNotifications = result.items || [];
+            
+            // Reset retry count on successful fetch
+            retryCountRef.current = 0;
+            pollingDelayRef.current = 20000; // Reset to 20 seconds
             
             // Sort by createdAt descending (newest first)
             fetchedNotifications.sort((a, b) => {
@@ -70,6 +76,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             setUnreadCount(fetchedNotifications.filter(n => !n.isRead).length);
         } catch (error) {
             console.error('Error fetching notifications:', error);
+            // Implement exponential backoff on error
+            retryCountRef.current += 1;
+            pollingDelayRef.current = Math.min(20000 * Math.pow(2, retryCountRef.current), 300000); // Max 5 minutes
+            console.log(`Will retry in ${pollingDelayRef.current / 1000} seconds`);
         } finally {
             setLoading(false);
         }
@@ -94,12 +104,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }, []);
 
     // Mark all notifications as read
-    const markAllAsRead = useCallback(async () => {
+    const markAllAsRead = useCallback(async (): Promise<void> => {
         try {
-            const count = await NotificationService.markAllAsRead();
+            await NotificationService.markAllAsRead();
             setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
             setUnreadCount(0);
-            return count;
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
             throw error;
@@ -111,11 +120,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         fetchNotifications();
     }, []);
 
-    // Poll for new notifications every 20 seconds
+    // Poll for new notifications with dynamic delay based on errors
     useEffect(() => {
-        pollingIntervalRef.current = setInterval(() => {
-            fetchNotifications();
-        }, 20000); // 20 seconds
+        const startPolling = () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+            
+            pollingIntervalRef.current = setInterval(() => {
+                fetchNotifications();
+            }, pollingDelayRef.current);
+        };
+        
+        startPolling();
 
         return () => {
             if (pollingIntervalRef.current) {

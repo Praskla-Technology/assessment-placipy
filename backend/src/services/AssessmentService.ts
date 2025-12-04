@@ -614,10 +614,17 @@ class AssessmentService {
                 // Strict in-memory department filter (case/whitespace normalized)
                 if (filters.department) {
                     const deptNorm = String(filters.department).trim().toLowerCase();
+                    console.log('Filtering by department:', deptNorm);
+                    console.log('Items before department filter:', items.length);
+                    if (items.length > 0) {
+                        console.log('Sample departments:', items.slice(0, 3).map((i: any) => i.department));
+                    }
                     items = items.filter((item: any) => {
                         const v = (item.department ?? '').toString().trim().toLowerCase();
-                        return v === deptNorm || v === 'all' || v === 'all departments';
+                        const matches = v === deptNorm || v === 'all' || v === 'all departments';
+                        return matches;
                     });
+                    console.log('Items after department filter:', items.length);
                 }
 
                 return {
@@ -668,22 +675,32 @@ class AssessmentService {
                     scanParams.ExclusiveStartKey = lastKey;
                 }
 
+                console.log('Scanning with params:', JSON.stringify(scanParams, null, 2));
                 const scanResult = await dynamodb.scan(scanParams).promise();
                 let items = scanResult.Items || [];
+                console.log('Scan returned', items.length, 'items before filtering');
 
                 // Keep only assessment items (exclude batch items)
                 items = items.filter(item => {
                     return item.PK && item.PK.startsWith('CLIENT#') && item.SK && item.SK.startsWith('ASSESSMENT#') &&
                         !item.SK.includes('#MCQ_BATCH_') && !item.SK.includes('#CODING_BATCH_');
                 });
+                console.log('After batch exclusion:', items.length, 'items');
 
                 // Strict in-memory department filter (case/whitespace normalized)
                 if (filters.department) {
                     const deptNorm = String(filters.department).trim().toLowerCase();
+                    console.log('Filtering by department:', deptNorm);
+                    console.log('Items before department filter:', items.length);
+                    if (items.length > 0) {
+                        console.log('Sample departments:', items.slice(0, 3).map((i: any) => i.department));
+                    }
                     items = items.filter((item: any) => {
                         const v = (item.department ?? '').toString().trim().toLowerCase();
-                        return v === deptNorm || v === 'all' || v === 'all departments';
+                        const matches = v === deptNorm || v === 'all' || v === 'all departments';
+                        return matches;
                     });
+                    console.log('Items after department filter:', items.length);
                 }
 
                 return {

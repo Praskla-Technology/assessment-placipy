@@ -100,6 +100,21 @@ const login = async (req, res) => {
             });
         }
 
+        // Handle rate limiting errors from AWS Cognito
+        if (error.code === 'TooManyRequestsException' || error.name === 'TooManyRequestsException') {
+            return res.status(429).json({
+                error: 'Too Many Requests',
+                message: 'Too many login attempts. Please wait a few minutes before trying again.'
+            });
+        }
+
+        if (error.code === 'LimitExceededException' || error.name === 'LimitExceededException') {
+            return res.status(429).json({
+                error: 'Too Many Requests',
+                message: 'Rate limit exceeded. Please wait before trying again.'
+            });
+        }
+
         if (error.code === 'PasswordResetRequiredException') {
             return res.status(401).json({
                 error: 'Unauthorized',

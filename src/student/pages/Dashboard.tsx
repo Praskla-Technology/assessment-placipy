@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import DashboardHome from '../components/DashboardHome';
 import Assessments from '../components/Assessments';
+import AssessmentDetail from '../components/AssessmentDetail';
 import ResultsReports from '../components/ResultsReports';
 import Profile from '../components/Profile';
 import Notifications from '../components/Notifications';
@@ -212,6 +213,7 @@ const StudentDashboard: React.FC = () => {
           <Routes>
             <Route path="/" element={<DashboardHome />} />
             <Route path="/assessments" element={<Assessments />} />
+            <Route path="/assessments/:assessmentId" element={<AssessmentDetail />} />
             <Route path="/results" element={<ResultsReports />} />
             <Route path="/results/:attemptId" element={<ResultDetail />} />
             <Route path="/profile" element={<Profile />} />

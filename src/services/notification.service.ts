@@ -38,7 +38,8 @@ class NotificationService {
 
             const response = await axios.get(API_BASE_URL, {
                 headers: this.getAuthHeaders(),
-                params
+                params,
+                timeout: 10000
             });
 
             return {
@@ -47,10 +48,20 @@ class NotificationService {
             };
         } catch (error: any) {
             console.error('Error fetching notifications:', error);
+            
+            // Handle rate limiting gracefully - don't throw error
+            if (error.response?.status === 429) {
+                console.warn('Rate limited while fetching notifications. Will retry later.');
+                return { items: [] };
+            }
+            
             if (error.response?.status === 404) {
                 return { items: [] };
             }
-            throw new Error(error.response?.data?.message || 'Failed to fetch notifications');
+            
+            // Don't throw error to prevent breaking the app
+            console.error('Failed to fetch notifications:', error.response?.data?.message || error.message);
+            return { items: [] };
         }
     }
 
