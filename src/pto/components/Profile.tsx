@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FaUser, FaEdit, FaLock, FaBell } from 'react-icons/fa';
+import { FaUser, FaEdit, FaLock, FaBell, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { useUser } from '../../contexts/UserContext';
 import PTOService from '../../services/pto.service';
 import ProfileService from '../../services/profile.service';
@@ -51,7 +51,9 @@ const Profile: React.FC = () => {
         });
         const stored = localStorage.getItem('ptoProfilePictureUrl');
         if (stored) setProfilePicture(stored);
-      } catch {}
+      } catch {
+        setError('Failed to load profile');
+      }
     };
     load();
     const loadDepartments = async () => {
@@ -59,7 +61,7 @@ const Profile: React.FC = () => {
         const catalog = await PTOService.getDepartmentCatalog();
         const codes = Array.isArray(catalog)
           ? catalog
-              .map((d: any) => {
+              .map((d: string | { code?: string }) => {
                 if (typeof d === 'string') return d;
                 if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
                 return String(d || '').toUpperCase();
@@ -68,7 +70,9 @@ const Profile: React.FC = () => {
           : [];
         const unique = Array.from(new Set(codes));
         setDeptOptions(unique);
-      } catch {}
+      } catch {
+        setError('Failed to load departments');
+      }
     };
     loadDepartments();
   }, [user]);
@@ -78,6 +82,7 @@ const Profile: React.FC = () => {
     newPassword: '',
     confirmPassword: ''
   });
+  const [showPwd, setShowPwd] = useState({ current: false, next: false, confirm: false });
 
   const [notifications, setNotifications] = useState({
     emailNotifications: true,
@@ -151,8 +156,9 @@ const Profile: React.FC = () => {
           employeeId: String((updated.employeeId || (String(updated.SK || '').startsWith('PTO#') ? String(updated.SK || '').replace('PTO#','') : '')) || '')
         });
         setTimeout(() => setSuccess(''), 2500);
-    } catch (e: any) {
-      setError(e.message || 'Failed to update profile');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to update profile';
+      setError(msg);
     }
   };
 
@@ -172,8 +178,9 @@ const Profile: React.FC = () => {
       setShowImageSelector(false);
       setSuccess('Profile picture updated successfully');
       setTimeout(() => setSuccess(''), 2500);
-    } catch (e: any) {
-      setError(e.message || 'Failed to update profile picture');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to update profile picture';
+      setError(msg);
     }
   };
 
@@ -188,11 +195,13 @@ const Profile: React.FC = () => {
       return;
     }
     try {
+      await PTOService.updateStaffPassword(profileData.email, passwordData.newPassword);
       setSuccess('Password updated successfully');
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setTimeout(() => setSuccess(''), 2500);
-    } catch (err: any) {
-      setError(err.message || 'Failed to change password');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to change password';
+      setError(msg);
     }
   };
 
@@ -381,40 +390,70 @@ const Profile: React.FC = () => {
             <div className="password-tab">
               <h3>Change Password</h3>
               <form className="password-form" onSubmit={handleChangePassword}>
-                <div className="form-group">
+                <div className="form-group" style={{ position: 'relative' }}>
                   <label>Current Password</label>
-                  <input
-                    type="password"
-                    name="currentPassword"
-                    value={passwordData.currentPassword}
-                    onChange={handlePasswordChange}
-                    placeholder="Enter current password"
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPwd.current ? 'text' : 'password'}
+                      name="currentPassword"
+                      value={passwordData.currentPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="Enter current password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      aria-label="Toggle current password visibility"
+                      onClick={() => setShowPwd(prev => ({ ...prev, current: !prev.current }))}
+                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9768E1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, lineHeight: 0, padding: 0, fontSize: 18, opacity: 0.95 }}
+                    >
+                      {showPwd.current ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ position: 'relative' }}>
                   <label>New Password</label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={passwordData.newPassword}
-                    onChange={handlePasswordChange}
-                    placeholder="Enter new password"
-                    required
-                    minLength={6}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPwd.next ? 'text' : 'password'}
+                      name="newPassword"
+                      value={passwordData.newPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="Enter new password"
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Toggle new password visibility"
+                      onClick={() => setShowPwd(prev => ({ ...prev, next: !prev.next }))}
+                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9768E1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, lineHeight: 0, padding: 0, fontSize: 18, opacity: 0.95 }}
+                    >
+                      {showPwd.next ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ position: 'relative' }}>
                   <label>Confirm New Password</label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={passwordData.confirmPassword}
-                    onChange={handlePasswordChange}
-                    placeholder="Confirm new password"
-                    required
-                    minLength={6}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPwd.confirm ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={passwordData.confirmPassword}
+                      onChange={handlePasswordChange}
+                      placeholder="Confirm new password"
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Toggle confirm password visibility"
+                      onClick={() => setShowPwd(prev => ({ ...prev, confirm: !prev.confirm }))}
+                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9768E1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, lineHeight: 0, padding: 0, fontSize: 18, opacity: 0.95 }}
+                    >
+                      {showPwd.confirm ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" className="primary-btn">
                   Change Password

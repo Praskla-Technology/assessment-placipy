@@ -45,8 +45,9 @@ const StaffManagement: React.FC = () => {
           }
         }));
         setStaff(mapped);
-      } catch (e: any) {
-        setError(e.message || 'Failed to load staff');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load staff';
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -57,14 +58,16 @@ const StaffManagement: React.FC = () => {
   }, []);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [showCreds, setShowCreds] = useState<{ email: string; password: string } | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
+  const [deptOptions, setDeptOptions] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    designation: '',
+    designation: 'PTS',
     department: '',
     permissions: {
       createAssessments: false,
@@ -83,8 +86,21 @@ const StaffManagement: React.FC = () => {
     );
   };
 
-  const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'All Departments'];
   const collegeDomain = ((user?.email || '').includes('@') ? (user!.email.split('@')[1]) : 'ksrce.ac.in');
+
+  useEffect(() => {
+    const loadDepts = async () => {
+      try {
+        const list = await PTOService.getDepartments();
+        const names = Array.isArray(list) ? list.map((d: { name?: string; code?: string }) => String(d?.name ?? d?.code ?? '')).filter(Boolean) : [];
+        const unique = Array.from(new Set(names));
+        setDeptOptions(unique);
+      } catch {
+        setError('Failed to load departments');
+      }
+    };
+    loadDepts();
+  }, []);
 
   const handleAddStaff = async () => {
     const email = String(formData.email || '').trim();
@@ -105,15 +121,20 @@ const StaffManagement: React.FC = () => {
       return;
     }
     if (formData.email) {
-      await PTOService.createStaff({
+      const created = await PTOService.createStaff({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: email,
         phone: formData.phone,
         designation: formData.designation,
         department: formData.department,
-        permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as any)[perm])
+        permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as Record<string, boolean>)[perm])
       });
+      const emailCreated = (created as unknown as { email?: string }).email || '';
+      const passCreated = (created as unknown as { defaultPassword?: string }).defaultPassword || 'Praskla@123';
+      if (emailCreated) {
+        setShowCreds({ email: String(emailCreated), password: String(passCreated) });
+      }
       const refreshed = await PTOService.getStaff();
       const filtered = refreshed.filter((s: StaffDto) => String(s.id || '').includes('@'));
       const mapped: StaffMember[] = filtered.map((s: StaffDto) => ({
@@ -171,7 +192,7 @@ const StaffManagement: React.FC = () => {
         phone: formData.phone,
         designation: formData.designation,
         department: formData.department,
-        permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as any)[perm])
+        permissions: Object.keys(formData.permissions).filter((perm) => (formData.permissions as Record<string, boolean>)[perm])
       });
       const refreshed = await PTOService.getStaff();
       const filtered = refreshed.filter((s: StaffDto) => String(s.id || '').includes('@'));
@@ -259,7 +280,7 @@ const StaffManagement: React.FC = () => {
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-          } catch (e) {
+          } catch {
             alert('Export failed');
           }
         }}>Export</button>
@@ -274,7 +295,7 @@ const StaffManagement: React.FC = () => {
             const ws = wb.Sheets[wsName];
             const rows = XLSX.utils.sheet_to_json(ws);
             try {
-              const result = await PTOService.importStaff(rows as any[]);
+              const result = await PTOService.importStaff(rows as Array<Record<string, unknown>>);
               if (result?.success) {
                 const refreshed = await PTOService.getStaff();
                 const filtered = refreshed.filter((s: StaffDto) => String(s.id || '').includes('@'));
@@ -296,7 +317,7 @@ const StaffManagement: React.FC = () => {
               } else {
                 alert('Import failed');
               }
-            } catch (err) {
+            } catch {
               alert('Import failed');
             }
             e.currentTarget.value = '';
@@ -324,7 +345,7 @@ const StaffManagement: React.FC = () => {
                 <td>{member.name}</td>
                 <td>{member.email}</td>
                 <td>{member.phone}</td>
-                <td>{member.designation}</td>
+                <td>PTS</td>
                 <td>{member.department}</td>
                 <td>
                   <div className="permissions-badges">
@@ -421,8 +442,7 @@ const StaffManagement: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                 required
               >
-                <option value="">Select designation</option>
-                <option value="Placement Training Staff / PTS">Placement Training Staff / PTS</option>
+                <option value="PTS">PTS</option>
               </select>
             </div>
             <div className="form-group">
@@ -433,7 +453,7 @@ const StaffManagement: React.FC = () => {
                 required
               >
                 <option value="">Select Department</option>
-                {departments.map(dept => (
+                {deptOptions.map(dept => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
@@ -470,6 +490,25 @@ const StaffManagement: React.FC = () => {
             <div className="modal-actions">
               <button className="primary-btn" onClick={handleAddStaff} disabled={!isCreateValid()}>Create</button>
               <button className="secondary-btn" onClick={() => setIsAddModalOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreds && (
+        <div className="modal-overlay" onClick={() => setShowCreds(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <h3>Staff Account Created</h3>
+            <div className="form-group">
+              <label>Username (Email)</label>
+              <input type="text" value={showCreds.email} readOnly />
+            </div>
+            <div className="form-group">
+              <label>Default Password</label>
+              <input type="text" value={showCreds.password} readOnly />
+            </div>
+            <div className="modal-actions">
+              <button className="primary-btn" onClick={() => setShowCreds(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -520,7 +559,7 @@ const StaffManagement: React.FC = () => {
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
               >
-                <option value="Placement Training Staff / PTS">Placement Training Staff / PTS</option>
+                <option value="PTS">PTS</option>
               </select>
             </div>
             <div className="form-group">
@@ -529,7 +568,7 @@ const StaffManagement: React.FC = () => {
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               >
-                {departments.map(dept => (
+                {deptOptions.map(dept => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
