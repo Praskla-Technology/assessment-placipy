@@ -30,8 +30,8 @@ class ResultsService {
      */
     private getDomainFromEmail(email: string): string {
         if (!email || !email.includes('@')) {
-            console.log('Invalid email format, using default domain:', email);
-            return 'ksrce.ac.in'; // Default domain
+            console.log('Invalid email format, cannot extract domain:', email);
+            throw new Error('Invalid email format, cannot extract domain');
         }
         const domain = email.split('@')[1];
         console.log('Extracted domain from email:', email, '=>', domain);
@@ -179,7 +179,14 @@ class ResultsService {
             console.log('Student Email:', studentEmail);
 
             // Get domain from email
-            const collegeDomain = this.getDomainFromEmail(studentEmail);
+            let collegeDomain;
+            try {
+                collegeDomain = this.getDomainFromEmail(studentEmail);
+            } catch (domainError) {
+                console.error('Error extracting domain from email:', domainError);
+                // Try with a default domain as fallback for backward compatibility
+                collegeDomain = 'ksrce.ac.in';
+            }
             const PK = `CLIENT#${collegeDomain}`;
 
             // Query all results for this student (SK starts with RESULT#ASSESSMENT#)
@@ -215,7 +222,14 @@ class ResultsService {
             console.log('Results table name:', this.resultsTableName);
 
             // Get domain from email
-            const collegeDomain = this.getDomainFromEmail(studentEmail);
+            let collegeDomain;
+            try {
+                collegeDomain = this.getDomainFromEmail(studentEmail);
+            } catch (domainError) {
+                console.error('Error extracting domain from email:', domainError);
+                // Try with a default domain as fallback for backward compatibility
+                collegeDomain = 'ksrce.ac.in';
+            }
             const PK = `CLIENT#${collegeDomain}`;
             const SK = attemptId;
 

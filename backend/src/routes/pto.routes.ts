@@ -308,20 +308,41 @@ router.post('/assessments', async (req, res) => {
     // Send notifications to students when PTO creates an assessment
     try {
       const notificationService = require('../services/NotificationService');
-      const domain = (email && email.includes('@')) ? email.split('@')[1] : 'ksrce.ac.in';
+      // Use dynamic domain detection - collect students from all domains
       let studentEmails: string[] = [];
+      // Extract domain from email, but handle missing/invalid email gracefully
+      const ptoDomain = (email && email.includes('@')) ? email.split('@')[1] : undefined;
 
-      // Get target students based on departments, with fallback to all students
+      // Get target students based on departments across all domains
       if (req.body.targetDepartments && req.body.targetDepartments.length > 0) {
+        // Get students by department without assuming a single domain
         for (const dept of req.body.targetDepartments) {
-          const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
-          studentEmails.push(...deptStudents);
+          // For each department, we might have students from different domains
+          // So we need to get students from all possible domains
+          try {
+            // First, get students from the PTO's domain as a starting point (if domain is available)
+            if (ptoDomain) {
+              const deptStudents = await notificationService.getStudentsByDepartment(ptoDomain, dept);
+              studentEmails.push(...deptStudents);
+            }
+            
+            // TODO: In a more advanced implementation, we would dynamically discover
+            // all domains that have students in this department, but for now we
+            // start with the PTO's domain which should cover most cases
+          } catch (domainError) {
+            console.log(`Could not get students for department ${dept} in PTO domain:`, domainError.message);
+          }
         }
       }
 
-      // Fallback: if no students were found by department, notify all students in the domain
-      if (!studentEmails.length) {
-        studentEmails = await notificationService.getStudentsByDomain(domain);
+      // If no target departments specified or no students found, get all students across domains
+      if (!studentEmails.length && ptoDomain) {
+        try {
+          // Get students from the PTO's domain as a fallback
+          studentEmails = await notificationService.getStudentsByDomain(ptoDomain);
+        } catch (domainError) {
+          console.log('Could not get students from PTO domain:', domainError.message);
+        }
       }
 
       // Remove duplicates

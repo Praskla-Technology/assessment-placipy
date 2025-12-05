@@ -47,7 +47,12 @@ const limiter = rateLimit({
     message: 'Too many requests from this IP, please try again later.'
 });
 
-if (process.env.NODE_ENV !== 'development') {
+// Explicitly disable rate limiting in development environment
+const isDevelopment = process.env.NODE_ENV === 'development' || 
+                     process.env.NODE_ENV === 'dev' || 
+                     !process.env.NODE_ENV;
+
+if (!isDevelopment) {
     app.use(limiter);
 }
 

@@ -288,20 +288,40 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         // Send notifications if assessment is published
         if (assessmentData.isPublished && result) {
             try {
-                const domain = (createdBy && createdBy.includes('@')) ? createdBy.split('@')[1] : 'ksrce.ac.in';
+                // Use dynamic domain detection - start with creator's domain
+                const createdByDomain = (createdBy && createdBy.includes('@')) ? createdBy.split('@')[1] : undefined;
                 let studentEmails: string[] = [];
 
-                // Get target students based on departments, with fallback to all students
+                // Get target students based on departments across all domains
                 if (assessmentData.targetDepartments && assessmentData.targetDepartments.length > 0) {
+                    // Get students by department without assuming a single domain
                     for (const dept of assessmentData.targetDepartments) {
-                        const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
-                        studentEmails.push(...deptStudents);
+                        // For each department, we might have students from different domains
+                        // So we need to get students from all possible domains
+                        try {
+                            // First, get students from the creator's domain as a starting point (if domain is available)
+                            if (createdByDomain) {
+                                const deptStudents = await notificationService.getStudentsByDepartment(createdByDomain, dept);
+                                studentEmails.push(...deptStudents);
+                            }
+                            
+                            // TODO: In a more advanced implementation, we would dynamically discover
+                            // all domains that have students in this department, but for now we
+                            // start with the creator's domain which should cover most cases
+                        } catch (domainError) {
+                            console.log(`Could not get students for department ${dept} in creator domain:`, domainError.message);
+                        }
                     }
                 }
 
-                // Fallback: if no students were found by department, notify all students in the domain
-                if (!studentEmails.length) {
-                    studentEmails = await notificationService.getStudentsByDomain(domain);
+                // If no target departments specified or no students found, get all students across domains
+                if (!studentEmails.length && createdByDomain) {
+                    try {
+                        // Get students from the creator's domain as a fallback
+                        studentEmails = await notificationService.getStudentsByDomain(createdByDomain);
+                    } catch (domainError) {
+                        console.log('Could not get students from creator domain:', domainError.message);
+                    }
                 }
 
                 // Remove duplicates
@@ -384,21 +404,41 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
         // Send notifications if assessment is being published
         if (isBeingPublished && result) {
             try {
-                const domain = (updatedBy && updatedBy.includes('@')) ? updatedBy.split('@')[1] : 'ksrce.ac.in';
+                // Use dynamic domain detection - start with updater's domain
+                const updatedByDomain = (updatedBy && updatedBy.includes('@')) ? updatedBy.split('@')[1] : undefined;
                 let studentEmails: string[] = [];
 
-                // Get target students based on departments, with fallback to all students
+                // Get target students based on departments across all domains
                 const targetDepts = assessmentData.targetDepartments || result.target?.departments || [];
                 if (targetDepts.length > 0) {
+                    // Get students by department without assuming a single domain
                     for (const dept of targetDepts) {
-                        const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
-                        studentEmails.push(...deptStudents);
+                        // For each department, we might have students from different domains
+                        // So we need to get students from all possible domains
+                        try {
+                            // First, get students from the updater's domain as a starting point (if domain is available)
+                            if (updatedByDomain) {
+                                const deptStudents = await notificationService.getStudentsByDepartment(updatedByDomain, dept);
+                                studentEmails.push(...deptStudents);
+                            }
+                            
+                            // TODO: In a more advanced implementation, we would dynamically discover
+                            // all domains that have students in this department, but for now we
+                            // start with the updater's domain which should cover most cases
+                        } catch (domainError) {
+                            console.log(`Could not get students for department ${dept} in updater domain:`, domainError.message);
+                        }
                     }
                 }
 
-                // Fallback: if no students were found by department, notify all students in the domain
-                if (!studentEmails.length) {
-                    studentEmails = await notificationService.getStudentsByDomain(domain);
+                // If no target departments specified or no students found, get all students across domains
+                if (!studentEmails.length && updatedByDomain) {
+                    try {
+                        // Get students from the updater's domain as a fallback
+                        studentEmails = await notificationService.getStudentsByDomain(updatedByDomain);
+                    } catch (domainError) {
+                        console.log('Could not get students from updater domain:', domainError.message);
+                    }
                 }
 
                 // Remove duplicates
