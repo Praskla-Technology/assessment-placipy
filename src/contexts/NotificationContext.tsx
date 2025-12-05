@@ -8,7 +8,7 @@ interface NotificationContextType {
     loading: boolean;
     fetchNotifications: () => Promise<void>;
     markAsRead: (notificationId: string) => Promise<void>;
-    markAllAsRead: () => Promise<void>;
+    markAllAsRead: () => Promise<void>;  // Changed return type to Promise<void>
     lastNotificationId: string | null;
 }
 
@@ -78,13 +78,20 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark notification as read
     const markAsRead = useCallback(async (notificationId: string) => {
         try {
-            await NotificationService.markAsRead(notificationId);
+            // Ensure we're using the correct ID format for the API call
+            const apiNotificationId = notificationId.startsWith('NOTIF#') ? notificationId.replace('NOTIF#', '') : notificationId;
+            await NotificationService.markAsRead(apiNotificationId);
             setNotifications(prev => 
-                prev.map(notif => 
-                    (notif.SK === notificationId || notif.createdAt === notificationId)
-                        ? { ...notif, isRead: true }
-                        : notif
-                )
+                prev.map(notif => {
+                    // Check if this is the notification we're marking as read
+                    const notifId = notif.SK ? String(notif.SK).replace('NOTIF#', '') : notif.createdAt;
+                    const targetId = apiNotificationId.startsWith('NOTIF#') ? apiNotificationId.replace('NOTIF#', '') : apiNotificationId;
+                    
+                    if (notifId === targetId) {
+                        return { ...notif, isRead: true };
+                    }
+                    return notif;
+                })
             );
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
@@ -96,10 +103,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark all notifications as read
     const markAllAsRead = useCallback(async () => {
         try {
-            const count = await NotificationService.markAllAsRead();
+            await NotificationService.markAllAsRead();
             setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
             setUnreadCount(0);
-            return count;
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
             throw error;
@@ -148,4 +154,3 @@ export function useNotifications() {
     }
     return context;
 }
-

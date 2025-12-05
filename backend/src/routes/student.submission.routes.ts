@@ -16,7 +16,31 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
         console.log('Body:', JSON.stringify(req.body, null, 2));
         console.log('Headers:', req.headers);
 
-        const studentEmail = req.user?.email || req.user?.username || req.user?.sub;
+        // Try to get email from token first
+        // Only use email if it's a valid email address (contains @)
+        let studentEmail = (req.user?.email && req.user.email.includes('@')) ? req.user.email : null;
+        
+        // Also check username if it contains @
+        if (!studentEmail && req.user?.username && req.user.username.includes('@')) {
+            studentEmail = req.user.username;
+        }
+        
+        // If no email in token, get it from Cognito
+        if (!studentEmail) {
+            const userId = req.user?.username || req.user?.sub;
+            if (userId) {
+                try {
+                    console.log('Fetching email from Cognito for user:', userId);
+                    const userInfo = await getUserAttributes(userId);
+                    if (userInfo?.attributes?.email) {
+                        studentEmail = userInfo.attributes.email;
+                        console.log('Got email from Cognito:', studentEmail);
+                    }
+                } catch (cognitoError) {
+                    console.error('Error fetching email from Cognito:', cognitoError);
+                }
+            }
+        }
         
         console.log('Extracted student email:', studentEmail);
         

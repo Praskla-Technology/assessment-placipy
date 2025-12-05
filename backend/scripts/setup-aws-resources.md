@@ -22,6 +22,18 @@ This guide will help you set up the necessary AWS resources for the PlaciPy appl
    - Partition key: `PK` (String)
    - Sort key: `SK` (String)
 
+4. Create the assessment results table named `Assessment_placipy_asseessment_result`
+5. Set the primary key as:
+   - Partition key: `PK` (String)
+   - Sort key: `SK` (String)
+
+Alternatively, you can run the provided script to automatically create the results table:
+
+```bash
+cd backend
+node scripts/create-results-table.js
+```
+
 ## 3. Environment Variables
 
 Update your `.env` file with the actual values:
@@ -164,11 +176,14 @@ Ensure your AWS credentials have the following permissions:
         "cognito-idp:*",
         "dynamodb:GetItem",
         "dynamodb:Scan",
-        "dynamodb:Query"
+        "dynamodb:Query",
+        "dynamodb:PutItem",
+        "dynamodb:CreateTable"
       ],
       "Resource": [
         "arn:aws:cognito-idp:region:account:userpool/your-user-pool-id",
-        "arn:aws:dynamodb:region:account:table/Assesment_placipy"
+        "arn:aws:dynamodb:region:account:table/Assesment_placipy",
+        "arn:aws:dynamodb:region:account:table/Assessment_placipy_asseessment_result"
       ]
     }
   ]

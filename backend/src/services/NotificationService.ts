@@ -53,7 +53,7 @@ class NotificationService {
                 PK,
                 SK,
                 userId,
-                email: email.toLowerCase(),
+                email: email.toLowerCase(), // Ensure email is lowercase
                 type,
                 title,
                 message,
@@ -94,7 +94,8 @@ class NotificationService {
             const notifications = [];
             
             for (const email of studentEmails) {
-                const domain = this.getDomainFromEmail(email);
+                const lowerCaseEmail = email.toLowerCase();
+                const domain = this.getDomainFromEmail(lowerCaseEmail);
                 const PK = `CLIENT#${domain}`;
                 
                 // Get student info to get userId
@@ -103,17 +104,18 @@ class NotificationService {
                     KeyConditionExpression: 'PK = :pk AND SK = :sk',
                     ExpressionAttributeValues: {
                         ':pk': PK,
-                        ':sk': `STUDENT#${email}`
+                        ':sk': `STUDENT#${lowerCaseEmail}`
                     }
                 };
 
                 const studentResult = await dynamodb.query(studentParams).promise();
                 const student = studentResult.Items?.[0];
-                const userId = student?.SK || email;
+                // Use the student's email as userId if student record not found
+                const userId = student?.SK || lowerCaseEmail;
 
                 const notification = await this.createNotificationForUser(
                     userId,
-                    email,
+                    lowerCaseEmail,
                     type,
                     title,
                     message,
@@ -142,6 +144,7 @@ class NotificationService {
         try {
             const domain = this.getDomainFromEmail(email);
             const PK = `CLIENT#${domain}`;
+            const lowerCaseEmail = email.toLowerCase(); // Ensure email is lowercase
 
             const params: any = {
                 TableName: this.notificationsTableName,
@@ -161,8 +164,9 @@ class NotificationService {
             const result = await dynamodb.query(params).promise();
             
             // Filter by email after query (since FilterExpression doesn't work well with KeyConditionExpression)
+            // Ensure case-insensitive comparison
             const filteredItems = (result.Items || []).filter(
-                item => item.email?.toLowerCase() === email.toLowerCase()
+                item => item.email && item.email.toLowerCase() === lowerCaseEmail
             );
 
             return {
@@ -182,7 +186,8 @@ class NotificationService {
         try {
             const domain = this.getDomainFromEmail(email);
             const PK = `CLIENT#${domain}`;
-            const SK = `NOTIF#${notificationId}`;
+            // Check if notificationId already includes the NOTIF# prefix
+            const SK = notificationId.startsWith('NOTIF#') ? notificationId : `NOTIF#${notificationId}`;
 
             const params = {
                 TableName: this.notificationsTableName,
@@ -212,6 +217,7 @@ class NotificationService {
         try {
             const domain = this.getDomainFromEmail(email);
             const PK = `CLIENT#${domain}`;
+            const lowerCaseEmail = email.toLowerCase(); // Ensure email is lowercase
 
             // Get all notifications for this user
             const queryParams = {
@@ -225,7 +231,7 @@ class NotificationService {
 
             const result = await dynamodb.query(queryParams).promise();
             const unreadNotifications = (result.Items || []).filter(
-                item => item.email?.toLowerCase() === email.toLowerCase() && !item.isRead
+                item => item.email && item.email.toLowerCase() === lowerCaseEmail && !item.isRead
             );
 
             // Update each notification
@@ -314,7 +320,6 @@ class NotificationService {
     }
 
 
-
     /**
      * Mark a reminder as sent
      */
@@ -326,21 +331,21 @@ class NotificationService {
         try {
             const domain = this.getDomainFromEmail(studentEmail);
             const PK = `CLIENT#${domain}`;
-            const reminderSK = `NOTIF_SENT#${reminderType}#${assessmentId}#${studentEmail}`;
+            const SK = `REMINDER#${assessmentId}#${studentEmail}#${reminderType}`;
 
             const params = {
                 TableName: this.notificationsTableName,
-                Item: {
+                Key: {
                     PK,
-                    SK: reminderSK,
-                    assessmentId,
-                    studentEmail: studentEmail.toLowerCase(),
-                    reminderType,
-                    sentAt: new Date().toISOString()
+                    SK
+                },
+                UpdateExpression: 'SET sentAt = :sentAt',
+                ExpressionAttributeValues: {
+                    ':sentAt': new Date().toISOString()
                 }
             };
 
-            await dynamodb.put(params).promise();
+            await dynamodb.update(params).promise();
         } catch (error) {
             console.error('Error marking reminder as sent:', error);
             throw new Error('Failed to mark reminder as sent: ' + error.message);
@@ -363,7 +368,8 @@ class NotificationService {
             };
 
             const result = await dynamodb.query(params).promise();
-            return (result.Items || []).map(item => item.email).filter(Boolean);
+            // Ensure all emails are lowercase
+            return (result.Items || []).map(item => item.email ? item.email.toLowerCase() : '').filter(Boolean);
         } catch (error) {
             console.error('Error fetching students by domain:', error);
             throw new Error('Failed to fetch students: ' + error.message);
@@ -388,7 +394,8 @@ class NotificationService {
             };
 
             const result = await dynamodb.query(params).promise();
-            return (result.Items || []).map(item => item.email).filter(Boolean);
+            // Ensure all emails are lowercase
+            return (result.Items || []).map(item => item.email ? item.email.toLowerCase() : '').filter(Boolean);
         } catch (error) {
             console.error('Error fetching students by department:', error);
             throw new Error('Failed to fetch students: ' + error.message);
@@ -397,4 +404,3 @@ class NotificationService {
 }
 
 module.exports = new NotificationService();
-

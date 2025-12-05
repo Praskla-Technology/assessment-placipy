@@ -304,6 +304,72 @@ router.post('/assessments', async (req, res) => {
   try {
     const email = await getEmail(req);
     const item = await ptoService.createAssessment(email, req.body);
+    
+    // Send notifications to students when PTO creates an assessment
+    try {
+      const notificationService = require('../services/NotificationService');
+      // Use dynamic domain detection - collect students from all domains
+      let studentEmails: string[] = [];
+      // Extract domain from email, but handle missing/invalid email gracefully
+      const ptoDomain = (email && email.includes('@')) ? email.split('@')[1] : undefined;
+
+      // Get target students based on departments across all domains
+      if (req.body.targetDepartments && req.body.targetDepartments.length > 0) {
+        // Get students by department without assuming a single domain
+        for (const dept of req.body.targetDepartments) {
+          // For each department, we might have students from different domains
+          // So we need to get students from all possible domains
+          try {
+            // First, get students from the PTO's domain as a starting point (if domain is available)
+            if (ptoDomain) {
+              const deptStudents = await notificationService.getStudentsByDepartment(ptoDomain, dept);
+              studentEmails.push(...deptStudents);
+            }
+            
+            // TODO: In a more advanced implementation, we would dynamically discover
+            // all domains that have students in this department, but for now we
+            // start with the PTO's domain which should cover most cases
+          } catch (domainError) {
+            console.log(`Could not get students for department ${dept} in PTO domain:`, domainError.message);
+          }
+        }
+      }
+
+      // If no target departments specified or no students found, get all students across domains
+      if (!studentEmails.length && ptoDomain) {
+        try {
+          // Get students from the PTO's domain as a fallback
+          studentEmails = await notificationService.getStudentsByDomain(ptoDomain);
+        } catch (domainError) {
+          console.log('Could not get students from PTO domain:', domainError.message);
+        }
+      }
+
+      // Remove duplicates
+      studentEmails = [...new Set(studentEmails)];
+
+      if (studentEmails.length) {
+        const priority = req.body.scheduling?.startDate ? 'medium' : 'medium';
+        await notificationService.createNotificationsForStudents(
+          studentEmails,
+          'assessment_published',
+          `New Assessment: ${req.body.name}`,
+          req.body.scheduling?.startDate 
+            ? `A new assessment "${req.body.name}" has been published and is scheduled.`
+            : `A new assessment "${req.body.name}" has been published.`,
+          `/student/assessments/${item.SK?.replace('ASSESSMENT#', '') || item.id}`,
+          priority,
+          { assessmentId: item.SK?.replace('ASSESSMENT#', '') || item.id }
+        );
+        console.log(`Sent notifications to ${studentEmails.length} students for PTO-created assessment`);
+      } else {
+        console.log('No students found to notify for PTO-created assessment');
+      }
+    } catch (notifError) {
+      console.error('Error sending notifications for PTO-created assessment:', notifError);
+      // Don't fail the request if notifications fail
+    }
+    
     res.status(201).json({ success: true, data: item });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to create assessment', error: error.message });

@@ -59,8 +59,10 @@ class NotificationService {
      */
     async markAsRead(notificationId: string): Promise<void> {
         try {
+            // Ensure we're using the correct ID format
+            const id = notificationId.startsWith('NOTIF#') ? notificationId.replace('NOTIF#', '') : notificationId;
             await axios.post(
-                `${API_BASE_URL}/${notificationId}/read`,
+                `${API_BASE_URL}/${encodeURIComponent(id)}/read`,
                 {},
                 { headers: this.getAuthHeaders() }
             );
@@ -73,14 +75,13 @@ class NotificationService {
     /**
      * Mark all notifications as read
      */
-    async markAllAsRead(): Promise<number> {
+    async markAllAsRead(): Promise<void> {  // Changed return type to void to match interface
         try {
-            const response = await axios.post(
+            await axios.post(
                 `${API_BASE_URL}/mark-all`,
                 {},
                 { headers: this.getAuthHeaders() }
             );
-            return response.data.count || 0;
         } catch (error: any) {
             console.error('Error marking all notifications as read:', error);
             throw new Error(error.response?.data?.message || 'Failed to mark all notifications as read');
@@ -89,4 +90,3 @@ class NotificationService {
 }
 
 export default new NotificationService();
-

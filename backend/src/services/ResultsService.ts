@@ -30,8 +30,8 @@ class ResultsService {
      */
     private getDomainFromEmail(email: string): string {
         if (!email || !email.includes('@')) {
-            console.log('Invalid email format, using default domain:', email);
-            return 'ksrce.ac.in'; // Default domain
+            console.log('Invalid email format, cannot extract domain:', email);
+            throw new Error('Invalid email format, cannot extract domain');
         }
         const domain = email.split('@')[1];
         console.log('Extracted domain from email:', email, '=>', domain);
@@ -118,8 +118,12 @@ class ResultsService {
             console.log('Table:', this.resultsTableName);
             console.log('PK:', resultItem.PK);
             console.log('SK:', resultItem.SK);
+            console.log('Params:', JSON.stringify(params, null, 2));
             
             const putResult = await dynamodb.put(params).promise();
+            
+            console.log('DynamoDB PUT operation completed successfully');
+            console.log('Put result:', JSON.stringify(putResult, null, 2));
             
             console.log('========================================');
             console.log('✅ RESULT SAVED SUCCESSFULLY!');
@@ -175,7 +179,14 @@ class ResultsService {
             console.log('Student Email:', studentEmail);
 
             // Get domain from email
-            const collegeDomain = this.getDomainFromEmail(studentEmail);
+            let collegeDomain;
+            try {
+                collegeDomain = this.getDomainFromEmail(studentEmail);
+            } catch (domainError) {
+                console.error('Error extracting domain from email:', domainError);
+                // Try with a default domain as fallback for backward compatibility
+                collegeDomain = 'ksrce.ac.in';
+            }
             const PK = `CLIENT#${collegeDomain}`;
 
             // Query all results for this student (SK starts with RESULT#ASSESSMENT#)
@@ -208,9 +219,17 @@ class ResultsService {
             console.log('=== Getting Result By Attempt ID ===');
             console.log('Student Email:', studentEmail);
             console.log('Attempt ID:', attemptId);
+            console.log('Results table name:', this.resultsTableName);
 
             // Get domain from email
-            const collegeDomain = this.getDomainFromEmail(studentEmail);
+            let collegeDomain;
+            try {
+                collegeDomain = this.getDomainFromEmail(studentEmail);
+            } catch (domainError) {
+                console.error('Error extracting domain from email:', domainError);
+                // Try with a default domain as fallback for backward compatibility
+                collegeDomain = 'ksrce.ac.in';
+            }
             const PK = `CLIENT#${collegeDomain}`;
             const SK = attemptId;
 
@@ -225,6 +244,8 @@ class ResultsService {
             console.log('Get params:', JSON.stringify(params, null, 2));
             const result = await dynamodb.get(params).promise();
             
+            console.log('DynamoDB GET result:', JSON.stringify(result, null, 2));
+            
             if (!result.Item) {
                 throw new Error('Result not found');
             }
@@ -233,6 +254,14 @@ class ResultsService {
             // Check both the email field and the email in the SK
             const emailInSK = SK.split('#').pop(); // Extract email from SK: RESULT#ASSESSMENT#<id>#<email>
             const resultEmail = result.Item.email || emailInSK;
+            
+            console.log('Authorization check:');
+            console.log('  resultEmail:', resultEmail);
+            console.log('  emailInSK:', emailInSK);
+            console.log('  studentEmail:', studentEmail);
+            console.log('  resultEmail.toLowerCase():', resultEmail.toLowerCase());
+            console.log('  studentEmail.toLowerCase():', studentEmail.toLowerCase());
+            console.log('  emailInSK.toLowerCase():', emailInSK.toLowerCase());
             
             // Case-insensitive comparison
             if (resultEmail.toLowerCase() !== studentEmail.toLowerCase() && 
