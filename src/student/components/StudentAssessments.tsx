@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '../../contexts/UserContext';
 
 import StudentAssessmentService from '../../services/student.assessment.service';
-import ResultsService from '../../services/results.service';
 import './AssessmentTaking.css';
 
 interface Assessment {

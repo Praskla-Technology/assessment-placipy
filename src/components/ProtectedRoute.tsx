@@ -41,6 +41,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
                 }
             } catch (error) {
                 console.error('Authorization check failed:', error);
+                AuthService.logout();
                 navigate('/');
             } finally {
                 setIsLoading(false);

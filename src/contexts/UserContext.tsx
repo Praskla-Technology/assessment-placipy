@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AuthService from '../services/auth.service';
+import { useNavigate } from 'react-router-dom';
 
 interface User {
     email: string;
@@ -28,6 +29,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [initialized, setInitialized] = useState(false);
+    const navigate = useNavigate();
 
     // Fetch user data from API
     const fetchUser = useCallback(async () => {
@@ -42,23 +44,36 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
             if (token) {
                 const userProfile = await AuthService.getUserProfile(token);
-                setUser({
+                const userData = {
                     email: userProfile.email,
                     name: userProfile.name,
                     role: userProfile.role,
                     department: userProfile.department,
                     year: userProfile.year,
                     joiningDate: userProfile.joiningDate
-                });
+                };
+                setUser(userData);
+
+                // Redirecting to dashboard 
+                if (window.location.pathname === '/') {
+                    const dashboardPath = AuthService.getDashboardPath(userProfile.role);
+                    navigate(dashboardPath);
+                }
+            } else if (window.location.pathname !== '/') {
+                // No token , redirecting broo.
+                navigate('/');
             }
         } catch (error) {
             console.error('Error fetching user profile:', error);
             AuthService.logout();
+            if (window.location.pathname !== '/') {
+                navigate('/');
+            }
         } finally {
             setLoading(false);
             setInitialized(true);
         }
-    }, [initialized, user]);
+    }, [initialized, user, navigate]);
 
     // Refresh user data (useful for manual updates)
     const refreshUser = useCallback(async () => {

@@ -54,8 +54,10 @@ const LoginPage: React.FC = () => {
             const dashboardPath = AuthService.getDashboardPath(userResult.role);
             console.log('Redirecting to:', dashboardPath);
 
-            // Redirect to appropriate dashboard
-            navigate(dashboardPath);
+            // Small delay to ensure context is updated before redirect
+            setTimeout(() => {
+                navigate(dashboardPath);
+            }, 100);
         } catch (err) {
             const e = err as Error;
             console.error('Login error in component:', e);
@@ -103,8 +105,10 @@ const LoginPage: React.FC = () => {
             const dashboardPath = AuthService.getDashboardPath(user.role);
             console.log('Redirecting to:', dashboardPath);
 
-            // Redirect to appropriate dashboard
-            navigate(dashboardPath);
+            // Small delay to ensure context is updated before redirect
+            setTimeout(() => {
+                navigate(dashboardPath);
+            }, 100);
         } catch (err) {
             const e = err as Error;
             console.error('New password error in component:', e);
