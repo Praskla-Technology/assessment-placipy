@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AuthService from './auth.service';
 
-const API_BASE_URL = import.meta.env.VITE_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 class ResultsService {
   private getAuthHeaders() {
@@ -26,7 +26,7 @@ class ResultsService {
       console.log('Request headers:', headers);
       
       const response = await axios.post(
-        `${API_BASE_URL}/api/student/submit-assessment`,
+        `${API_BASE_URL}/student/submit-assessment`,
         resultData,
         { headers }
       );
@@ -58,9 +58,9 @@ class ResultsService {
    */
   async getStudentResults(): Promise<any> {
     try {
-      console.log('Fetching student results from:', `${API_BASE_URL}/api/student/results`);
+      console.log('Fetching student results from:', `${API_BASE_URL}/student/results`);
       const response = await axios.get(
-        `${API_BASE_URL}/api/student/results`,
+        `${API_BASE_URL}/student/results`,
         { headers: this.getAuthHeaders() }
       );
       console.log('Student results response:', response.data);
@@ -96,7 +96,7 @@ class ResultsService {
       const headers = this.getAuthHeaders();
       
       const response = await axios.get(
-        `${API_BASE_URL}/api/student/dashboard-stats`,
+        `${API_BASE_URL}/student/dashboard-stats`,
         { headers }
       );
       
@@ -130,7 +130,7 @@ class ResultsService {
     try {
       const encodedAttemptId = encodeURIComponent(attemptId);
       const response = await axios.get(
-        `${API_BASE_URL}/api/student/results/${encodedAttemptId}`,
+        `${API_BASE_URL}/student/results/${encodedAttemptId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -146,7 +146,7 @@ class ResultsService {
   async getMyResults(): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/results/my-results`,
+        `${API_BASE_URL}/results/my-results`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -171,7 +171,7 @@ class ResultsService {
   async getMyAssessmentResult(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/results/my-results/${assessmentId}`,
+        `${API_BASE_URL}/results/my-results/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -187,7 +187,7 @@ class ResultsService {
   async getAssessmentResults(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/results/assessment/${assessmentId}`,
+        `${API_BASE_URL}/results/assessment/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -203,7 +203,7 @@ class ResultsService {
   async getMyRank(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/results/rank/${assessmentId}`,
+        `${API_BASE_URL}/results/rank/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -219,7 +219,7 @@ class ResultsService {
   async getDepartmentStats(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/results/department-stats/${assessmentId}`,
+        `${API_BASE_URL}/results/department-stats/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -238,7 +238,7 @@ class ResultsService {
       params.append('limit', limit.toString());
       
       const response = await axios.get(
-        `${API_BASE_URL}/api/results/top-performers/${assessmentId}?${params.toString()}`,
+        `${API_BASE_URL}/results/top-performers/${assessmentId}?${params.toString()}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AuthService from './auth.service';
 
-const API_BASE_URL = import.meta.env.VITE_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 class AssessmentService {
   private getAuthHeaders() {
@@ -23,7 +23,7 @@ class AssessmentService {
       console.log('Request headers:', headers);
       
       const response = await axios.post(
-        `${API_BASE_URL}/api/assessments`,
+        `${API_BASE_URL}/assessments`,
         assessmentData,
         { headers }
       );
@@ -45,7 +45,7 @@ class AssessmentService {
       if (filters?.lastKey) params.append('lastKey', filters.lastKey);
 
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments?${params.toString()}`,
+        `${API_BASE_URL}/assessments?${params.toString()}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -58,7 +58,7 @@ class AssessmentService {
   async getAssessmentById(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments/${assessmentId}`,
+        `${API_BASE_URL}/assessments/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -71,7 +71,7 @@ class AssessmentService {
   async getAssessmentQuestions(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments/${assessmentId}/questions`,
+        `${API_BASE_URL}/assessments/${assessmentId}/questions`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -87,7 +87,7 @@ class AssessmentService {
   async getAssessmentWithQuestions(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments/${assessmentId}/with-questions`,
+        `${API_BASE_URL}/assessments/${assessmentId}/with-questions`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -100,7 +100,7 @@ class AssessmentService {
   async updateAssessment(assessmentId: string, updates: any): Promise<any> {
     try {
       const response = await axios.put(
-        `${API_BASE_URL}/api/assessments/${assessmentId}`,
+        `${API_BASE_URL}/assessments/${assessmentId}`,
         updates,
         { headers: this.getAuthHeaders() }
       );
@@ -114,7 +114,7 @@ class AssessmentService {
   async deleteAssessment(assessmentId: string): Promise<any> {
     try {
       const response = await axios.delete(
-        `${API_BASE_URL}/api/assessments/${assessmentId}`,
+        `${API_BASE_URL}/assessments/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -131,7 +131,7 @@ class AssessmentService {
       if (filters.status) params.append('status', filters.status);
       
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments/export/csv?${params.toString()}`,
+        `${API_BASE_URL}/assessments/export/csv?${params.toString()}`,
         { 
           headers: this.getAuthHeaders(),
           responseType: 'blob'
@@ -148,7 +148,7 @@ class AssessmentService {
   async importAssessmentsFromCSV(rows: any[]): Promise<any> {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/assessments/import/csv`,
+        `${API_BASE_URL}/assessments/import/csv`,
         { rows },
         { headers: this.getAuthHeaders() }
       );

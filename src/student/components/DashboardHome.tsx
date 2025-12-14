@@ -311,117 +311,118 @@ const DashboardHome: React.FC = () => {
           <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>Loading performance data...</div>
         ) : performanceData.length > 0 ? (
           <div style={{ width: '100%', padding: '20px 0' }}>
-            {/* Chart Container */}
-            <div style={{ 
-              position: 'relative', 
-              width: '100%', 
-              height: '300px',
-              display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'space-around',
-              padding: '20px 40px 40px 60px',
-              borderBottom: '2px solid #E5E7EB',
-              borderLeft: '2px solid #E5E7EB'
-            }}>
-              {/* Y-axis labels */}
-              <div style={{
+            {(() => {
+              const isMobile = typeof window !== 'undefined' && window.innerWidth <= 480;
+              const containerStyle: React.CSSProperties = {
+                position: 'relative',
+                width: '100%',
+                height: isMobile ? 220 : 300,
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'space-around',
+                padding: isMobile ? '12px 16px 28px 36px' : '20px 40px 40px 60px',
+                borderBottom: '2px solid #E5E7EB',
+                borderLeft: '2px solid #E5E7EB'
+              };
+              const yAxisStyle: React.CSSProperties = {
                 position: 'absolute',
                 left: 0,
                 top: 0,
-                bottom: 40,
+                bottom: isMobile ? 28 : 40,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                width: '40px',
-                paddingRight: '10px',
+                width: isMobile ? 32 : 40,
+                paddingRight: '8px',
                 alignItems: 'flex-end'
-              }}>
-                {[100, 80, 60, 40, 20, 0].map((value) => (
-                  <span key={value} style={{
-                    fontSize: '12px',
-                    color: '#6B7280',
-                    fontWeight: 500
-                  }}>
-                    {value}
-                  </span>
-                ))}
-              </div>
-
-              {/* Bars */}
-              {performanceData.map((subject, index) => {
-                const clamped = Math.max(0, Math.min(100, subject.score));
-                const barHeight = (clamped / 100) * 240; // Max height is 240px (300px - 60px padding)
-                const barWidth = Math.max(60, Math.min(120, 400 / performanceData.length));
-                
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      flex: 1,
-                      maxWidth: '150px',
-                      height: '100%',
-                      justifyContent: 'flex-end',
-                      position: 'relative'
-                    }}
-                  >
-                    {/* Bar */}
-                    <div
-                      style={{
-                        width: `${barWidth}px`,
-                        height: `${barHeight}px`,
-                        minHeight: clamped > 0 ? '4px' : '0',
-                        background: '#9768E1',
-                        borderRadius: '4px 4px 0 0',
-                        transition: 'height 0.8s ease',
-                        position: 'relative',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 4px rgba(151, 104, 225, 0.2)'
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.opacity = '0.8';
-                        (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.opacity = '1';
-                        (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1)';
-                      }}
-                    >
-                      {/* Value label on top of bar */}
-                      {clamped > 0 && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '-25px',
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: '#111827',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {clamped}%
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* X-axis label */}
-                    <div style={{
-                      marginTop: '8px',
-                      fontSize: '12px',
-                      color: '#374151',
-                      fontWeight: 500,
-                      textAlign: 'center',
-                      wordBreak: 'break-word',
-                      maxWidth: `${barWidth}px`
-                    }}>
-                      {subject.subject}
-                    </div>
+              };
+              return (
+                <div style={containerStyle}>
+                  <div style={yAxisStyle}>
+                    {[100, 80, 60, 40, 20, 0].map((value) => (
+                      <span key={value} style={{
+                        fontSize: isMobile ? '10px' : '12px',
+                        color: '#6B7280',
+                        fontWeight: 500
+                      }}>
+                        {value}
+                      </span>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+                  {performanceData.map((subject, index) => {
+                    const clamped = Math.max(0, Math.min(100, subject.score));
+                    const maxHeight = (isMobile ? 180 : 240);
+                    const barHeight = (clamped / 100) * maxHeight;
+                    const barWidth = isMobile
+                      ? Math.max(24, Math.min(60, 240 / Math.max(1, performanceData.length)))
+                      : Math.max(60, Math.min(120, 400 / Math.max(1, performanceData.length)));
+                    return (
+                      <div
+                        key={index}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          flex: 1,
+                          maxWidth: isMobile ? '120px' : '150px',
+                          height: '100%',
+                          justifyContent: 'flex-end',
+                          position: 'relative'
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${barWidth}px`,
+                            height: `${barHeight}px`,
+                            minHeight: clamped > 0 ? '4px' : '0',
+                            background: '#9768E1',
+                            borderRadius: '4px 4px 0 0',
+                            transition: 'height 0.8s ease',
+                            position: 'relative',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(151, 104, 225, 0.2)'
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.opacity = '0.8';
+                            (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.opacity = '1';
+                            (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1)';
+                          }}
+                        >
+                          {clamped > 0 && (
+                            <div style={{
+                              position: 'absolute',
+                              top: isMobile ? -20 : -25,
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              fontSize: isMobile ? '11px' : '12px',
+                              fontWeight: 600,
+                              color: '#111827',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {clamped}%
+                            </div>
+                          )}
+                        </div>
+                        <div style={{
+                          marginTop: '8px',
+                          fontSize: isMobile ? '11px' : '12px',
+                          color: '#374151',
+                          fontWeight: 500,
+                          textAlign: 'center',
+                          wordBreak: 'break-word',
+                          maxWidth: `${barWidth}px`
+                        }}>
+                          {subject.subject}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* Legend */}
             <div style={{

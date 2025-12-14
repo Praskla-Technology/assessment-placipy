@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AuthService from './auth.service';
 
-const API_BASE_URL = import.meta.env.VITE_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 class StudentAssessmentService {
   private getAuthHeaders() {
@@ -24,7 +24,7 @@ class StudentAssessmentService {
       if (filters?.limit) params.append('limit', filters.limit.toString());
       if (filters?.lastKey) params.append('lastKey', filters.lastKey);
 
-      const url = `${API_BASE_URL}/api/assessments?${params.toString()}`;
+      const url = `${API_BASE_URL}/assessments?${params.toString()}`;
       console.log('Fetching assessments from:', url);
       
       const response = await axios.get(url, { headers: this.getAuthHeaders() });
@@ -63,7 +63,7 @@ class StudentAssessmentService {
       }
       
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments/${assessmentId}`,
+        `${API_BASE_URL}/assessments/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -88,7 +88,7 @@ class StudentAssessmentService {
       }
       
       const response = await axios.get(
-        `${API_BASE_URL}/api/assessments/${assessmentId}/questions`,
+        `${API_BASE_URL}/assessments/${assessmentId}/questions`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -114,7 +114,7 @@ class StudentAssessmentService {
       
       console.log(`Fetching assessment with questions: ${assessmentId}`);
       const response = await axios.get(
-        `${API_BASE_URL}/api/student-assessments/${assessmentId}/with-questions`,
+        `${API_BASE_URL}/student-assessments/${assessmentId}/with-questions`,
         { headers: this.getAuthHeaders() }
       );
       console.log('Assessment with questions response:', response.data);

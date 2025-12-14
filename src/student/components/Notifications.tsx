@@ -78,8 +78,8 @@ const Notifications: React.FC = () => {
   };
 
   const handleMarkAsRead = async (notification: Notification) => {
-    const id = notification.SK ? String(notification.SK).replace('NOTIF#', '') : notification.createdAt;
-    await markAsRead(id);
+    const id = notification.SK || notification.createdAt;
+    await markAsRead(String(id));
   };
 
   const handleMarkAllAsRead = async () => {

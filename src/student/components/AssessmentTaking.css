@@ -1052,9 +1052,9 @@ input:checked + .slider:before {
   }
   
   .code-editor {
-    min-height: 1100px; /* Restore original height for mobile */
-    font-size: 14px;
-    padding: 15px;
+    min-height: 360px;
+    font-size: 13px;
+    padding: 12px;
   }
   
   /* Mobile styles for language selector */
@@ -1075,6 +1075,8 @@ input:checked + .slider:before {
   
   .language-options {
     gap: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
   
   .language-option-btn {
@@ -1090,13 +1092,13 @@ input:checked + .slider:before {
   
   /* Mobile styles for navigation buttons */
   .navigation-buttons {
-    padding: 0 15px;
+    padding: 0 12px;
   }
   
   .nav-btn, .submit-btn.small {
-    padding: 6px 12px;
+    padding: 6px 10px;
     font-size: 0.85rem;
-    min-width: 100px;
+    min-width: 96px;
   }
   
   /* Mobile styles for Next Challenge button in right corner */
@@ -1108,6 +1110,16 @@ input:checked + .slider:before {
     font-size: 0.8rem;
     min-width: auto;
     width: auto;
+  }
+  .coding-content {
+    padding: 12px;
+    gap: 12px;
+  }
+  .editor-header {
+    padding: 10px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }
 

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 export interface Student {
   email: string;
@@ -35,7 +35,7 @@ const getAuthHeader = () => {
 export const getAllStudents = async (): Promise<Student[]> => {
   try {
     const response = await axios.get(
-      `${API_BASE_URL}/api/students`,
+      `${API_BASE_URL}/students`,
       getAuthHeader()
     );
 
@@ -54,7 +54,7 @@ export const getStudentByEmail = async (email: string): Promise<Student> => {
     const encodedEmail = encodeURIComponent(email);
 
     const response = await axios.get(
-      `${API_BASE_URL}/api/students/${encodedEmail}`,
+      `${API_BASE_URL}/students/${encodedEmail}`,
       getAuthHeader()
     );
 
@@ -73,7 +73,7 @@ export const upsertStudent = async (
 ): Promise<Student> => {
   try {
     const response = await axios.post(
-      `${API_BASE_URL}/api/students`,
+      `${API_BASE_URL}/students`,
       studentData,
       getAuthHeader()
     );
@@ -96,7 +96,7 @@ export const updateStudentStatus = async (
     const encodedEmail = encodeURIComponent(email);
 
     const response = await axios.put(
-      `${API_BASE_URL}/api/students/${encodedEmail}/status`,
+      `${API_BASE_URL}/students/${encodedEmail}/status`,
       { status },
       getAuthHeader()
     );
@@ -118,7 +118,7 @@ export const deleteStudent = async (email: string): Promise<void> => {
     const encodedEmail = encodeURIComponent(email);
 
     await axios.delete(
-      `${API_BASE_URL}/api/students/${encodedEmail}`,
+      `${API_BASE_URL}/students/${encodedEmail}`,
       getAuthHeader()
     );
 

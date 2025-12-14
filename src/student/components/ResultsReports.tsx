@@ -107,41 +107,79 @@ const ResultsReports: React.FC = () => {
       <div className="scores-tab">
         <h3>Your Test Scores</h3>
         {testResults.length > 0 ? (
-          <div className="results-table">
-            <div className="table-header" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
-              <div>Assessment Title</div>
-              <div>Score / Max</div>
-              <div>Percentage</div>
-              <div>Accuracy</div>
-              <div>Submitted At</div>
-              <div>Action</div>
-            </div>
-            {testResults.map((result: any, index: number) => (
-              <div key={index} className="table-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
-                <div>{result.assessmentId || 'Assessment'}</div>
-                <div className="score">{result.score || 0} / {result.maxScore || 0}</div>
-                <div>{result.percentage || 0}%</div>
-                <div>{result.accuracy || 0}%</div>
-                <div>{result.submittedAt ? new Date(result.submittedAt).toLocaleString() : 'N/A'}</div>
-                <div>
-                  <button 
-                    onClick={() => handleViewResult(result)}
-                    style={{
-                      padding: '6px 12px',
-                      background: '#9768E1',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    View Result
-                  </button>
+          (() => {
+            const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+            if (isMobile) {
+              return (
+                <div className="results-list-mobile">
+                  {testResults.map((result: any, index: number) => (
+                    <div key={index} className="result-card">
+                      <div className="result-title">{result.assessmentId || 'Assessment'}</div>
+                      <div className="result-meta">
+                        <div><strong>Score:</strong> <span className="score">{result.score || 0} / {result.maxScore || 0}</span></div>
+                        <div><strong>Percentage:</strong> {result.percentage || 0}%</div>
+                        <div><strong>Accuracy:</strong> {result.accuracy || 0}%</div>
+                        <div><strong>Submitted:</strong> {result.submittedAt ? new Date(result.submittedAt).toLocaleString() : 'N/A'}</div>
+                      </div>
+                      <div className="result-action">
+                        <button 
+                          onClick={() => handleViewResult(result)}
+                          style={{
+                            padding: '8px 14px',
+                            background: '#9768E1',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          View Result
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              );
+            }
+            return (
+              <div className="results-table">
+                <div className="table-header" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                  <div>Assessment Title</div>
+                  <div>Score / Max</div>
+                  <div>Percentage</div>
+                  <div>Accuracy</div>
+                  <div>Submitted At</div>
+                  <div>Action</div>
+                </div>
+                {testResults.map((result: any, index: number) => (
+                  <div key={index} className="table-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                    <div>{result.assessmentId || 'Assessment'}</div>
+                    <div className="score">{result.score || 0} / {result.maxScore || 0}</div>
+                    <div>{result.percentage || 0}%</div>
+                    <div>{result.accuracy || 0}%</div>
+                    <div>{result.submittedAt ? new Date(result.submittedAt).toLocaleString() : 'N/A'}</div>
+                    <div>
+                      <button 
+                        onClick={() => handleViewResult(result)}
+                        style={{
+                          padding: '6px 12px',
+                          background: '#9768E1',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        View Result
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()
         ) : (
           <div className="no-results">
             <p>No assessment results available yet.</p>
