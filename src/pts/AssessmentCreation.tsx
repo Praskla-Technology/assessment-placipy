@@ -83,7 +83,7 @@ const AssessmentCreation: React.FC = () => {
     description: "",
     duration: 60,
     instructions: "",
-    department: "",
+    department: user?.department || "",
     difficulty: "",
     category: ["MCQ", "Coding"], // Initialize with both categories
     questions: [],
@@ -159,6 +159,9 @@ const AssessmentCreation: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const departments = ["Computer Science", "Information Technology", "Electronics", "Mechanical", "Civil", "All Departments"];
+  
+  // Get the user's department from their profile
+  const userDepartment = user?.department || "";
   // Updated categories to match requirements
   const categories = ["MCQ", "Coding"];
 
@@ -985,17 +988,14 @@ const AssessmentCreation: React.FC = () => {
 
             <div className="pts-form-group">
               <label className="pts-form-label">Department *</label>
-              <select
-                className="pts-form-select"
+              <div className="pts-form-display">
+                {userDepartment || assessmentData.department || "Loading..."}
+              </div>
+              <input
+                type="hidden"
                 value={assessmentData.department}
-                onChange={(e) => handleInputChange("department", e.target.value)}
-                required
-              >
-                <option value="">Select Department</option>
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
+                name="department"
+              />
             </div>
 
             <div className="pts-form-group">

@@ -476,12 +476,31 @@ class ResultsService {
             const requesterDomain = this.getDomainFromEmail(requesterEmail);
             console.log('Requester domain:', requesterDomain);
             
-            // Validate table name
-            if (!this.resultsTableName) {
-                throw new Error('Results table name is not configured');
+            // Validate table names
+            if (!this.resultsTableName || !this.studentsTableName) {
+                throw new Error('Table names are not configured');
             }
             
-            // Query results for this domain only
+            // Step 1: Get students from Student Management (source of truth)
+            const studentParams = {
+                TableName: this.studentsTableName,
+                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+                ExpressionAttributeValues: {
+                    ':pk': `CLIENT#${requesterDomain}`,
+                    ':skPrefix': 'STUDENT#'
+                }
+            };
+            
+            console.log('Querying students for domain:', `CLIENT#${requesterDomain}`);
+            const studentResult = await dynamodb.query(studentParams).promise();
+            const studentList = studentResult.Items || [];
+            console.log('Found students in Student Management:', studentList.length);
+            
+            // Create a set of valid student emails from Student Management
+            const validStudentEmails = new Set(studentList.map(student => student.email?.toLowerCase()));
+            console.log('Valid student emails:', Array.from(validStudentEmails));
+            
+            // Step 2: Query results for this domain only
             const resultsParams = {
                 TableName: this.resultsTableName,
                 KeyConditionExpression: 'PK = :pk',
@@ -490,30 +509,39 @@ class ResultsService {
                 }
             };
             
-            console.log('Query params:', JSON.stringify(resultsParams, null, 2));
+            console.log('Query params for results:', JSON.stringify(resultsParams, null, 2));
             const resultsResult = await dynamodb.query(resultsParams).promise();
-            const results = resultsResult.Items || [];
-            console.log('Found results:', results.length);
+            const allResults = resultsResult.Items || [];
+            console.log('Found all results:', allResults.length);
             
-            // Enrich results with student data (roll numbers, etc.)
-            const enrichedResults = [];
-            for (const result of results) {
-                // Skip results without email
+            // Step 3: Filter results to only include those from students in Student Management
+            const filteredResults = allResults.filter(result => {
                 if (!result.email) {
                     console.log('Skipping result without email:', result);
-                    continue;
+                    return false;
                 }
                 
                 // Validate result email format
                 if (!result.email.includes('@')) {
                     console.log('Skipping result with invalid email format:', result.email);
-                    continue;
+                    return false;
                 }
                 
-                const studentData = await this.getStudentByEmail(result.email);
+                // Check if the student exists in Student Management
+                return validStudentEmails.has(result.email.toLowerCase());
+            });
+            
+            console.log('Filtered results count (only students from Student Management):', filteredResults.length);
+            
+            // Enrich filtered results with student data (roll numbers, etc.)
+            const enrichedResults = [];
+            for (const result of filteredResults) {
+                // Get student data from our student list instead of separate query
+                const studentData = studentList.find(student => student.email?.toLowerCase() === result.email?.toLowerCase());
                 enrichedResults.push({
                     ...result,
-                    rollNumber: studentData?.rollNumber || 'N/A'
+                    rollNumber: studentData?.rollNumber || 'N/A',
+                    department: studentData?.department || result.department || 'Unknown'
                 });
             }
             
@@ -573,21 +601,60 @@ class ResultsService {
             });
             const overallAvgScore = scoreCount > 0 ? Math.round((totalScore / scoreCount) * 100) / 100 : 0;
             
+            // Aggregate results by student to avoid duplicates
+            const studentResultsMap = new Map();
+            for (const result of enrichedResults) {
+                const email = result.email;
+                if (studentResultsMap.has(email)) {
+                    const existing = studentResultsMap.get(email);
+                    // Update with cumulative data
+                    existing.assessmentsTaken += 1;
+                    existing.totalScore += result.percentage || 0;
+                    existing.totalMarks += result.score || 0;
+                    // Update last active date if this is more recent
+                    if (new Date(result.submittedAt) > new Date(existing.lastActive)) {
+                        existing.lastActive = result.submittedAt;
+                    }
+                    // Keep the highest score
+                    if ((result.percentage || 0) > existing.highestScore) {
+                        existing.highestScore = result.percentage || 0;
+                    }
+                } else {
+                    studentResultsMap.set(email, {
+                        email: result.email,
+                        name: result.Name || result.email,
+                        rollNo: result.rollNumber || 'N/A',
+                        department: result.department || 'Unknown',
+                        assessmentsTaken: 1,
+                        totalScore: result.percentage || 0,
+                        totalMarks: result.score || 0,
+                        highestScore: result.percentage || 0,
+                        lastActive: result.submittedAt
+                    });
+                }
+            }
+            
+            // Calculate average scores for each student and create top performers list
+            const studentsWithAvg = Array.from(studentResultsMap.values()).map(student => ({
+                ...student,
+                averageScore: student.totalScore / student.assessmentsTaken
+            }));
+            
             // Get top performers with roll numbers
-            const topPerformers = enrichedResults
-                .sort((a: any, b: any) => (b.percentage || 0) - (a.percentage || 0))
+            const topPerformers = studentsWithAvg
+                .sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0))
                 .slice(0, 5)
-                .map((result: any, index: number) => ({
+                .map((student, index) => ({
                     id: index + 1,
-                    name: result.Name || result.email,
-                    rollNo: result.rollNumber || 'N/A',
-                    department: result.department || 'Unknown',
+                    name: student.name,
+                    rollNo: student.rollNo,
+                    department: student.department || 'Unknown',
                     batch: 'N/A',
-                    assessmentsTaken: 1,
-                    averageScore: result.percentage || 0,
-                    totalMarks: result.score || 0,
+                    assessmentsTaken: student.assessmentsTaken,
+                    averageScore: Math.round(student.averageScore * 100) / 100,
+                    totalMarks: student.totalMarks,
                     rank: index + 1,
-                    lastActive: result.submittedAt
+                    lastActive: student.lastActive
                 }));
 
             return {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Filter, X, Save, Upload } from 'lucide-react';
+import { useUser } from '../contexts/UserContext';
 import * as XLSX from '@e965/xlsx';
 import {
   getAllStudents,
@@ -8,6 +9,7 @@ import {
   deleteStudent,
   type Student
 } from '../services/student.service';
+import AuthService from '../services/auth.service';
 
 // Student interface is imported from student.service
 
@@ -15,7 +17,6 @@ const StudentManagement: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +24,10 @@ const StudentManagement: React.FC = () => {
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importResults, setImportResults] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const [domainAlert, setDomainAlert] = useState<{ show: boolean; emailDomain: string; userDomain: string }>({ show: false, emailDomain: '', userDomain: '' });
+  
+  const { user: contextUser, loading: userLoading } = useUser();
+  const [ptsProfile, setPtsProfile] = useState<any>(null);
+  const [ptsProfileLoading, setPtsProfileLoading] = useState(true);
 
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -36,7 +41,40 @@ const StudentManagement: React.FC = () => {
     status: 'Active' as 'Active' | 'Inactive'
   });
 
-  const departments = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology'];
+  const [departments] = useState(['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Information Technology']);
+  
+  // Get PTS profile on component mount
+  useEffect(() => {
+    const fetchPtsProfile = async () => {
+      if (contextUser) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            const profile = await AuthService.getUserProfile(token);
+            setPtsProfile(profile);
+            // Set department from profile, checking for different possible field names
+            const profileAny: any = profile;
+            const deptValue = profileAny.department || profileAny.dept || profileAny.userDepartment || profileAny.userDept || '';
+            setFormData(prev => ({
+              ...prev,
+              department: deptValue
+            }));
+          }
+        } catch (error) {
+          console.error('Error fetching PTS profile:', error);
+        } finally {
+          setPtsProfileLoading(false);
+        }
+      } else {
+        setPtsProfileLoading(false);
+      }
+    };
+    
+    fetchPtsProfile();
+  }, [contextUser]);
+  
+  // Get department from PTS profile
+  const ptsDepartment = ptsProfile?.department || 'Computer Science';
 
   // Unified save handler: used for both Add and Edit flows
   const handleSaveStudent = async () => {
@@ -49,9 +87,9 @@ const StudentManagement: React.FC = () => {
 
     // Check if the email domain matches the logged-in user's domain
     const emailDomain = formData.email.split('@')[1];
-    // In a real app, you would get the logged-in user's domain from auth context
-    // For now, we'll simulate this by extracting domain from the first student in the list
-    const userDomain = students.length > 0 ? students[0].email.split('@')[1] : emailDomain;
+    
+    // Get the logged-in user's domain from context
+    const userDomain = contextUser?.email ? contextUser.email.split('@')[1] : 'unknown';
     
     if (emailDomain !== userDomain) {
       const confirm = window.confirm(
@@ -68,8 +106,13 @@ const StudentManagement: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      // Ensure the department matches the PTS user's department when adding a new student
+      const studentData = isEditing 
+        ? formData 
+        : { ...formData, department: ptsProfile?.department || formData.department };
+
       // upsertStudent works for both create and update
-      await upsertStudent(formData);
+      await upsertStudent(studentData);
 
       // Reload list
       await loadStudents();
@@ -157,7 +200,7 @@ const StudentManagement: React.FC = () => {
       email: '',
       name: '',
       rollNumber: '',
-      department: 'Computer Science',
+      department: ptsProfile?.department || 'Computer Science',
       phone: '',
       status: 'Active'
     });
@@ -205,7 +248,11 @@ const StudentManagement: React.FC = () => {
       student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = filterDepartment === 'all' || student.department === filterDepartment;
+    
+    // Only show students from the PTS user's department
+    const matchesDepartment = ptsProfile ? student.department === ptsProfile.department : true;
+    
+    // Keep the status filter
     const matchesStatus = filterStatus === 'all' || student.status === filterStatus;
 
     return matchesSearch && matchesDepartment && matchesStatus;
@@ -505,19 +552,7 @@ const StudentManagement: React.FC = () => {
             />
           </div>
 
-          <div className="pts-form-group">
-            <label className="pts-form-label">
-              <Filter size={16} /> Department
-            </label>
-            <select className="pts-form-select" value={filterDepartment} onChange={e => setFilterDepartment(e.target.value)}>
-              <option value="all">All Departments</option>
-              {departments.map(dept => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-          </div>
+
 
           <div className="pts-form-group">
             <label className="pts-form-label">Status</label>
@@ -778,12 +813,34 @@ const StudentManagement: React.FC = () => {
 
               <div className="pts-form-group">
                 <label className="pts-form-label">Department *</label>
-                <select className="pts-form-select" value={formData.department} onChange={e => handleFormChange('department', e.target.value)}>
+                <select 
+                  className="pts-form-select" 
+                  value={ptsProfile?.department || ptsProfile?.dept || ptsProfile?.userDepartment || ptsProfile?.userDept || formData.department} // Show profile department or form data
+                  onChange={e => handleFormChange('department', e.target.value)}
+                  disabled={!!ptsProfile} // Disable if PTS profile is loaded
+                  style={ptsProfile ? { 
+                    backgroundColor: '#f5f5f5',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none'
+                  } : {}}
+                >
                   {departments.map(dept => (
-                    <option key={dept} value={dept}>
+                    <option 
+                      key={dept} 
+                      value={dept}
+                      disabled={ptsProfile && dept !== (ptsProfile?.department || ptsProfile?.dept || ptsProfile?.userDepartment || ptsProfile?.userDept)} // Only allow PTS department if profile loaded
+                    >
                       {dept}
                     </option>
                   ))}
+                  {/* Add the profile department as an option if it's not in the predefined list */}
+                  {ptsProfile && (ptsProfile?.department || ptsProfile?.dept || ptsProfile?.userDepartment || ptsProfile?.userDept) && 
+                   !departments.includes(ptsProfile?.department || ptsProfile?.dept || ptsProfile?.userDepartment || ptsProfile?.userDept) && (
+                    <option value={ptsProfile?.department || ptsProfile?.dept || ptsProfile?.userDepartment || ptsProfile?.userDept}>
+                      {ptsProfile?.department || ptsProfile?.dept || ptsProfile?.userDepartment || ptsProfile?.userDept}
+                    </option>
+                  )}
                 </select>
               </div>
 

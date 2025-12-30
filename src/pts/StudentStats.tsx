@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { Download } from 'lucide-react';
 import AnalyticsService from '../services/analytics.service';
+import { useUser } from '../contexts/UserContext';
 
 interface StudentPerformance {
   id: number;
@@ -16,14 +17,7 @@ interface StudentPerformance {
   lastActive: string;
 }
 
-interface DepartmentStats {
-  department: string;
-  totalStudents: number;
-  activeStudents: number;
-  averageScore: number;
-  assessmentsCompleted: number;
-  participationRate: number;
-}
+
 
 interface AssessmentAnalytics {
   assessmentTitle: string;
@@ -36,47 +30,40 @@ interface AssessmentAnalytics {
 }
 
 const StudentStats: React.FC = () => {
-  const [selectedView, setSelectedView] = useState<'overview' | 'departments' | 'assessments' | 'students'>('overview');
+  const [selectedView, setSelectedView] = useState<'overview' | 'assessments'>('overview');
   
-  const [departmentStats, setDepartmentStats] = useState<DepartmentStats[]>([]);
-  const [departmentChartData, setDepartmentChartData] = useState<any[]>([]);
   const [topPerformers, setTopPerformers] = useState<StudentPerformance[]>([]);
   const [assessmentAnalytics, setAssessmentAnalytics] = useState<AssessmentAnalytics[]>([]);
   const [performanceTrends, setPerformanceTrends] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  const { user, loading: userLoading } = useUser();
 
   // Fetch real data from backend
   useEffect(() => {
     const fetchAnalytics = async () => {
+      // Wait for user context to be loaded
+      if (userLoading) return;
+      
       try {
         setLoading(true);
         setError(null);
         
-        // Fetch PTS overview data
-        const overviewResponse = await AnalyticsService.getPTSOverview();
-        const overviewData = overviewResponse.data || {};
+        // Fetch student analytics data
+        const analyticsResponse = await AnalyticsService.getStudentAnalytics();
+        const analyticsData = analyticsResponse.data || {};
         
-        // Set department stats
-        const deptStats = overviewData.departmentStats || [];
-        setDepartmentStats(deptStats);
-        
-        // Create chart data for PieChart
-        const chartData = deptStats.map((dept: any) => ({
-          name: dept.department,
-          value: dept.totalStudents
-        }));
-        setDepartmentChartData(chartData);
+        // Process the analytics data from the updated endpoint
         
         // Set top performers
-        setTopPerformers(overviewData.topPerformers || []);
+        setTopPerformers(analyticsData.topPerformers || []);
         
         // Set assessment analytics
-        setAssessmentAnalytics(overviewData.recentAssessments || []);
+        setAssessmentAnalytics(analyticsData.assessments || []);
         
         // Create performance trends data
-        // For now, we'll create mock trend data based on the average score
-        const avgScore = overviewData.overview?.avgScore || 0;
+        const avgScore = analyticsData.avgScore || 0;
         const trendData = [
           { month: 'Jan', averageScore: Math.max(0, avgScore - 15) },
           { month: 'Feb', averageScore: Math.max(0, avgScore - 12) },
@@ -96,13 +83,14 @@ const StudentStats: React.FC = () => {
     };
 
     fetchAnalytics();
-  }, []);
+  }, [userLoading]);
 
   const getOverallStats = () => {
-    const totalStudents = departmentStats.reduce((sum, dept) => sum + dept.totalStudents, 0);
-    const totalActive = departmentStats.reduce((sum, dept) => sum + dept.activeStudents, 0);
-    const totalAssessments = departmentStats.reduce((sum, dept) => sum + dept.assessmentsCompleted, 0);
-    const avgScore = departmentStats.length > 0 ? departmentStats.reduce((sum, dept) => sum + dept.averageScore, 0) / departmentStats.length : 0;
+    // Calculate stats from available data
+    const totalStudents = topPerformers.length;
+    const totalActive = topPerformers.filter(student => student.assessmentsTaken > 0).length;
+    const totalAssessments = assessmentAnalytics.reduce((sum, assessment) => sum + assessment.totalParticipants, 0);
+    const avgScore = totalStudents > 0 ? topPerformers.reduce((sum, student) => sum + student.averageScore, 0) / totalStudents : 0;
     
     return {
       totalStudents,
@@ -120,10 +108,10 @@ const StudentStats: React.FC = () => {
   const handleExportStudents = () => {
     try {
       // Create CSV content
-      let csvContent = "Department,Total Students,Active Students,Average Score,Assessments Completed\n";
+      let csvContent = "Name,Roll No,Department,Average Score,Assessments Taken\n";
       
-      departmentStats.forEach(dept => {
-        csvContent += `${dept.department},${dept.totalStudents},${dept.activeStudents},${dept.averageScore},${dept.assessmentsCompleted}\n`;
+      topPerformers.forEach(student => {
+        csvContent += `${student.name},${student.rollNo},${student.department},${student.averageScore},${student.assessmentsTaken}\n`;
       });
       
       // Add top performers section
@@ -165,7 +153,7 @@ const StudentStats: React.FC = () => {
         <div className="pts-stat-card">
           <h3>Total Students</h3>
           <div className="pts-stat-value">{overallStats.totalStudents}</div>
-          <div className="pts-stat-change">Across all departments</div>
+          <div className="pts-stat-change">Your department</div>
         </div>
         <div className="pts-stat-card">
           <h3>Active Students</h3>
@@ -180,7 +168,7 @@ const StudentStats: React.FC = () => {
         <div className="pts-stat-card">
           <h3>Average Score</h3>
           <div className="pts-stat-value">{overallStats.avgScore}%</div>
-          <div className="pts-stat-change">All departments</div>
+          <div className="pts-stat-change">Your department</div>
         </div>
       </div>
 
@@ -198,35 +186,12 @@ const StudentStats: React.FC = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Department Distribution */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-        <div className="pts-form-container">
-          <h3 className="pts-form-title">Student Distribution by Department</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={departmentChartData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value }) => `${name ? name.substring(0,3) : 'N/A'}: ${value}`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {departmentStats.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
+      {/* Performance Overview */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }}>
         <div className="pts-form-container">
           <h3 className="pts-form-title">Top Performers</h3>
           <div style={{ maxHeight: "250px", overflowY: "auto" }}>
-            {topPerformers.slice(0, 5).map((student, index) => (
+            {topPerformers.slice(0, 5).map((student: StudentPerformance, index: number) => (
               <div key={student.id} style={{ 
                 display: "flex", 
                 justifyContent: "space-between", 
@@ -259,44 +224,14 @@ const StudentStats: React.FC = () => {
     </div>
   );
 
-  const renderDepartmentsTab = () => (
-    <div className="pts-fade-in">
-      <div className="pts-form-container">
-        <h3 className="pts-form-title">Department Performance Analysis</h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={departmentStats}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="department" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="averageScore" fill="#9768E1" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
 
-      <div className="pts-stats-grid">
-        {departmentStats.map((dept, index) => (
-          <div key={index} className="pts-stat-card">
-            <h3>{dept.department}</h3>
-            <div className="pts-stat-value">{dept.averageScore}%</div>
-            <div className="pts-stat-change">
-              {dept.activeStudents}/{dept.totalStudents} active students
-            </div>
-            <div style={{ fontSize: "0.9rem", color: "#A4878D", marginTop: "5px" }}>
-              {dept.assessmentsCompleted} assessments completed
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 
   const renderAssessmentsTab = () => (
     <div className="pts-fade-in">
       <div className="pts-form-container">
         <h3 className="pts-form-title">Recent Assessment Analytics</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-          {assessmentAnalytics.map((assessment, index) => (
+          {assessmentAnalytics.map((assessment: AssessmentAnalytics, index: number) => (
             <div key={index} style={{
               background: "white",
               padding: "20px", 
@@ -384,7 +319,6 @@ const StudentStats: React.FC = () => {
         <div style={{ display: "flex", gap: "10px", marginBottom: "0", flexWrap: "wrap" }}>
           {[
             { key: 'overview', label: 'Overview' },
-            { key: 'departments', label: 'Departments' },
             { key: 'assessments', label: 'Assessment Analytics' },
           ].map(tab => (
             <button
@@ -405,7 +339,7 @@ const StudentStats: React.FC = () => {
 
       {/* Tab Content */}
       {selectedView === 'overview' && renderOverviewTab()}
-      {selectedView === 'departments' && renderDepartmentsTab()}
+
       {selectedView === 'assessments' && renderAssessmentsTab()}
     </div>
   );
