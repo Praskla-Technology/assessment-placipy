@@ -338,6 +338,20 @@ async getStudentByEmail(email: string) {
             };
 
             await dynamodb.delete(params).promise();
+            
+            // Delete from Cognito as well
+            try {
+                await cognito.adminDeleteUser({
+                    UserPoolId: this.userPoolId,
+                    Username: email
+                }).promise();
+                console.log(`Successfully deleted user ${email} from Cognito`);
+            } catch (cognitoError) {
+                console.error(`Error deleting user ${email} from Cognito:`, cognitoError.message);
+                // Don't throw error here as DynamoDB deletion was successful
+                // The user may not exist in Cognito but still be in DynamoDB
+            }
+            
             return { message: 'Student deleted successfully' };
         } catch (error) {
             throw new Error('Failed to delete student: ' + error.message);
