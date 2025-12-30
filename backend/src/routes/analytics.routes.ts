@@ -68,39 +68,178 @@ async function getEmailFromRequest(req) {
 // Get student analytics
 router.get('/students', authMiddleware.authenticateToken, async (req, res) => {
     try {
-        // Scan for all students
-        const params = {
-            TableName: TABLE_NAME,
-            FilterExpression: 'begins_with(SK, :student)',
+        console.log('=== Getting Student Analytics ===');
+        console.log('Request object:', JSON.stringify(req.user, null, 2));
+        
+        // Get requester email for domain-based filtering
+        const requesterEmail = await getEmailFromRequest(req);
+        console.log('Requester email:', requesterEmail);
+        
+        // Validate email format
+        if (!requesterEmail || !requesterEmail.includes('@')) {
+            throw new Error('Invalid email format: ' + requesterEmail);
+        }
+        
+        // Extract domain from requester's email
+        const requesterDomain = requesterEmail.split('@')[1];
+        console.log('Requester domain:', requesterDomain);
+        
+        // Validate table names
+        const resultsTableName = process.env.RESULTS_TABLE_NAME || 'Assessment_placipy_asseessment_result';
+        const studentsTableName = process.env.DYNAMODB_TABLE_NAME || 'Assesment_placipy';
+        
+        if (!resultsTableName || !studentsTableName) {
+            throw new Error('Table names are not configured');
+        }
+        
+        // Step 1: Fetch Student Management data first and filter by requester domain and owner email
+        // Query all students in the requester's domain
+        const studentParams = {
+            TableName: studentsTableName,
+            KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
             ExpressionAttributeValues: {
-                ':student': 'STUDENT#'
+                ':pk': `CLIENT#${requesterDomain}`,
+                ':skPrefix': 'STUDENT#'
             }
         };
-
-        const result = await dynamodb.scan(params).promise();
-        const students = result.Items || [];
-
-        // Count by department
-        const departmentCount = students.reduce((acc: any, student: any) => {
-            const dept = student.department || 'Unknown';
-            acc[dept] = (acc[dept] || 0) + 1;
-            return acc;
-        }, {});
-
-        // Count by status
-        const activeCount = students.filter((s: any) => s.status === 'Active').length;
-
+        
+        console.log('Querying students for domain:', `CLIENT#${requesterDomain}`);
+        const studentResult = await dynamodb.query(studentParams).promise();
+        const allStudentsInDomain = studentResult.Items || [];
+        console.log('Found students in domain:', allStudentsInDomain.length);
+        
+        // Filter students by the requesting user's email (ownership)
+        const studentList = allStudentsInDomain.filter(student => student.createdBy === requesterEmail);
+        console.log('Found students owned by requester:', studentList.length);
+        
+        // Step 2: Build an email-based Map for O(1) lookups
+        const studentEmailMap = new Map();
+        for (const student of studentList) {
+            if (student.email) {
+                studentEmailMap.set(student.email.toLowerCase(), student);
+            }
+        }
+        
+        // Step 3: Query results for this domain only
+        const resultsParams = {
+            TableName: resultsTableName,
+            KeyConditionExpression: 'PK = :pk',
+            ExpressionAttributeValues: {
+                ':pk': `CLIENT#${requesterDomain}`
+            }
+        };
+        
+        console.log('Query params for results:', JSON.stringify(resultsParams, null, 2));
+        const resultsResult = await dynamodb.query(resultsParams).promise();
+        const allResults = resultsResult.Items || [];
+        console.log('Found all results:', allResults.length);
+        
+        // Step 4: Create analytics data by iterating over Student Management students
+        // and matching with results from the Results table using same email
+        const studentAnalyticsMap = new Map();
+        
+        // Initialize all students from Student Management in the analytics map
+        for (const student of studentList) {
+            if (student.email) {
+                const emailKey = student.email.toLowerCase();
+                studentAnalyticsMap.set(emailKey, {
+                    email: student.email,
+                    name: student.name || student.email,  // Identity from Student Management
+                    rollNo: student.rollNumber || 'N/A',
+                    department: student.department || 'Unknown',
+                    batch: student.batch || 'N/A',
+                    assessmentsTaken: 0,
+                    totalScore: 0,
+                    totalMarks: 0,
+                    highestScore: 0,
+                    lastActive: null,
+                    averageScore: 0
+                });
+            }
+        }
+        
+        // Process results and aggregate performance data only for matched students
+        for (const result of allResults) {
+            if (!result.email) continue;
+            
+            const emailKey = result.email.toLowerCase();
+            
+            // Only process results that map to a Student Management student
+            if (studentEmailMap.has(emailKey)) {
+                const studentAnalytics = studentAnalyticsMap.get(emailKey);
+                if (studentAnalytics) {
+                    // Aggregate performance data
+                    studentAnalytics.assessmentsTaken += 1;
+                    studentAnalytics.totalScore += result.percentage || 0;
+                    studentAnalytics.totalMarks += result.score || 0;
+                    
+                    // Update highest score
+                    if ((result.percentage || 0) > studentAnalytics.highestScore) {
+                        studentAnalytics.highestScore = result.percentage || 0;
+                    }
+                    
+                    // Update last active date if this is more recent
+                    if (result.submittedAt && (!studentAnalytics.lastActive || new Date(result.submittedAt) > new Date(studentAnalytics.lastActive))) {
+                        studentAnalytics.lastActive = result.submittedAt;
+                    }
+                }
+            }
+        }
+        
+        // Calculate average scores for each student
+        for (const [emailKey, studentAnalytics] of studentAnalyticsMap) {
+            if (studentAnalytics.assessmentsTaken > 0) {
+                studentAnalytics.averageScore = studentAnalytics.totalScore / studentAnalytics.assessmentsTaken;
+            }
+        }
+        
+        // Convert to array and create top performers list
+        const allStudentsWithAnalytics = Array.from(studentAnalyticsMap.values());
+        
+        // Get top performers sorted by averageScore
+        const topPerformers = allStudentsWithAnalytics
+            .filter(student => student.assessmentsTaken > 0)  // Only students who have taken assessments
+            .sort((a, b) => b.averageScore - a.averageScore)
+            .slice(0, 5)
+            .map((student, index) => ({
+                id: index + 1,
+                name: student.name,  // From Student Management (source of truth)
+                rollNo: student.rollNo,  // From Student Management
+                department: student.department,  // From Student Management
+                batch: student.batch,  // From Student Management
+                assessmentsTaken: student.assessmentsTaken,
+                averageScore: Math.round(student.averageScore * 100) / 100,
+                totalMarks: student.totalMarks,
+                rank: index + 1,
+                lastActive: student.lastActive
+            }));
+        
+        // Calculate overall statistics
+        const activeStudents = allStudentsWithAnalytics.filter(s => s.assessmentsTaken > 0);
+        const totalActive = activeStudents.length;
+        
+        let totalScore = 0;
+        let totalAssessments = 0;
+        for (const student of activeStudents) {
+            totalScore += student.averageScore;
+            totalAssessments += student.assessmentsTaken;
+        }
+        const overallAvgScore = totalActive > 0 ? Math.round((totalScore / totalActive) * 100) / 100 : 0;
+        
         res.json({
             success: true,
             data: {
-                totalStudents: students.length,
-                activeStudents: activeCount,
-                departmentCounts: departmentCount,
-                students: students.slice(0, 100) // Limit to 100 for performance
+                totalStudents: allStudentsWithAnalytics.length,
+                activeStudents: totalActive,
+                totalAssessments: totalAssessments,
+                avgScore: overallAvgScore,
+                topPerformers,
+                assessments: [] // Will be populated with recent assessments if needed
             }
         });
     } catch (error) {
         console.error('Error getting student analytics:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
             message: 'Failed to retrieve student analytics',

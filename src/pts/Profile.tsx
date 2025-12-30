@@ -389,19 +389,9 @@ const Profile: React.FC = () => {
 
           <div className="pts-form-group">
             <label className="pts-form-label">Department</label>
-            {isEditing.personal ? (
-              <select
-                className="pts-form-select"
-                value={personalInfo.department}
-                onChange={(e) => handlePersonalInfoChange('department', e.target.value)}
-              >
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="pts-form-display">{personalInfo.department}</div>
-            )}
+            <div className="pts-form-display" style={{ backgroundColor: '#f5f5f5' }}>
+              {personalInfo.department}
+            </div>
           </div>
 
           <div className="pts-form-group">

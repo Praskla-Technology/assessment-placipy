@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, BarChart3 } from "lucide-react";
 import AssessmentService from "../services/assessment.service";
+import { useUser } from "../contexts/UserContext";
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user, loading: userLoading } = useUser();
   const [stats, setStats] = useState({
     totalAssessments: 0,
     activeAssessments: 0,
-    completedToday: 0  // Static value for UI
+    completedToday: 0 
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,27 @@ const Dashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // Fetch all assessments
-        const response = await AssessmentService.getAllAssessments();
+        // Wait for user data to be available
+        if (!user) {
+          throw new Error("User data not available");
+        }
+        
+        // Extract username and domain from email
+        const email = user.email;
+        const [username, domain] = email.split('@');
+        
+        console.log("Dashboard: User email:", email);
+        console.log("Dashboard: Extracted username:", username);
+        console.log("Dashboard: Extracted domain:", domain);
+        
+        // Fetch assessments with both username and domain for more specific filtering
+        const filters = {
+          username: username,
+          domain: domain,
+          limit: 500  // Increase limit from default 50 to 500
+        };
+        
+        const response = await AssessmentService.getAllAssessments(filters);
         
         console.log("Dashboard: All assessments response:", response);
         
@@ -87,7 +108,7 @@ const Dashboard: React.FC = () => {
     };
 
     loadStats();
-  }, []);
+  }, [user]);
 
   // Generate recent activities from assessments
   const generateRecentActivities = () => {
@@ -176,7 +197,7 @@ const Dashboard: React.FC = () => {
   });
 
   // Show loading state (simplified)
-  if (loading) {
+  if (loading || userLoading) {
     return (
       <div className="pts-fade-in">
         <div className="pts-welcome-container" style={{
