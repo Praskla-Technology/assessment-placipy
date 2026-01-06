@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle, Clock, Megaphone } from 'lucide-react';
 import { useNotifications } from '../../contexts/useNotifications';
 import type { Notification } from '../../services/notification.service';
+import Pagination from './Pagination';
 
 type TabKey = 'all' | 'assessments' | 'results' | 'reminders' | 'general';
 
+const PAGE_SIZE = 8;
+
 const Notifications: React.FC = () => {
-  const { notifications, markAsRead, markAllAsRead, loading } = useNotifications();
+  const { notifications, markAsRead, markAllAsRead, removeNotification, loading } = useNotifications();
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const navigate = useNavigate();
 
@@ -79,12 +82,23 @@ const Notifications: React.FC = () => {
 
   const handleMarkAsRead = async (notification: Notification) => {
     const id = notification.SK ? String(notification.SK).replace('NOTIF#', '') : notification.createdAt;
-    await markAsRead(id);
+    await removeNotification(id);
   };
 
   const handleMarkAllAsRead = async () => {
     await markAllAsRead();
   };
+
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalItems = filteredNotifications.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE;
+  const paginatedNotifications = filteredNotifications.slice(
+    startIndex,
+    startIndex + PAGE_SIZE
+  );
 
   return (
     <div className="notifications-page">
@@ -100,7 +114,7 @@ const Notifications: React.FC = () => {
         {notifications.length > 0 && (
           <button
             className="mark-read-btn"
-            onClick={handleMarkAllAsRead}
+          onClick={handleMarkAllAsRead}
             style={{ padding: '6px 12px', fontSize: '14px' }}
           >
             Mark all as read
@@ -165,8 +179,9 @@ const Notifications: React.FC = () => {
         )}
 
         {!loading && filteredNotifications.length > 0 && (
-          <div className="notifications-list">
-            {filteredNotifications.map((notification, index) => {
+          <>
+            <div className="notifications-list">
+            {paginatedNotifications.map((notification, index) => {
               const borderColor = getPriorityColor(notification.priority);
               const iconColor = borderColor;
               const isUnread = !notification.isRead;
@@ -222,6 +237,14 @@ const Notifications: React.FC = () => {
               );
             })}
           </div>
+
+          <Pagination
+            currentPage={safeCurrentPage}
+            totalItems={totalItems}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+          </>
         )}
       </div>
     </div>

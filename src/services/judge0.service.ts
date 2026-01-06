@@ -49,6 +49,8 @@ export interface SubmissionResult {
   message: string;
   time: string;
   memory: number;
+  exampleOutput?: string;
+  exampleError?: string;
 }
 
 class Judge0Service {

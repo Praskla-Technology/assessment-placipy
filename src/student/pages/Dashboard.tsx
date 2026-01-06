@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import DashboardHome from '../components/DashboardHome';
 import Assessments from '../components/Assessments';
@@ -27,10 +27,11 @@ const StudentDashboard: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const [isLoading, setIsLoading] = useState(true);
   const [isAssessmentActive, setIsAssessmentActive] = useState(false);
   const [activePopup, setActivePopup] = useState<Notification | null>(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // Navigation items (removed profile)
   const navItems = useMemo(() => [
@@ -142,6 +143,19 @@ const StudentDashboard: React.FC = () => {
   const closeSidebar = () => {
     setSidebarOpen(false);
   };
+  
+  // Handle window resize to update mobile state
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   const { user } = useUser();
 
@@ -150,19 +164,35 @@ const StudentDashboard: React.FC = () => {
   }
 
   return (
-    <div className="student-dashboard">
-      {/* Hamburger Menu Button (Visible on mobile) */}
-      <button className="hamburger-menu" onClick={toggleSidebar}>
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+    <div className={`student-dashboard ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+      {/* Hamburger Menu Button - Hidden during active assessment */}
+      {!isAssessmentActive && (
+        <button className="hamburger-menu" onClick={toggleSidebar}>
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      )}
 
       {/* Sidebar Navigation - Hidden during active assessment */}
       {!isAssessmentActive && (
         <nav className={`dashboard-sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
             <h2>Student Portal</h2>
+            {/* Toggle Menu Button - Visible on desktop */}
+            <button className="sidebar-toggle-btn" onClick={toggleSidebar}>
+              {sidebarOpen ? (
+                <>
+                  <span className="toggle-icon">&laquo;</span>
+                  <span className="toggle-text">Hide</span>
+                </>
+              ) : (
+                <>
+                  <span className="toggle-icon">&raquo;</span>
+                  <span className="toggle-text">Show</span>
+                </>
+              )}
+            </button>
           </div>
           <ul className="sidebar-menu">
             {navItems.map((item) => (
@@ -191,8 +221,10 @@ const StudentDashboard: React.FC = () => {
         </nav>
       )}
 
+
+
       {/* Overlay for mobile when sidebar is open */}
-      {sidebarOpen && !isAssessmentActive && <div className="sidebar-overlay" onClick={closeSidebar}></div>}
+      {sidebarOpen && !isAssessmentActive && isMobile && <div className="sidebar-overlay" onClick={closeSidebar}></div>}
 
       {/* Main Content Area */}
       <main className="dashboard-main">

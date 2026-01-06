@@ -8,6 +8,7 @@ interface NotificationContextType {
     fetchNotifications: () => Promise<void>;
     markAsRead: (notificationId: string) => Promise<void>;
     markAllAsRead: () => Promise<void>;
+    removeNotification: (notificationId: string) => Promise<void>;
     lastNotificationId: string | null;
     // Add method to add temporary notifications
     addTemporaryNotification: (notification: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => void;
@@ -162,6 +163,20 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         }
     }, []);
 
+    // Remove notification
+    const removeNotification = useCallback(async (notificationId: string) => {
+        try {
+            const updated = loadStoredNotifications().filter(notif => notif.SK !== notificationId);
+            saveStoredNotifications(updated);
+            tempNotificationsRef.current = updated;
+            setNotifications(updated);
+            setUnreadCount(updated.filter(n => !n.isRead).length);
+        } catch (error) {
+            console.error('Error removing notification:', error);
+            throw error;
+        }
+    }, []);
+
     // Initialize session and load notifications
     useEffect(() => {
         let sid = localStorage.getItem('notif_session_id');
@@ -240,6 +255,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                 fetchNotifications,
                 markAsRead,
                 markAllAsRead,
+                removeNotification,
                 lastNotificationId,
                 addTemporaryNotification,
                 addNotification

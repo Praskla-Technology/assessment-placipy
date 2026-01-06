@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import './AssessmentTaking.css';
 import judge0Service, { type SubmissionResult } from '../../services/judge0.service';
@@ -6,6 +6,8 @@ import StudentAssessmentService from '../../services/student.assessment.service'
 import ResultsService from '../../services/results.service';
 import { useUser } from '../../contexts/UserContext';
 import AuthService from '../../services/auth.service';
+import { getStudentByEmail } from '../../services/student.service';
+import SkeletonLoader from './SkeletonLoader';
 
 // Define interfaces for assessment data
 interface MCQOption {
@@ -83,8 +85,23 @@ const AssessmentTaking: React.FC = () => {
   // Get assessmentId from URL params
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useUser();
+
+  // Fetch student profile to get roll number
+  useEffect(() => {
+    const fetchStudentProfile = async () => {
+      if (user?.email) {
+        try {
+          const profile = await getStudentByEmail(user.email);
+          setStudentProfile(profile);
+        } catch (error) {
+          console.error('Error fetching student profile:', error);
+        }
+      }
+    };
+
+    fetchStudentProfile();
+  }, [user?.email]);
 
   // State for assessment data
   const [assessmentData, setAssessmentData] = useState<AssessmentData | null>(null);
@@ -97,7 +114,6 @@ const AssessmentTaking: React.FC = () => {
   const [focusLossCount, setFocusLossCount] = useState<number>(0);
   // State for focus loss warnings
   // Removed focus loss warning state variables as per requirement  const [focusLossWarningMessage, setFocusLossWarningMessage] = useState<string>('');
-  const [focusLossWarningType, setFocusLossWarningType] = useState<'first' | 'second' | 'third'>('first');
   
   // Updated handleTabChange function (no longer tracks tab switches)
   const handleTabChange = (newTab: 'mcq' | 'coding') => {
@@ -110,28 +126,35 @@ const AssessmentTaking: React.FC = () => {
 
   // State for timer
   const [timeLeft, setTimeLeft] = useState<number>(0); // Start with 0, will be set by assessment config
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  
+  // State for watermark
+  const [watermarkSize, setWatermarkSize] = useState<number>(12);
+  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.08);
+  // State for student profile
+  const [studentProfile, setStudentProfile] = useState<any>(null);
+  
+  // Get student roll number from profile or fallback to email
+  const studentRollNo = studentProfile?.rollNumber || user?.email || 'Reg Number';
   // State for MCQ section
   const [currentMCQIndex, setCurrentMCQIndex] = useState<number>(0);
   const [mcqAnswers, setMcqAnswers] = useState<{ [key: string]: number }>({});
 
   // State for coding section
   const [currentCodingIndex, setCurrentCodingIndex] = useState<number>(0);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('javascript');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('select');
   const [code, setCode] = useState<{ [key: string]: { [key: string]: string } }>({});
   const [executionResult, setExecutionResult] = useState<{ [key: string]: SubmissionResult }>({});
   const [testCaseResults, setTestCaseResults] = useState<{ [key: string]: { passed: boolean, actualOutput: string, expectedOutput: string, input: string }[] }>({});
-  const [allTestCasesPassed, setAllTestCasesPassed] = useState<boolean>(false);
+  // // const [allTestCasesPassed, setAllTestCasesPassed] = useState<boolean>(false); // Commenting out unused state // Commenting out unused state
   // State to track which coding challenges have been successfully executed without errors
   const [successfulExecutions, setSuccessfulExecutions] = useState<Record<string, boolean>>({});
-  const [isAutoRunEnabled, setIsAutoRunEnabled] = useState<boolean>(false); // Disable auto-run by default
+  // const [isAutoRunEnabled, setIsAutoRunEnabled] = useState<boolean>(false); // Commenting out unused state
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [customInput, setCustomInput] = useState<string>('');
 
   // State for assessment completion
-  const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false);
+  // // const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false); // Commenting out unused state // Commenting out unused state
   const [submitted, setSubmitted] = useState(false);
-  const [mcqResults, setMcqResults] = useState<any>(null);
+  const [mcqResults, setMcqResults] = useState<Record<string, any> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
  // State for showing submit button after 20 minutes (keeping for compatibility)
 const [showSubmitButton, setShowSubmitButton] = useState<boolean>(false);
@@ -168,7 +191,7 @@ useEffect(() => {
   }, []);
 
   // State for showing test cases dropdown
-  const [showTestCases, setShowTestCases] = useState<boolean>(false);
+  // // const [showTestCases, setShowTestCases] = useState<boolean>(false); // Commenting out unused state // Commenting out unused state
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -267,7 +290,7 @@ useEffect(() => {
       console.log('=== End Focus Event ===');
     };
 
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = (_: BeforeUnloadEvent) => {
       console.log('=== Before Unload Event ===');
       // Mark that we're submitting to prevent focus loss counting
       isSubmittingRef.current = true;
@@ -320,7 +343,7 @@ useEffect(() => {
       console.log('Finished cleaning up event listeners');
       console.log('=== Focus Loss Detection Effect Unmounted ===');
     };
-  }, [assessmentData, submitted]);
+  }, [assessmentData, submitted, handleFocusLoss]);
 
   // Handle submit
   const handleSubmit = useCallback(async () => {
@@ -388,7 +411,7 @@ useEffect(() => {
       }
 
       // Calculate MCQ answers in exact format
-      const mcqAnswersArray: any[] = [];
+      const mcqAnswersArray: Array<{ questionId: string; selected: string[]; isCorrect: boolean }> = [];      
       let mcqScore = 0;
       let mcqMaxScore = 0;
       let mcqCorrect = 0;
@@ -434,7 +457,7 @@ useEffect(() => {
       });
 
       // Calculate coding answers (simplified - assume all coding questions are attempted if code exists)
-      const codingAnswersArray: any[] = [];
+      const codingAnswersArray: Array<{ questionId: string; selected: string[]; isCorrect: boolean }> = [];      
       let codingScore = 0;
       let codingMaxScore = 0;
       let codingCorrect = 0;
@@ -520,7 +543,7 @@ useEffect(() => {
       setMcqResults(mcqAnswersArray.reduce((acc, ans) => {
         acc[ans.questionId] = ans;
         return acc;
-      }, {} as any));
+      }, {} as Record<string, any>));
       setSubmitted(true);
 
       console.log('Submitting assessment result...', resultData);
@@ -558,7 +581,7 @@ useEffect(() => {
       if (window.parent) {
         window.parent.postMessage({ type: 'ASSESSMENT_COMPLETED' }, '*');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving assessment result:', error);
       console.error('Error details:', {
         message: error.message,
@@ -597,7 +620,7 @@ useEffect(() => {
       console.error('Final error message:', errorMessage);
       alert(errorMessage);
     }
-  }, [assessmentData, assessmentId, code, codingChallenges, isSubmitting, mcqAnswers, navigate, selectedLanguage, submitted, successfulExecutions, timeLeft, user]);
+  }, [assessmentData, assessmentId, code, codingChallenges, isSubmitting, mcqAnswers, mcqQuestions, navigate, selectedLanguage, submitted, successfulExecutions, timeLeft, user]);
 
   // Handle focus loss event - removed warning flow
   const handleFocusLoss = useCallback(() => {
@@ -624,7 +647,7 @@ useEffect(() => {
     setFocusLossCount(newCount);
     
     console.log('=== End Focus Loss Event ===');
-  }, [focusLossCount, handleSubmit]);
+  }, [focusLossCount]);
   // Get current challenge safely
   const currentChallenge = codingChallenges[currentCodingIndex];
 
@@ -700,7 +723,7 @@ try {
 }
 `;
 
-    } catch (error) {
+    } catch (_error) {
       // If all else fails, provide a safe fallback
       return `
 console.log("React/JSX code detected:");
@@ -773,16 +796,35 @@ console.log("In a browser environment, this would render as HTML");
     try {
       setIsLoading(true);
 
-      if (inputType === 'test') {
+      // Always run test cases first if they exist, then run with custom/example input
+      if (currentChallenge.testCases && currentChallenge.testCases.length > 0) {
         // Run all test cases
         await runTestCases(currentCode);
+        
+        // After running test cases, also run with example input if requested
+        if (inputType !== 'test') {
+          let input = '';
+          if (inputType === 'example' && currentChallenge.examples && currentChallenge.examples[0]) {
+            input = currentChallenge.examples[0].input;
+          }
+
+          // Execute code using Judge0 service for additional output
+          const result = await judge0Service.executeCode(currentCode, selectedLanguage, input);
+
+          setExecutionResult(prev => ({
+            ...prev,
+            [currentChallenge.questionId]: {
+              ...prev[currentChallenge.questionId],
+              exampleOutput: result.stdout || '',
+              exampleError: result.stderr || result.compile_output || ''
+            }
+          }));
+        }
       } else {
-        // Get input based on input type
+        // No test cases, run with specified input type
         let input = '';
         if (inputType === 'example' && currentChallenge.examples && currentChallenge.examples[0]) {
           input = currentChallenge.examples[0].input;
-        } else if (inputType === 'custom') {
-          input = customInput;
         }
 
         // Execute code using Judge0 service
@@ -839,7 +881,7 @@ console.log("In a browser environment, this would render as HTML");
     } finally {
       setIsLoading(false);
     }
-  }, [currentChallenge, code, selectedLanguage, customInput]);
+  }, [currentChallenge, code, selectedLanguage, customInput, runTestCases]);
 
   // Utility function for delay
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -877,6 +919,29 @@ console.log("In a browser environment, this would render as HTML");
           }
 
           const result = await judge0Service.executeCode(codeToTest, selectedLanguage, processedInput);
+
+          // Check for compilation errors first
+          if (result.compile_output) {
+            // If there's a compilation error, show it in the actual output
+            results.push({
+              passed: false,
+              actualOutput: `❌ Compilation Error:\n${result.compile_output}`,
+              expectedOutput: testCase.expectedOutput,
+              input: testCase.input
+            });
+            continue; // Skip to next test case
+          }
+
+          // Check for runtime errors
+          if (result.stderr) {
+            results.push({
+              passed: false,
+              actualOutput: `❌ Runtime Error:\n${result.stderr}`,
+              expectedOutput: testCase.expectedOutput,
+              input: testCase.input
+            });
+            continue; // Skip to next test case
+          }
 
           // Normalize output for comparison (remove trailing newlines and whitespace)
           const actualOutput = (result.stdout || '').trim();
@@ -937,9 +1002,6 @@ console.log("In a browser environment, this would render as HTML");
         [currentChallenge.questionId]: results
       }));
 
-      // Check if all test cases passed
-      const allPassed = results.every(result => result.passed);
-      setAllTestCasesPassed(allPassed);
 
       // Mark as successful execution if no compilation or runtime errors
       setSuccessfulExecutions(prev => ({
@@ -951,7 +1013,7 @@ console.log("In a browser environment, this would render as HTML");
       setExecutionResult(prev => ({
         ...prev,
         [currentChallenge.questionId]: {
-          status: { id: allPassed ? 3 : 4, description: allPassed ? 'All Tests Passed' : 'Some Tests Failed' },
+          status: { id: results.every(result => result.passed) ? 3 : 4, description: results.every(result => result.passed) ? 'All Tests Passed' : 'Some Tests Failed' },
           stdout: `Ran ${results.length} test cases. ${results.filter(r => r.passed).length} passed, ${results.filter(r => !r.passed).length} failed.`,
           stderr: '',
           compile_output: '',
@@ -1112,6 +1174,7 @@ console.log("In a browser environment, this would render as HTML");
 
   // Languages supported by Judge0
   const languages = [
+    { id: 'select', name: 'Select Language' },
     { id: 'html', name: 'HTML' },
     { id: 'javascript', name: 'JavaScript' },
     { id: 'python', name: 'Python' },
@@ -1512,20 +1575,13 @@ useEffect(() => {
     return formattedTime;
   };
 
-  // Handle fullscreen toggle
-  const toggleFullscreen = () => {
-    if (!isFullscreen) {
-      // Enter fullscreen
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen();
-      }
-    } else {
-      // Exit fullscreen
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    }
-    setIsFullscreen(!isFullscreen);
+
+  // Format assessment ID to remove prefix and add custom format
+  const formatAssessmentId = (id: string): string => {
+    if (!id) return 'Assessment';
+    // Remove 'ASSESS_IT_' prefix and return in format 'Assessment-XXX'
+    const formatted = id.replace('ASSESS_IT_', 'Assessment-');
+    return formatted;
   };
 
   // Handle MCQ answer selection
@@ -1536,9 +1592,14 @@ useEffect(() => {
       currentQuestion: mcqQuestions[currentMCQIndex]
     });
 
+    const questionId = mcqQuestions[currentMCQIndex]?.questionId;
+    if (!questionId) {
+      return;
+    }
+
     setMcqAnswers(prev => ({
       ...prev,
-      [mcqQuestions[currentMCQIndex]?.questionId]: optionIndex
+      [questionId]: optionIndex
     }));
   };
 
@@ -1582,6 +1643,12 @@ useEffect(() => {
   const handleCodeChange = useCallback((newCode: string) => {
     // Check if the indices are valid
     if (currentCodingIndex < 0 || currentCodingIndex >= codingChallenges.length) {
+      return;
+    }
+
+    // Check if language is not selected
+    if (selectedLanguage === 'select') {
+      alert('Please select an option first before typing in the code editor.');
       return;
     }
 
@@ -1793,61 +1860,33 @@ useEffect(() => {
   }
 
   return (
-    <div className={`assessment-taking ${isFullscreen ? 'fullscreen' : ''}`}>
-      {/* Header with timer, navigation buttons, and coding controls */}
+    <div className="assessment-taking">
+    
+      {/* Diagonal watermark background */}
+      <div className="diagonal-watermark"></div>
+      
+      {/* Header with logo, assessment title, timer, and buttons */}
       <div className="assessment-header">
-        <div className="timer-section">
-          <span className={`timer ${timeLeft < 300 ? 'warning' : ''}`}>
-            {formatTime(timeLeft)}
-          </span>
+        <div className="header-left">
+          <div className="assessment-title">
+            {assessmentData ? formatAssessmentId(assessmentData.assessmentId) : 'Assessment'}
+          </div>
         </div>
-
-        <div className="header-controls">
-          {/* Navigation buttons as tabs near timer */}
-          <button
-            className={`section-btn ${activeTab === 'mcq' ? 'active' : ''} ${mcqQuestions.length === 0 ? 'disabled' : ''}`}
-            onClick={() => mcqQuestions.length > 0 && handleTabChange('mcq')}
-            disabled={mcqQuestions.length === 0}
-          >
-            MCQ
-          </button>
-          <button
-            className={`section-btn ${activeTab === 'coding' ? 'active' : ''} ${codingChallenges.length === 0 ? 'disabled' : ''}`}
-            onClick={() => codingChallenges.length > 0 && handleTabChange('coding')}
-            disabled={codingChallenges.length === 0}
-          >
-            Coding
-          </button>
-
-          {/* Language selector and Run button for coding challenges */}
-          {activeTab === 'coding' && (
-            <>
-              <select
-                className="language-selector"
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-              >
-                {languages.map(lang => (
-                  <option key={lang.id} value={lang.id}>{lang.name}</option>
-                ))}
-              </select>
-              <button
-                className="control-btn run-btn"
-                onClick={() => runCode('test')}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Running...' : 'Run Code'}
-              </button>
-            </>
-          )}
-
-          <button
-            className="fullscreen-btn"
-            onClick={toggleFullscreen}
-          >
-            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-          </button>
+        
+        <div className="header-center">
+          <div className="timer-section">
+            <span className={`timer ${timeLeft < 300 ? 'warning' : ''}`}>
+              Time Left: {formatTime(timeLeft)}
+            </span>
+          </div>
         </div>
+        
+      </div>
+
+      {/* Section buttons between header and tab container */}
+      <div className="header-section-buttons">
+        <button type="button" className={`section-btn ${activeTab === 'mcq' ? 'active' : ''}`} onClick={() => setActiveTab('mcq')}>Technical</button>
+        <button type="button" className={`section-btn ${activeTab === 'coding' ? 'active' : ''}`} onClick={() => setActiveTab('coding')}>Coding</button>
       </div>
 
       {/* Tab content */}
@@ -1866,85 +1905,81 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="question-container">
-              <div className="question-content">
-                <div className="question-text small">
-                  {mcqQuestions[currentMCQIndex]?.question}
-                </div>
+            <div className="main-content">
+              <div className="question-container">
+                <div className="question-content">
+                  <div className="question-text">
+                    {mcqQuestions[currentMCQIndex]?.question || ''}
+                  </div>
 
-                <div className="options-container small">
-                  {mcqQuestions[currentMCQIndex]?.options.map((option, index) => {
-                    // Check if this option should show feedback
-                    const questionId = mcqQuestions[currentMCQIndex]?.questionId;
-                    const showFeedback = submitted && mcqResults && mcqResults[questionId];
-                    const isSelected = mcqAnswers[questionId] === index;
-                    const isCorrectOption = Array.isArray(mcqQuestions[currentMCQIndex]?.correctAnswer)
-                      ? mcqQuestions[currentMCQIndex]?.correctAnswer.includes(String.fromCharCode(65 + index))
-                      : mcqQuestions[currentMCQIndex]?.correctAnswer === String.fromCharCode(65 + index);
+                  <div className="options-container">
+                    {(mcqQuestions[currentMCQIndex]?.options ?? []).map((option: any, index: number) => {
+                      const questionId = mcqQuestions[currentMCQIndex]?.questionId;
+                      const isSelected = questionId ? mcqAnswers[questionId] === index : false;
 
-                    let optionClass = "option-item";
-                    if (showFeedback) {
-                      if (isSelected && mcqResults[questionId].isCorrect) {
-                        optionClass += " correct-answer";
-                      } else if (isSelected && !mcqResults[questionId].isCorrect) {
-                        optionClass += " incorrect-answer";
-                      } else if (isCorrectOption) {
-                        optionClass += " correct-answer";
+                      let optionClass = "option-item";
+                      if (isSelected) {
+                        optionClass += " selected";
                       }
-                    }
 
-                    return (
-                      <div
-                        key={index}
-                        className={optionClass}
-                        onClick={() => {
-                          // Only allow selection if not submitted
-                          if (!submitted) {
-                            handleMCQAnswerSelect(index);
-                          }
-                        }}
-                      >
-                        <div className={`radio-button ${mcqAnswers[questionId] === index ? 'selected' : ''}`}>
-                          {mcqAnswers[questionId] === index && <div className="radio-button-inner"></div>}
+                      const optionText = typeof option === 'string' ? option : (option?.text ?? option?.optionText ?? '');
+
+                      return (
+                        <div
+                          key={option?.id ?? option?.optionId ?? index}
+                          className={optionClass}
+                          onClick={() => {
+                            if (!submitted && questionId) {
+                              handleMCQAnswerSelect(index);
+                            }
+                          }}
+                        >
+                          <div className={`radio-button ${isSelected ? 'selected' : ''}`}>
+                            {isSelected && <div className="radio-button-inner"></div>}
+                          </div>
+                          <span className="option-text">{optionText}</span>
                         </div>
-                        <span className="option-text">{option.text}</span>
-                        {showFeedback && isSelected && mcqResults[questionId].isCorrect && (
-                          <span className="feedback-icon correct">✓</span>
-                        )}
-                        {showFeedback && isSelected && !mcqResults[questionId].isCorrect && (
-                          <span className="feedback-icon incorrect">✗</span>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+              
             </div>
 
-            {/* Previous button on left side corner */}
-            <button
-              className="nav-btn prev left-corner"
-              onClick={() => handleMCQNavigation('prev')}
-              disabled={currentMCQIndex === 0}
-            >
-              Previous
-            </button>
-
-            {/* Save and Next button in the middle */}
-            <button
-              className="nav-btn next save-next"
-              onClick={() => {
-                // If on last MCQ question and no coding questions, submit
-                if (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0) {
-                  handleSubmit();
-                } else {
-                  handleMCQNavigation('next');
-                }
-              }}
-              disabled={isSubmitting || submitted}
-            >
-              {isSubmitting ? 'Submitting...' : (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0 ? 'Submit' : 'Save and Next')}
-            </button>
+            <div className="bottom-navigation">
+              <button
+                className="clear-response-btn"
+                onClick={() => {
+                  // Clear the current response
+                  const questionId = mcqQuestions[currentMCQIndex]?.questionId;
+                  if (questionId) {
+                    setMcqAnswers(prev => {
+                      const newAnswers = {...prev};
+                      delete newAnswers[questionId];
+                      return newAnswers;
+                    });
+                  }
+                }}
+              >
+                Clear Response
+              </button>
+              
+              <button
+                className="nav-btn save-next"
+                onClick={() => handleMCQNavigation('next')}
+              >
+                Save & Next
+              </button>
+              
+              <button
+                className="submit-btn bottom"
+                onClick={handleSubmit}
+                disabled={isSubmitting || submitted || !isSubmitEnabled}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Test'}
+              </button>
+            </div>
 
 
           </div>
@@ -1956,23 +1991,8 @@ useEffect(() => {
 
             {/* Language selection alert */}
             {showLanguageAlert && (
-              <div className="language-alert-overlay">
-                <div className="language-alert-modal">
-                  <h3>Please Select a Programming Language</h3>
-                  <p>Choose a language to start coding:</p>
-                  <div className="language-options">
-                    {languages.map(lang => (
-                      <button
-                        key={lang.id}
-                        className="language-option-btn"
-                        onClick={() => handleLanguageSelect(lang.id)}
-                      >
-                        {lang.name}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="note">You can change the language later using the dropdown in the header.</p>
-                </div>
+              <div className="simple-language-alert">
+                Please select the language
               </div>
             )}
 
@@ -2028,38 +2048,24 @@ useEffect(() => {
                 {/* Execution output section - moved to be below test cases */}
                 {(executionResult[codingChallenges[currentCodingIndex]?.questionId] || testCaseResults[codingChallenges[currentCodingIndex]?.questionId]) && (
                   <div className="output-section test-cases-section">
-                    <div className="result-header">Execution Output</div>
+                    <div className="result-header">Execution Results</div>
                     <div className="result-content">
-                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.compile_output && (
-                        <div className="error-output">
-                          <strong>Compilation Error:</strong>
-                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.compile_output}</pre>
-                        </div>
-                      )}
-                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr && (
-                        <div className="error-output">
-                          <strong>Runtime Error:</strong>
-                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr}</pre>
-                        </div>
-                      )}
-                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stdout && !testCaseResults[codingChallenges[currentCodingIndex]?.questionId] && (
-                        <div className="result-output">
-                          <strong>Output:</strong>
-                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stdout}</pre>
-                        </div>
-                      )}
-                      
-                      {/* Test Case Results */}
+                      {/* Test Case Results - Show first */}
                       {testCaseResults[codingChallenges[currentCodingIndex]?.questionId] && (
                         <div className="test-case-results">
                           <h3>Test Case Results:</h3>
+                          <div className="test-summary">
+                            {testCaseResults[codingChallenges[currentCodingIndex]?.questionId].filter(r => r.passed).length} / {testCaseResults[codingChallenges[currentCodingIndex]?.questionId].length} test cases passed
+                          </div>
                           {testCaseResults[codingChallenges[currentCodingIndex]?.questionId].map((result, index) => (
                             <div 
                               key={index} 
-                              className={result.passed ? "test-case-passed" : "test-case-failed"}
+                              className={`test-case-result ${result.passed ? "test-case-passed" : "test-case-failed"}`}
                             >
                               <div className="test-case-header">
-                                <span className="test-case-number">Test Case {index + 1}: {result.passed ? '✓ PASSED' : '✗ FAILED'}</span>
+                                <span className="test-case-number">
+                                  Test Case {index + 1}: {result.passed ? '✓ PASSED' : '✗ FAILED'}
+                                </span>
                               </div>
                               <div className="test-case-details">
                                 <div className="test-case-input">
@@ -2079,6 +2085,42 @@ useEffect(() => {
                           ))}
                         </div>
                       )}
+                      
+                      {/* Compilation Errors */}
+                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.compile_output && (
+                        <div className="error-output">
+                          <strong>❌ Compilation Error:</strong>
+                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.compile_output}</pre>
+                        </div>
+                      )}
+                      
+                      {/* Runtime Errors */}
+                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr && (
+                        <div className="error-output">
+                          <strong>❌ Runtime Error:</strong>
+                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr}</pre>
+                        </div>
+                      )}
+                      
+                      {/* Example Output (when running with example input) */}
+                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.exampleOutput && (
+                        <div className="result-output">
+                          <strong>📤 Output:</strong>
+                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.exampleOutput}</pre>
+                        </div>
+                      )}
+                      
+                      {/* Standard Output (when no test cases) */}
+                      {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stdout && 
+                       !testCaseResults[codingChallenges[currentCodingIndex]?.questionId] && 
+                       !executionResult[codingChallenges[currentCodingIndex]?.questionId]?.exampleOutput && (
+                        <div className="result-output">
+                          <strong>📤 Output:</strong>
+                          <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stdout}</pre>
+                        </div>
+                      )}
+                      
+                      {/* Success Message */}
                     </div>
                   </div>
                 )}
@@ -2089,6 +2131,25 @@ useEffect(() => {
                 <div className="editor-section">
                   <div className="editor-header">
                     <div>Code Editor</div>
+                    <select 
+                      className="language-selector"
+                      value={selectedLanguage}
+                      onChange={(e) => setSelectedLanguage(e.target.value)}
+                      disabled={isLoading}
+                    >
+                      {languages.map(lang => (
+                        <option key={lang.id} value={lang.id}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button 
+                      className="control-btn run-btn"
+                      onClick={() => runCode('custom')}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Running...' : 'Run Code'}
+                    </button>
                   </div>
                   <textarea
                     ref={codeEditorRef}
@@ -2149,16 +2210,6 @@ int main() {
                           : `Write your ${languages.find(l => l.id === selectedLanguage)?.name} code here...`}
                   />
 
-                  {/* Custom input section */}
-                  <div className="custom-input-section">
-                    <h4>Custom Input:</h4>
-                    <textarea
-                      className="custom-input"
-                      value={customInput}
-                      onChange={(e) => setCustomInput(e.target.value)}
-                      placeholder="Enter custom input for your code here..."
-                    />
-                  </div>
                 </div>
               </div>
             </div>

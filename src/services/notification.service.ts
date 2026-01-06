@@ -60,6 +60,20 @@ class NotificationService {
             throw new Error(error.response?.data?.message || 'Failed to mark all notifications as read');
         }
     }
+
+    /**
+     * Remove a notification
+     * No-op since notifications are not stored in DB
+     */
+    async removeNotification(notificationId: string): Promise<void> {
+        try {
+            // No-op since notifications are not stored in DB
+            console.log(`Removing notification ${notificationId} (no DB operation)`);
+        } catch (error: any) {
+            console.error('Error removing notification:', error);
+            throw new Error(error.response?.data?.message || 'Failed to remove notification');
+        }
+    }
 }
 
 export default new NotificationService();
