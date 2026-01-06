@@ -538,8 +538,8 @@ const StudentManagement: React.FC = () => {
 
       {/* Search and Filters */}
       <div className="pts-form-container" style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-          <div className="pts-form-group">
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'end' }}>
+          <div className="pts-form-group" style={{ flex: 1, maxWidth: '300px' }}>
             <label className="pts-form-label">
               <Search size={16} /> Search
             </label>
@@ -552,9 +552,7 @@ const StudentManagement: React.FC = () => {
             />
           </div>
 
-
-
-          <div className="pts-form-group">
+          <div className="pts-form-group" style={{ flex: 1, maxWidth: '200px' }}>
             <label className="pts-form-label">Status</label>
             <select className="pts-form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="all">All Status</option>
@@ -573,18 +571,21 @@ const StudentManagement: React.FC = () => {
             Showing {filteredStudents.length} of {students.length} students
           </div>
         </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        
+        {/* Table header line */}
+        <div style={{ height: '4px', background: 'linear-gradient(90deg, #9768E1 0%, #7c4dce 100%)', borderRadius: '2px', marginBottom: '20px' }}></div>
+        
+        <div>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #e9ecef' }}>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Email</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Roll No</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Name</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Department</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Phone</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Status</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48' }}>Actions</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '25%' }}>Email</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Roll No</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '15%' }}>Name</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Department</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Phone</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Status</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '13%' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -602,54 +603,72 @@ const StudentManagement: React.FC = () => {
                 </tr>
               ) : (
                 filteredStudents.map(student => (
-                  <tr key={student.email} style={{ borderBottom: '1px solid #e9ecef' }}>
+                  <tr key={student.email} style={{ borderBottom: '1px solid #e9ecef', height: 'auto', minHeight: '50px', verticalAlign: 'middle' }}>
                     <td style={{ 
-                      padding: '12px', 
+                      padding: '10px 12px', 
                       color: '#A4878D', 
                       fontSize: '0.9rem',
                       position: 'relative',
-                      zIndex: 1
+                      zIndex: 1,
+                      height: 'auto',
+                      verticalAlign: 'middle',
+                      lineHeight: '1.4'
                     }}>
                       {student.email}
                     </td>
                     <td style={{ 
-                      padding: '12px', 
+                      padding: '10px 12px', 
                       color: '#523C48', 
                       fontWeight: '500',
                       position: 'relative',
-                      zIndex: 1
+                      zIndex: 1,
+                      height: 'auto',
+                      verticalAlign: 'middle',
+                      lineHeight: '1.4'
                     }}>
                       {student.rollNumber}
                     </td>
                     <td style={{ 
-                      padding: '12px', 
+                      padding: '10px 12px', 
                       color: '#523C48',
                       position: 'relative',
-                      zIndex: 1
+                      zIndex: 1,
+                      height: 'auto',
+                      verticalAlign: 'middle',
+                      lineHeight: '1.4'
                     }}>
                       {student.name}
                     </td>
                     <td style={{ 
-                      padding: '12px', 
+                      padding: '10px 12px', 
                       color: '#523C48',
                       position: 'relative',
-                      zIndex: 1
+                      zIndex: 1,
+                      height: 'auto',
+                      verticalAlign: 'middle',
+                      lineHeight: '1.4'
                     }}>
                       {student.department}
                     </td>
                     <td style={{ 
-                      padding: '12px', 
+                      padding: '10px 12px', 
                       color: '#A4878D', 
                       fontSize: '0.9rem',
                       position: 'relative',
-                      zIndex: 1
+                      zIndex: 1,
+                      height: 'auto',
+                      verticalAlign: 'middle',
+                      lineHeight: '1.4'
                     }}>
                       {student.phone || '-'}
                     </td>
                     <td style={{ 
-                      padding: '12px',
+                      padding: '10px 12px',
                       position: 'relative',
-                      zIndex: 1
+                      zIndex: 1,
+                      height: 'auto',
+                      verticalAlign: 'middle',
+                      lineHeight: '1.4'
                     }}>
                       <button
                         onClick={() => toggleStudentStatus(student.email)}
@@ -682,11 +701,15 @@ const StudentManagement: React.FC = () => {
                     </td>
 
                     <td style={{ 
-                      padding: '12px', 
+                      padding: '10px 12px', 
                       display: 'flex', 
                       gap: '8px',
                       position: 'relative',
-                      zIndex: 10
+                      zIndex: 10,
+                      verticalAlign: 'middle',
+                      height: 'auto',
+                      alignItems: 'center',
+                      lineHeight: '1.4'
                     }}>
                       {/* Edit Button */}
                       <button
@@ -700,7 +723,12 @@ const StudentManagement: React.FC = () => {
                           cursor: 'pointer',
                           position: 'relative',
                           zIndex: 20,
-                          pointerEvents: 'auto'
+                          pointerEvents: 'auto',
+                          margin: '0',
+                          minHeight: '30px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}
                         title="Edit student"
                       >
@@ -719,7 +747,12 @@ const StudentManagement: React.FC = () => {
                           cursor: 'pointer',
                           position: 'relative',
                           zIndex: 20,
-                          pointerEvents: 'auto'
+                          pointerEvents: 'auto',
+                          margin: '0',
+                          minHeight: '30px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}
                         title="Delete student"
                       >
