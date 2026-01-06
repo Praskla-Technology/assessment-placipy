@@ -10,7 +10,7 @@ type TabKey = 'all' | 'assessments' | 'results' | 'reminders' | 'general';
 const PAGE_SIZE = 8;
 
 const Notifications: React.FC = () => {
-  const { notifications, markAsRead, markAllAsRead, loading } = useNotifications();
+  const { notifications, markAsRead, markAllAsRead, removeNotification, loading } = useNotifications();
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const navigate = useNavigate();
 
@@ -82,7 +82,7 @@ const Notifications: React.FC = () => {
 
   const handleMarkAsRead = async (notification: Notification) => {
     const id = notification.SK ? String(notification.SK).replace('NOTIF#', '') : notification.createdAt;
-    await markAsRead(id);
+    await removeNotification(id);
   };
 
   const handleMarkAllAsRead = async () => {

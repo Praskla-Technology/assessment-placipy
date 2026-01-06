@@ -153,13 +153,9 @@ const Assessments: React.FC = () => {
   // Filter assessments based on active filter
   const filteredAssessments = activeFilter === 'all'
     ? allAssessments.filter(assessment => {
+        // Only include non-completed assessments in "all" filter
         const isAttempted = attemptedAssessments.has(assessment.assessmentId);
-        if (!isAttempted) return true; // Include non-completed assessments
-        
-        // For completed assessments, check if they were completed within the last 10 days
-        const completionDate = attemptedAssessments.get(assessment.assessmentId)!;
-        const daysSinceCompletion = (Date.now() - completionDate.getTime()) / (1000 * 60 * 60 * 24);
-        return daysSinceCompletion <= 10; // Only include completed assessments within last 10 days
+        return !isAttempted;
       })
     : activeFilter === 'completed'
     ? allAssessments.filter(assessment => {
@@ -641,8 +637,8 @@ const Assessments: React.FC = () => {
 
     <div className="assessments-grid" style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-      gap: '20px',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+      gap: '16px',
       width: '100%'
     }}>
       {filteredAssessments.length === 0 ? (
@@ -659,25 +655,25 @@ const Assessments: React.FC = () => {
           return (
             <div key={assessment.id} style={{
               border: '1px solid #E5E7EB',
-              borderRadius: '12px',
+              borderRadius: '8px',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
               transition: 'transform 0.2s ease, box-shadow 0.2s ease'
             }}>
               <div style={{
-                padding: '16px',
+                padding: '12px',
                 borderBottom: '1px solid #E5E7EB',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <h3 style={{ margin: 0, fontSize: '18px', color: '#111827' }}>{assessment.title}</h3>
+                <h3 style={{ margin: 0, fontSize: '14px', color: '#111827' }}>{assessment.title}</h3>
                 <span style={{
-                  padding: '4px 12px',
+                  padding: '2px 8px',
                   borderRadius: '9999px',
-                  fontSize: '12px',
+                  fontSize: '10px',
                   fontWeight: 600,
                   ...(isAttempted ? { background: '#DBEAFE', color: '#1E40AF' } : statusStyle)
                 }}>
@@ -685,15 +681,15 @@ const Assessments: React.FC = () => {
                 </span>
               </div>
 
-              <div style={{ padding: '16px', flexGrow: 1 }}>
-                <div style={{ marginBottom: '16px' }}>
+              <div style={{ padding: '12px', flexGrow: 1 }}>
+                <div style={{ marginBottom: '12px' }}>
                   <p style={{ margin: '0 0 8px 0', color: '#6B7280', fontSize: '14px' }}>Category</p>
                   <p style={{ margin: 0, fontWeight: 500 }}>
                     {assessment.category.join(', ') || 'Not specified'}
                   </p>
                 </div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                   <div>
                     <p style={{ margin: '0 0 4px 0', color: '#6B7280', fontSize: '12px' }}>Questions</p>
                     <p style={{ margin: 0, fontWeight: 500 }}>
@@ -715,7 +711,7 @@ const Assessments: React.FC = () => {
                   </p>
                 </div>
                 
-                <div style={{ marginTop: '12px' }}>
+                <div style={{ marginTop: '8px' }}>
                   <p style={{ margin: '0 0 4px 0', color: '#6B7280', fontSize: '12px' }}>Created Date</p>
                   <p style={{ margin: 0, fontWeight: 500, fontSize: '14px' }}>
                     {assessment.createdAt ? new Date(assessment.createdAt).toLocaleDateString() : 'Unknown'}
@@ -723,7 +719,7 @@ const Assessments: React.FC = () => {
                 </div>
               </div>
               
-              <div style={{ padding: '16px', borderTop: '1px solid #E5E7EB' }}>
+              <div style={{ padding: '12px', borderTop: '1px solid #E5E7EB' }}>
                 <button 
                   onClick={() => handleAttendTest(assessment)}
                   disabled={buttonConfig.disabled}

@@ -165,12 +165,14 @@ const StudentDashboard: React.FC = () => {
 
   return (
     <div className={`student-dashboard ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-      {/* Hamburger Menu Button (Visible on mobile) */}
-      <button className="hamburger-menu" onClick={toggleSidebar}>
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+      {/* Hamburger Menu Button - Hidden during active assessment */}
+      {!isAssessmentActive && (
+        <button className="hamburger-menu" onClick={toggleSidebar}>
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      )}
 
       {/* Sidebar Navigation - Hidden during active assessment */}
       {!isAssessmentActive && (
