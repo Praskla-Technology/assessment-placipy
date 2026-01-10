@@ -5,6 +5,7 @@ import AuthService from '../services/auth.service';
 import { useNavigate } from 'react-router-dom';
 import type { User } from '../services/auth.service';
 import { useUser } from '../contexts/UserContext';
+import LoginSvg from '../assets/Login.svg';
 
 // Define challenge response interface locally to avoid import issues
 interface ChallengeResponse {
@@ -124,70 +125,75 @@ const LoginPage: React.FC = () => {
 
     return (
         <div className="login-page">
-            <div className="background-animation">
-                <div className="bubble bubble-1"></div>
-                <div className="bubble bubble-2"></div>
-                <div className="bubble bubble-3"></div>
-                <div className="bubble bubble-4"></div>
-                <div className="bubble bubble-5"></div>
+        
+            <div className="login-image-side">
+                <img src={LoginSvg} alt="Login Illustration" className="login-svg-image" />
             </div>
-            <div className="login-overlay">
-                {!challenge ? (
-                    <LoginForm onLogin={handleLogin} />
-                ) : (
-                    <div className="new-password-form">
-                        <h3>New Password Required</h3>
-                        {sessionExpired ? (
-                            <div>
-                                <p className="error-message">The session has expired. Please log in again.</p>
-                                <button
-                                    type="button"
-                                    className="login-button"
-                                    onClick={handleRetryLogin}
-                                >
-                                    Log In Again
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <p>You need to set a new password for your account.</p>
-                                <form onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    const formData = new FormData(e.target as HTMLFormElement);
-                                    const newPassword = formData.get('newPassword') as string;
-                                    await handleNewPassword(newPassword);
-                                }}>
-                                    <div className="login-form-group">
-                                        <label htmlFor="newPassword" className="login-form-label">
-                                            New Password
-                                        </label>
-                                        <div className="login-form-input-wrapper">
-                                            <input
-                                                type="password"
-                                                id="newPassword"
-                                                name="newPassword"
-                                                className="login-form-input"
-                                                placeholder="Enter your new password"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <button type="submit" className="login-button">
-                                        Set New Password
-                                    </button>
+
+            <div className="login-form-side">
+                <div className="login-container-inner">
+                    <div className="login-header">
+                        <h1 className="login-title">Welcome Back</h1>
+                        <p className="login-subtitle">Please enter your details to sign in.</p>
+                    </div>
+
+                    {!challenge ? (
+                        <LoginForm onLogin={handleLogin} />
+                    ) : (
+                        <div className="new-password-form">
+                            <h3>New Password Required</h3>
+                            {sessionExpired ? (
+                                <div>
+                                    <p className="error-message">The session has expired. Please log in again.</p>
                                     <button
                                         type="button"
-                                        className="login-button-secondary"
-                                        onClick={() => setChallenge(null)}
+                                        className="login-button"
+                                        onClick={handleRetryLogin}
                                     >
-                                        Cancel
+                                        Log In Again
                                     </button>
-                                </form>
-                            </>
-                        )}
-                    </div>
-                )}
-                {error && !sessionExpired && <div className="login-error">{error}</div>}
+                                </div>
+                            ) : (
+                                <>
+                                    <p>You need to set a new password for your account.</p>
+                                    <form onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        const formData = new FormData(e.target as HTMLFormElement);
+                                        const newPassword = formData.get('newPassword') as string;
+                                        await handleNewPassword(newPassword);
+                                    }}>
+                                        <div className="login-form-group">
+                                            <label htmlFor="newPassword" className="login-form-label">
+                                                New Password
+                                            </label>
+                                            <div className="login-form-input-wrapper">
+                                                <input
+                                                    type="password"
+                                                    id="newPassword"
+                                                    name="newPassword"
+                                                    className="login-form-input"
+                                                    placeholder="Enter your new password"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                        <button type="submit" className="login-button">
+                                            Set New Password
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="login-button-secondary"
+                                            onClick={() => setChallenge(null)}
+                                        >
+                                            Cancel
+                                        </button>
+                                    </form>
+                                </>
+                            )}
+                        </div>
+                    )}
+                    {error && !sessionExpired && <div className="login-error">{error}</div>}
+                </div>
             </div>
         </div>
     );

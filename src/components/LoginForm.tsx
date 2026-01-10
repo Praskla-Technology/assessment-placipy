@@ -10,6 +10,42 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Highlight Effect State
+    const [highlightStyle, setHighlightStyle] = useState<React.CSSProperties>({
+        opacity: 0,
+        top: 0,
+        left: 0,
+        width: 0,
+        height: 0,
+    });
+    const formRef = React.useRef<HTMLFormElement>(null);
+
+    const handleInputHover = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!formRef.current) return;
+
+        const target = e.currentTarget;
+        const formRect = formRef.current.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+
+        setHighlightStyle({
+            opacity: 1,
+            top: targetRect.top - formRect.top,
+            left: targetRect.left - formRect.left,
+            width: targetRect.width,
+            height: targetRect.height,
+        });
+
+        // Auto-focus the input within this wrapper
+        const input = target.querySelector('input');
+        if (input) {
+            input.focus();
+        }
+    };
+
+    const handleFormLeave = () => {
+        setHighlightStyle(prev => ({ ...prev, opacity: 0 }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -51,15 +87,27 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
     return (
         <div className="login-form-container">
-            <form onSubmit={handleSubmit} className="login-form">
-                <h2 className="login-title">Login</h2>
+            <form
+                ref={formRef}
+                onSubmit={handleSubmit}
+                className="login-form"
+                onMouseLeave={handleFormLeave}
+                style={{ position: 'relative' }}
+            >
+                <div
+                    className="input-highlight-box"
+                    style={highlightStyle}
+                />
 
                 <div className="login-form-group">
                     <label htmlFor="email" className="login-form-label">
                         <EmailIcon />
                         Email
                     </label>
-                    <div className="login-form-input-wrapper">
+                    <div
+                        className="login-form-input-wrapper"
+                        onMouseEnter={handleInputHover}
+                    >
                         <input
                             type="email"
                             id="email"
@@ -78,7 +126,10 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                         <PasswordIcon />
                         Password
                     </label>
-                    <div className="login-form-input-wrapper">
+                    <div
+                        className="login-form-input-wrapper"
+                        onMouseEnter={handleInputHover}
+                    >
                         <input
                             type={showPassword ? "text" : "password"}
                             id="password"
