@@ -416,7 +416,12 @@ router.delete('/:id', authMiddleware.authenticateToken, async (req, res) => {
         console.log('Params:', req.params);
 
         const { id } = req.params;
-        await assessmentService.deleteAssessment(id);
+        // Get requester email from Cognito profile and extract domain
+        const requesterEmail = await getEmailFromRequest(req);
+        const domain = requesterEmail.split('@')[1];
+        console.log('Extracted domain from user email:', domain);
+        
+        await assessmentService.deleteAssessment(id, domain);
         res.status(200).json({
             success: true,
             message: 'Assessment deleted successfully'
