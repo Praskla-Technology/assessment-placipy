@@ -12,6 +12,7 @@
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
@@ -32,6 +33,7 @@
 .pts-skeleton-button {
   border-radius: 6px;
 }
+
 .pts-dashboard {
   display: flex;
   min-height: 100vh;
@@ -82,7 +84,8 @@
   display: flex;
   flex-direction: column;
   box-shadow: 3px 0 10px rgba(0, 0, 0, 0.1);
-  z-index: 1000; /* High z-index, but hamburger menu is higher */
+  z-index: 1000;
+  /* High z-index, but hamburger menu is higher */
   position: fixed;
   top: 0;
   left: 0;
@@ -176,6 +179,7 @@ li:first-child .pts-sidebar-link:before {
 /* Create Assessment Icon */
 li:nth-child(2) .pts-sidebar-link:before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z'/%3E%3C/svg%3E");
+  width: 39px;
 }
 
 /* Assessment Scheduling Icon */
@@ -234,7 +238,8 @@ li:nth-child(6) .pts-sidebar-link:before {
 }
 
 .pts-dashboard.sidebar-closed .pts-main-content {
-  margin-left: 22px; /* Match default spacing when sidebar is closed */
+  margin-left: 22px;
+  /* Match default spacing when sidebar is closed */
 }
 
 @media (max-width: 768px) {
@@ -278,13 +283,14 @@ li:nth-child(6) .pts-sidebar-link:before {
   transition: padding-left 0.3s ease;
   z-index: 900;
   border-radius: 12px;
-  margin-top: 16px;  
+  margin-top: 16px;
   margin-right: 26px;
   margin-bottom: 12px;
 }
 
 .pts-dashboard.sidebar-open .pts-header {
-  padding-left: 50px; /* Reduced from 280px to bring content closer to sidebar */
+  padding-left: 50px;
+  /* Reduced from 280px to bring content closer to sidebar */
 }
 
 @media (max-width: 768px) {
@@ -370,12 +376,14 @@ li:nth-child(6) .pts-sidebar-link:before {
 }
 
 .pts-dashboard.sidebar-open .pts-content {
-  padding-left: 50px; /* Reduced padding when sidebar is open */
+  padding-left: 50px;
+  /* Reduced padding when sidebar is open */
 }
 
 @media (max-width: 768px) {
   .pts-dashboard.sidebar-open .pts-content {
-    padding-left: 30px; /* Reset padding on mobile */
+    padding-left: 30px;
+    /* Reset padding on mobile */
   }
 }
 
@@ -670,8 +678,22 @@ li:nth-child(6) .pts-sidebar-link:before {
 
 .pts-btn-secondary svg {
   margin-right: 8px;
- 
 
+}
+
+/* Override for table buttons to center properly */
+.data-table .pts-btn-secondary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto;
+}
+
+.data-table .pts-btn-secondary svg {
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 
@@ -681,10 +703,12 @@ li:nth-child(6) .pts-sidebar-link:before {
     transform: scale(1);
     opacity: 0;
   }
+
   50% {
     transform: scale(1.02);
     opacity: 1;
   }
+
   100% {
     transform: scale(1);
     opacity: 1;
@@ -1015,18 +1039,21 @@ table tr {
   height: 3px;
   background: linear-gradient(90deg, #9768E1, #7c4dce);
   border-radius: 2px;
-  animation: headerLine 1.5s ease-in-out infinite alternate;
+  opacity: 0;
+  transform: scaleX(0.8);
+  transition: all 0.3s ease;
 }
 
-@keyframes headerLine {
-  0% {
-    width: 30px;
-    opacity: 0.7;
-  }
-  100% {
-    width: 50px;
-    opacity: 1;
-  }
+/* Removed headerLine animation - lines are now static */
+
+.pts-section-header:hover::before {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.pts-section-header:hover {
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
 }
 
 .pts-section-header i {
@@ -1089,6 +1116,7 @@ table tr {
   0% {
     opacity: 0.6;
   }
+
   100% {
     opacity: 1;
   }
@@ -1184,10 +1212,13 @@ table tr {
 }
 
 @keyframes gradientPulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.1;
     background-position: 0% 50%;
   }
+
   50% {
     opacity: 0.2;
     background-position: 100% 50%;
@@ -1276,18 +1307,23 @@ table tr {
   position: absolute;
   bottom: -4px;
   left: 0;
-  width: 0;
+  width: 30px;
   height: 1px;
   background: linear-gradient(90deg, #9768E1, #7c4dce);
-  transition: width 0.3s ease;
+  opacity: 0;
+  transform: scaleX(0.5);
+  transition: all 0.3s ease;
 }
 
 .pts-form-group:hover .pts-form-label {
   color: #9768E1;
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
 }
 
 .pts-form-group:hover .pts-form-label::after {
-  width: 30px;
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 /* Enhanced Empty State */
@@ -1446,12 +1482,12 @@ table tr {
   .pts-sidebar-overlay {
     display: none;
   }
-  
+
   /* Desktop-specific styles for sidebar-open state */
   .pts-dashboard.sidebar-open .pts-sidebar {
     transform: translateX(0);
   }
-  
+
   .pts-dashboard.sidebar-open .pts-main-content {
     margin-left: 250px;
   }
@@ -1487,7 +1523,7 @@ table tr {
     z-index: 1000;
     display: none;
   }
-  
+
   .pts-sidebar-overlay.active {
     display: block;
   }
@@ -1537,6 +1573,7 @@ table tr {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1552,6 +1589,7 @@ table tr {
     transform: translateX(-20px);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -1577,8 +1615,13 @@ table tr {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Success/Error States */
@@ -1684,11 +1727,11 @@ table tr {
   border-radius: 50%;
 }
 
-input:checked + .pts-toggle-slider {
+input:checked+.pts-toggle-slider {
   background-color: #9768E1;
 }
 
-input:checked + .pts-toggle-slider:before {
+input:checked+.pts-toggle-slider:before {
   transform: translateX(25px);
 }
 
@@ -1700,7 +1743,7 @@ input:checked + .pts-toggle-slider:before {
 .pts-activity-item:hover {
   background: #f8f9fa !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Form validation styles */
@@ -1736,7 +1779,7 @@ input:checked + .pts-toggle-slider:before {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.7);
   color: white;
   display: flex;
   align-items: center;
@@ -1764,6 +1807,7 @@ input:checked + .pts-toggle-slider:before {
 
 /* Override any system dark mode preferences for PTS forms */
 @media (prefers-color-scheme: dark) {
+
   .pts-dashboard .pts-form-input,
   .pts-dashboard .pts-form-select,
   .pts-dashboard .pts-form-textarea,

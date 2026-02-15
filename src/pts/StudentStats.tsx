@@ -53,6 +53,9 @@ const StudentStats: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enrichedStudentData, setEnrichedStudentData] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [resultsPerPage] = useState(7);
+  const [currentResults, setCurrentResults] = useState<any[]>([]);
   
   const { user, loading: userLoading } = useUser();
 
@@ -152,6 +155,14 @@ const StudentStats: React.FC = () => {
     
     fetchStudentRollNumbers();
   }, [rawResults]);
+  
+  // Update current results when rawResults or page changes
+  useEffect(() => {
+    const indexOfLastResult = currentPage * resultsPerPage;
+    const indexOfFirstResult = indexOfLastResult - resultsPerPage;
+    const current = rawResults.slice(indexOfFirstResult, indexOfLastResult);
+    setCurrentResults(current);
+  }, [rawResults, currentPage, resultsPerPage]);
 
   const getOverallStats = () => {
     // Use data directly from the backend analytics response
@@ -372,105 +383,42 @@ const StudentStats: React.FC = () => {
     
     return (
       <div className="pts-fade-in">
-        <div className="pts-form-container">
-          <h3 className="pts-form-title">Assessment-wise </h3>
-          
+        <div className="pts-section-card">
+          <h3 className="pts-section-header">Assessment-wise</h3>
+                  
           {/* Attempt Overview Stats - using PTO style */}
-          <div className="stats-cards" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px", marginBottom: "30px" }}>
-            <div className="stat-card" style={{
-              background: "white",
-              padding: "20px",
-              borderRadius: "8px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e9ecef",
-              minHeight: "120px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between"
-            }}>
-              <div>
-                <h4 style={{ margin: "0 0 8px 0", fontSize: "1.3rem", fontWeight: "600", color: "#523C48" }}>Total Attempts</h4>
-                <div style={{ fontSize: "1.7rem", fontWeight: "bold", color: "#9768E1", marginBottom: "4px" }}>{totalAttempts}</div>
-              </div>
-              <div style={{ fontSize: "1rem", color: "#A4878D" }}>
-                All assessment attempts
-              </div>
+          <div className="pts-stats-grid">
+            <div className="pts-stat-card">
+              <h3>Total Attempts</h3>
+              <div className="pts-stat-value">{totalAttempts}</div>
+              <div className="pts-stat-change">All assessment attempts</div>
             </div>
-                      
-            <div className="stat-card" style={{
-              background: "white",
-              padding: "20px",
-              borderRadius: "8px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e9ecef",
-              minHeight: "120px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between"
-            }}>
-              <div>
-                <h4 style={{ margin: "0 0 8px 0", fontSize: "1.3rem", fontWeight: "600", color: "#523C48" }}>Active Students</h4>
-                <div style={{ fontSize: "1.7rem", fontWeight: "bold", color: "#9768E1", marginBottom: "4px" }}>{Object.keys(attemptsByStudent).length}</div>
-              </div>
-              <div style={{ fontSize: "1rem", color: "#A4878D" }}>
-                Who attempted assessments
-              </div>
+                               
+            <div className="pts-stat-card">
+              <h3>Active Students</h3>
+              <div className="pts-stat-value">{Object.keys(attemptsByStudent).length}</div>
+              <div className="pts-stat-change">Who attempted assessments</div>
             </div>
-                      
-            <div className="stat-card" style={{
-              background: "white",
-              padding: "20px",
-              borderRadius: "8px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e9ecef",
-              minHeight: "120px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between"
-            }}>
-              <div>
-                <h4 style={{ margin: "0 0 8px 0", fontSize: "1.3rem", fontWeight: "600", color: "#523C48" }}>Assessments</h4>
-                <div style={{ fontSize: "1.7rem", fontWeight: "bold", color: "#9768E1", marginBottom: "4px" }}>{Object.keys(attemptsByAssessment).length}</div>
-              </div>
-              <div style={{ fontSize: "1rem", color: "#A4878D" }}>
-                With at least one attempt
-              </div>
+                               
+            <div className="pts-stat-card">
+              <h3>Assessments</h3>
+              <div className="pts-stat-value">{Object.keys(attemptsByAssessment).length}</div>
+              <div className="pts-stat-change">With at least one attempt</div>
             </div>
-                      
-            <div className="stat-card" style={{
-              background: "white",
-              padding: "20px",
-              borderRadius: "8px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              border: "1px solid #e9ecef",
-              minHeight: "120px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between"
-            }}>
-              <div>
-                <h4 style={{ margin: "0 0 8px 0", fontSize: "1.3rem", fontWeight: "600", color: "#523C48" }}>Avg. Attempts/Student</h4>
-                <div style={{ fontSize: "1.7rem", fontWeight: "bold", color: "#9768E1", marginBottom: "4px" }}>
-                  {Object.keys(attemptsByStudent).length > 0 ? 
-                    Math.round((totalAttempts / Object.keys(attemptsByStudent).length) * 100) / 100 : 0}
-                </div>
+                               
+            <div className="pts-stat-card">
+              <h3>Avg. Attempts/Student</h3>
+              <div className="pts-stat-value">
+                {Object.keys(attemptsByStudent).length > 0 ? 
+                  Math.round((totalAttempts / Object.keys(attemptsByStudent).length) * 100) / 100 : 0}
               </div>
-              <div style={{ fontSize: "1rem", color: "#A4878D" }}>
-                Per active student
-              </div>
+              <div className="pts-stat-change">Per active student</div>
             </div>
           </div>
           
           {/* Attempt Trend Chart */}
           <h3 className="pts-form-title" style={{ marginTop: "30px" }}>Attempt Trend</h3>
-          <div className="chart-container" style={{
-            background: "white",
-            borderRadius: "8px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            border: "1px solid #e9ecef",
-            padding: "20px",
-            marginBottom: "30px"
-          }}>
+          <div className="pts-section-card">
             <ResponsiveContainer width="100%" height={400}>
               <AreaChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -484,23 +432,9 @@ const StudentStats: React.FC = () => {
           
           {/* Attempts by Student */}
           <h3 className="pts-form-title" style={{ marginTop: "30px" }}>Top Students by Attempts</h3>
-          <div className="table-container" style={{
-            background: "white",
-            borderRadius: "8px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            border: "1px solid #e9ecef",
-            overflow: "hidden",
-            marginBottom: "30px",
-            maxWidth: "700px"  /* Expanded to accommodate new column */
-          }}>
-            <table className="data-table" style={{
-              width: "100%",
-              borderCollapse: "collapse"
-            }}>
-              <thead style={{
-                backgroundColor: "#9768E1",
-                color: "white"
-              }}>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
                 <tr>
                   <th style={{ padding: "16px", textAlign: "left", width: "40%", fontSize: "1.1rem" }}>Student Email</th>
                   <th style={{ padding: "16px", textAlign: "center", width: "30%", fontSize: "1.1rem" }}>Roll No</th>
@@ -537,89 +471,7 @@ const StudentStats: React.FC = () => {
             </table>
           </div>
           
-          {/* Assessment-wise Pass/Fail Analysis */}
-          <h3 className="pts-form-title" style={{ marginTop: "30px" }}>Assessment-wise Pass/Fail Analysis</h3>
-          <div className="table-container" style={{
-            background: "white",
-            borderRadius: "8px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            border: "1px solid #e9ecef",
-            overflow: "hidden",
-            marginBottom: "30px",
-            maxWidth: "1400px"
-          }}>
-            <table className="data-table" style={{
-              width: "100%",
-              borderCollapse: "collapse"
-            }}>
-              <thead style={{
-                backgroundColor: "#9768E1",
-                color: "white"
-              }}>
-                <tr>
-                  <th style={{ padding: "16px", textAlign: "left", width: "25%", fontSize: "1.1rem" }}>Assessment</th>
-                  <th style={{ padding: "16px", textAlign: "left", width: "25%", fontSize: "1.1rem" }}>Student</th>
-                  <th style={{ padding: "16px", textAlign: "center", width: "15%", fontSize: "1.1rem" }}>Score</th>
-                  <th style={{ padding: "16px", textAlign: "center", width: "15%", fontSize: "1.1rem" }}>Pass/Fail</th>
-                  <th style={{ padding: "16px", textAlign: "center", width: "20%", fontSize: "1.1rem" }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rawResults.length > 0 ? (
-                  rawResults.map((result, index) => {
-                    // Determine pass/fail based on score
-                    const score = result.percentage || (result.score && result.maxScore ? 
-                      (result.score / result.maxScore) * 100 : 0);
-                    const isPass = score >= 50; // Assuming 50% is the pass threshold
-                    
-                    return (
-                      <tr key={index} style={{
-                        backgroundColor: index % 2 === 0 ? "#f9f9f9" : "white",
-                        borderBottom: "1px solid #ddd"
-                      }}>
-                        <td style={{ padding: "16px", wordBreak: "break-word", fontSize: "1rem" }}>{result.assessmentTitle || result.assessmentId || 'N/A'}</td>
-                        <td style={{ padding: "16px", wordBreak: "break-word", fontSize: "1rem" }}>{result.email || result.studentEmail || 'N/A'}</td>
-                        <td style={{ padding: "16px", textAlign: "center", fontWeight: "600", fontSize: "1rem" }}>{score.toFixed(2)}%</td>
-                        <td style={{ padding: "16px", textAlign: "center" }}>
-                          <span style={{
-                            padding: "6px 10px",
-                            borderRadius: "4px",
-                            backgroundColor: isPass ? "#d4edda" : "#f8d7da",
-                            color: isPass ? "#155724" : "#721c24",
-                            fontSize: "1rem"
-                          }}>
-                            {isPass ? 'PASS' : 'FAIL'}
-                          </span>
-                        </td>
-                        <td style={{ padding: "16px", textAlign: "center" }}>
-                          <span style={{
-                            padding: "6px 10px",
-                            borderRadius: "4px",
-                            backgroundColor: score >= 90 ? "#d1ecf1" : score >= 75 ? "#d4edda" : score >= 60 ? "#fff3cd" : "#f8d7da",
-                            color: score >= 90 ? "#0c5460" : score >= 75 ? "#155724" : score >= 60 ? "#856404" : "#721c24",
-                            fontSize: "1rem"
-                          }}>
-                            {score >= 90 ? 'Excellent' : score >= 75 ? 'Good' : score >= 60 ? 'Average' : 'Below Average'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={5} style={{
-                      padding: "40px",
-                      textAlign: "center",
-                      fontStyle: "italic",
-                      color: "#A4878D"
-                    }}>
-                      No assessment results recorded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+
           
         </div>
       </div>

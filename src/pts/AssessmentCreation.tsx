@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import AssessmentService from "../services/assessment.service";
 import { useUser } from '../contexts/UserContext';
 import { FileText, Plus, Upload, Download, Trash2, List, Code, Terminal, X } from 'lucide-react';
+import ResultsService from '../services/results.service';
 
 interface TestCase {
   id: string;
-  input: string;
+  input?: string;
+  inputs?: { input: string };
   expectedOutput: string;
 }
 
@@ -19,6 +21,7 @@ interface Question {
   subcategory?: string; // Add subcategory (replacing mcqSubcategory)
   language?: string; // Add language field for programming questions
   starterCode?: string; // Add starter code for programming questions
+  instructions?: string; // Add instructions field for programming questions
   questionId?: string; // Add questionId to match backend format
   questionNumber?: number; // Add questionNumber to match backend format
   points?: number; // Add points to match backend format
@@ -36,9 +39,7 @@ interface ReferenceMaterial {
 
 interface AssessmentData {
   title: string;
-  description: string;
   duration: number;
-  instructions: string;
   department: string;
   difficulty: string;
   category: string[];
@@ -78,12 +79,16 @@ interface AssessmentData {
 }
 
 const AssessmentCreation: React.FC = () => {
+  // Refs for modal scrolling
+  const mcqModalRef = useRef(null);
+  const programmingModalRef = useRef(null);
+  const referenceModalRef = useRef(null);
+  const testCaseModalRef = useRef(null);
+
   const { user } = useUser(); // Get user context
   const [assessmentData, setAssessmentData] = useState<AssessmentData>({
     title: "",
-    description: "",
     duration: 60,
-    instructions: "",
     department: user?.department || "",
     difficulty: "",
     category: ["MCQ", "Coding"], // Initialize with both categories
@@ -125,6 +130,7 @@ const AssessmentCreation: React.FC = () => {
     marks: 1,
     subcategory: "", // Updated from mcqSubcategory
     starterCode: "", // Initialize starter code
+    instructions: "", // Initialize instructions
     testCases: [], // Initialize test cases
     questionId: "", // Initialize questionId
     questionNumber: 0, // Initialize questionNumber
@@ -153,20 +159,119 @@ const AssessmentCreation: React.FC = () => {
   const [showReferenceMaterialForm, setShowReferenceMaterialForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  
+
   // Assessment toggle state
-  const [showAssessments, setShowAssessments] = useState(false);
+  const [showAssessments, setShowAssessments] = useState(true);
   const [assessments, setAssessments] = useState<any[]>([]);
   const [loadingAssessments, setLoadingAssessments] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [assessmentsPerPage] = useState(7);
   const [currentAssessments, setCurrentAssessments] = useState<any[]>([]);
-  
+
+  // Memoized pagination calculations
+  const totalPages = useMemo(() => {
+    return Math.ceil(assessments.length / assessmentsPerPage);
+  }, [assessments.length, assessmentsPerPage]);
+
+  const pageNumbers = useMemo<readonly (number | string)[]>(() => {
+    const pages: (number | string)[] = [];
+
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+      return pages;
+    }
+
+    pages.push(1);
+
+    let start: number;
+    let end: number;
+
+    if (currentPage <= 3) {
+      start = 2;
+      end = 4;
+    } else if (currentPage >= totalPages - 3) {
+      start = totalPages - 3;
+      end = totalPages - 1;
+    } else {
+      start = currentPage;
+      end = currentPage + 3;
+    }
+
+    if (start > 2) pages.push("...");
+
+    for (let i = start; i <= end; i++) pages.push(i);
+
+    if (end < totalPages - 1) pages.push("...");
+
+    pages.push(totalPages);
+
+    return pages;
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    const fetchAssessments = async () => {
+      try {
+        setLoadingAssessments(true);
+        const res = await AssessmentService.getAllAssessments(); // 👈 your API
+        setAssessments(res?.data || []);
+        setCurrentPage(1); // IMPORTANT for pagination
+        setShowAssessments(true); // default tab
+      } catch (err) {
+        console.error("Failed to fetch assessments", err);
+      } finally {
+        setLoadingAssessments(false);
+      }
+    };
+
+    fetchAssessments();
+  }, []);
+
   // Add CSV import state variables
   const [importLoading, setImportLoading] = useState(false);
   const [importResults, setImportResults] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // Scroll to modal when it opens
+  useEffect(() => {
+    if (showMcqForm && mcqModalRef.current) {
+      // @ts-ignore
+      mcqModalRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }
+  }, [showMcqForm]);
+
+  useEffect(() => {
+    if (showProgrammingForm && programmingModalRef.current) {
+      // @ts-ignore
+      programmingModalRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }
+  }, [showProgrammingForm]);
+
+  useEffect(() => {
+    if (showReferenceMaterialForm && referenceModalRef.current) {
+      // @ts-ignore
+      referenceModalRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }
+  }, [showReferenceMaterialForm]);
+
+  useEffect(() => {
+    if (showTestCaseForm && testCaseModalRef.current) {
+      // @ts-ignore
+      testCaseModalRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }
+  }, [showTestCaseForm]);
+
   // Update current assessments when assessments or page changes
   useEffect(() => {
     const indexOfLastAssessment = currentPage * assessmentsPerPage;
@@ -176,7 +281,7 @@ const AssessmentCreation: React.FC = () => {
   }, [assessments, currentPage, assessmentsPerPage]);
 
   const departments = ["Computer Science", "Information Technology", "Electronics", "Mechanical", "Civil", "All Departments"];
-  
+
   // Get the user's department from their profile
   const userDepartment = user?.department || "";
   // Updated categories to match requirements
@@ -193,6 +298,37 @@ const AssessmentCreation: React.FC = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  // Enhanced handler for duration that auto-calculates end time
+  const handleDurationChange = (value: number) => {
+    const newDuration = value || 0;
+
+    // Update duration in assessment data
+    setAssessmentData(prev => ({
+      ...prev,
+      duration: newDuration
+    }));
+
+    // If we have a start date/time, auto-calculate end time
+    if (startDateComponents.date && startDateComponents.time) {
+      const startDateTime = combineDateTime(
+        startDateComponents.date,
+        startDateComponents.time,
+        startDateComponents.period
+      );
+
+      // Calculate end time: start time + duration (in minutes)
+      const startDateObj = new Date(startDateTime);
+      const endDateObj = new Date(startDateObj.getTime() + (newDuration * 60 * 1000));
+
+      // Update end date components
+      const endDateComponents = extractTimeComponents(endDateObj.toISOString());
+      setEndDateComponents(endDateComponents);
+
+      // Update scheduling end date
+      handleSchedulingChange('endDate', endDateObj.toISOString());
+    }
   };
 
   const handleQuestionChange = (field: string, value: string | number | string[], index?: number) => {
@@ -235,6 +371,12 @@ const AssessmentCreation: React.FC = () => {
     }));
   };
 
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = (): string => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
   // Helper function to combine date and time into ISO string
   const combineDateTime = (date: string, time: string, period: string) => {
     if (!date || !time) {
@@ -273,6 +415,49 @@ const AssessmentCreation: React.FC = () => {
 
   // Initialize date components with proper fallback
   const initialStartDate = extractTimeComponents(assessmentData.scheduling.startDate || new Date().toISOString());
+
+  // Function to export assessment results
+  const exportResults = async (assessmentId: string) => {
+    try {
+      // Fetch results for the specific assessment
+      const response = await ResultsService.getAssessmentResults(assessmentId);
+      const results = response.data || [];
+
+      if (!results || results.length === 0) {
+        alert('No results found for this assessment');
+        return;
+      }
+
+      // Create CSV content
+      let csvContent = "Student Email,Score,Max Score,Num Correct,Num Incorrect,Total Questions,Percentage\n";
+
+      results.forEach((result: any) => {
+        const studentEmail = result.email || result.studentEmail || 'N/A';
+        const score = result.score || 0;
+        const maxScore = result.maxScore || 0;
+        const numCorrect = result.numCorrect || 0;
+        const numIncorrect = result.numIncorrect || 0;
+        const totalQuestions = numCorrect + numIncorrect;
+        const percentage = result.percentage || ((score / maxScore) * 100).toFixed(2);
+
+        csvContent += `${studentEmail},${score},${maxScore},${numCorrect},${numIncorrect},${totalQuestions},${percentage}\n`;
+      });
+
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `assessment_${assessmentId}_results.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error exporting results:', error);
+      alert('Failed to export results. Please try again.');
+    }
+  };
   const initialEndDate = extractTimeComponents(assessmentData.scheduling.endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString());
 
   // State for separate date/time inputs
@@ -291,6 +476,16 @@ const AssessmentCreation: React.FC = () => {
     setStartDateComponents(newComponents);
     const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
     handleSchedulingChange('startDate', isoString);
+
+    // Auto-calculate end time if duration is set
+    if (assessmentData.duration > 0 && newComponents.time) {
+      const startDateObj = new Date(isoString);
+      const endDateObj = new Date(startDateObj.getTime() + (assessmentData.duration * 60 * 1000));
+
+      const endDateComponents = extractTimeComponents(endDateObj.toISOString());
+      setEndDateComponents(endDateComponents);
+      handleSchedulingChange('endDate', endDateObj.toISOString());
+    }
   };
 
   const handleStartTimeChange = (time: string) => {
@@ -298,6 +493,16 @@ const AssessmentCreation: React.FC = () => {
     setStartDateComponents(newComponents);
     const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
     handleSchedulingChange('startDate', isoString);
+
+    // Auto-calculate end time if duration is set
+    if (assessmentData.duration > 0) {
+      const startDateObj = new Date(isoString);
+      const endDateObj = new Date(startDateObj.getTime() + (assessmentData.duration * 60 * 1000));
+
+      const endDateComponents = extractTimeComponents(endDateObj.toISOString());
+      setEndDateComponents(endDateComponents);
+      handleSchedulingChange('endDate', endDateObj.toISOString());
+    }
   };
 
   const handleStartPeriodChange = (period: string) => {
@@ -432,7 +637,6 @@ const AssessmentCreation: React.FC = () => {
       setAssessmentData(prev => ({
         ...prev,
         title: rowData.Title || prev.title,
-        description: rowData.Description || prev.description,
         department: rowData.Department || prev.department,
         duration: rowData.Duration ? parseInt(rowData.Duration) : prev.duration,
         difficulty: rowData.Difficulty || prev.difficulty,
@@ -474,7 +678,6 @@ const AssessmentCreation: React.FC = () => {
       // Create data array with current assessment data
       const exportData = [{
         Title: assessmentData.title,
-        Description: assessmentData.description,
         Department: assessmentData.department,
         Duration: assessmentData.duration,
         Difficulty: assessmentData.difficulty,
@@ -510,17 +713,17 @@ const AssessmentCreation: React.FC = () => {
       alert('Failed to export assessment: ' + err.message);
     }
   };
-  
+
   // Function to fetch assessments created by the current PTS
   const fetchAssessments = async () => {
     try {
       setLoadingAssessments(true);
-      
+
       // Call the assessment service to get assessments
       // We'll use the assessment service to make an API call to fetch assessments
       // that belong to the current user based on ownerEmail and domain
       const response = await AssessmentService.getAssessmentsByOwner();
-      
+
       // Update the assessments state
       setAssessments(response.data || []);
     } catch (error) {
@@ -531,7 +734,7 @@ const AssessmentCreation: React.FC = () => {
       setLoadingAssessments(false);
     }
   };
-  
+
   // Toggle function for showing/hiding assessments
   const toggleAssessments = async () => {
     if (!showAssessments) {
@@ -540,22 +743,22 @@ const AssessmentCreation: React.FC = () => {
     }
     setShowAssessments(!showAssessments);
   };
-  
+
   // Function to delete an assessment
   const deleteAssessment = async (assessmentId: string) => {
     if (!window.confirm('Are you sure you want to delete this assessment? This action cannot be undone.')) {
       return;
     }
-    
+
     try {
       await AssessmentService.deleteAssessment(assessmentId);
-      
+
       // Remove the deleted assessment from the state
       setAssessments(prev => prev.filter(assessment => assessment.assessmentId !== assessmentId));
-      
+
       // Show success message
       alert('Assessment deleted successfully!');
-      
+
       // Refresh the list
       await fetchAssessments();
     } catch (error) {
@@ -727,7 +930,8 @@ const AssessmentCreation: React.FC = () => {
   };
 
   const addTestCase = (questionId: number) => {
-    if (!currentTestCase.input.trim() || !currentTestCase.expectedOutput.trim()) {
+    const inputText = currentTestCase.inputs?.input || currentTestCase.input || '';
+    if (!inputText.trim() || !currentTestCase.expectedOutput.trim()) {
       alert("Please enter both input and expected output");
       return;
     }
@@ -863,10 +1067,39 @@ const AssessmentCreation: React.FC = () => {
         });
       }
 
+      // Format questions to ensure proper structure for backend
+      const formattedQuestions = assessmentData.questions.map(question => {
+        // If this is an MCQ question with string options, convert to object format
+        if (question.options && Array.isArray(question.options) && question.options.length > 0) {
+          // Check if options are strings (not objects with text property)
+          const hasStringOptions = question.options.some(option => typeof option === 'string');
+
+          if (hasStringOptions) {
+            // Convert string options to object format {id, text}
+            const formattedOptions = question.options.map((option, index) => {
+              if (typeof option === 'string') {
+                return {
+                  id: String.fromCharCode(65 + index), // A, B, C, D...
+                  text: option
+                };
+              }
+              return option; // Already in object format
+            });
+
+            return {
+              ...question,
+              options: formattedOptions
+            };
+          }
+        }
+        return question;
+      });
+
       // Update totalQuestions in configuration before submitting
       // Treat created assessments as published so student notifications are triggered
       const assessmentDataToSend = {
         ...assessmentData,
+        questions: formattedQuestions, // Use formatted questions
         isPublished: true,
         configuration: {
           ...assessmentData.configuration,
@@ -874,7 +1107,7 @@ const AssessmentCreation: React.FC = () => {
         },
         entities: entities,
         // Add createdBy and createdByName from user context
-        ...(user && { 
+        ...(user && {
           createdBy: user.email,
           createdByName: user.name
         }),
@@ -893,9 +1126,7 @@ const AssessmentCreation: React.FC = () => {
       // Reset form
       setAssessmentData({
         title: "",
-        description: "",
         duration: 60,
-        instructions: "",
         department: "",
         difficulty: "",
         category: ["MCQ", "Coding"],
@@ -1039,9 +1270,7 @@ const AssessmentCreation: React.FC = () => {
               // Reset form when switching to create mode
               setAssessmentData({
                 title: "",
-                description: "",
                 duration: 60,
-                instructions: "",
                 department: user?.department || "",
                 difficulty: "",
                 category: ["MCQ", "Coding"],
@@ -1093,11 +1322,11 @@ const AssessmentCreation: React.FC = () => {
               });
             }}
           >
-            <Plus size={16.5} style={{ marginRight: '8px'  }} />
+            <Plus size={16.5} style={{ marginRight: '8px' }} />
             Create Assessment
           </button>
         </div>
-        
+
         {/* Assessments table - shown when toggle is active */}
         {showAssessments && (
           <div style={{ marginBottom: '30px' }}>
@@ -1131,6 +1360,7 @@ const AssessmentCreation: React.FC = () => {
                       <th style={{ padding: "12px", textAlign: "center" }}>Questions</th>
                       <th style={{ padding: "12px", textAlign: "left" }}>Duration</th>
                       <th style={{ padding: "12px", textAlign: "left" }}>Scheduling</th>
+                      <th style={{ padding: "12px", textAlign: "center" }}>View Results</th>
                       <th style={{ padding: "12px", textAlign: "center" }}>Actions</th>
                     </tr>
                   </thead>
@@ -1151,12 +1381,21 @@ const AssessmentCreation: React.FC = () => {
                           <td style={{ padding: "12px" }}>{new Date(assessment.scheduling?.startDate || '').toLocaleDateString() || 'N/A'}</td>
                           <td style={{ padding: "12px", textAlign: "center" }}>
                             <button
+                              className="pts-btn-secondary"
+                              onClick={() => exportResults(assessment.assessmentId)}
+                              style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                            >
+                              <Download size={16} style={{ display: 'inline' }} />
+                            </button>
+                          </td>
+                          <td style={{ padding: "12px", textAlign: "center" }}>
+                            <button
                               className="pts-btn-danger"
                               onClick={() => deleteAssessment(assessment.assessmentId)}
                               style={{ padding: '4px 8px', fontSize: '0.8rem' }}
                             >
                               <Trash2 size={19} style={{ marginRight: '4px', display: 'inline' }} />
-                             
+
                             </button>
                           </td>
                         </tr>
@@ -1168,7 +1407,7 @@ const AssessmentCreation: React.FC = () => {
             )}
           </div>
         )}
-        
+
         {/* Add Import/Export buttons */}
         {showAssessments && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '20px' }}>
@@ -1189,11 +1428,13 @@ const AssessmentCreation: React.FC = () => {
             </button>
           </div>
         )}
-        
+
         {/* Pagination Controls */}
         {showAssessments && assessments.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '20px' }}>
-            <button 
+
+            {/* Previous Button */}
+            <button
               className="pts-btn-secondary"
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
@@ -1206,31 +1447,17 @@ const AssessmentCreation: React.FC = () => {
             >
               Previous
             </button>
-            
+
+            {/* Page Numbers */}
             <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-              {(() => {
-                const totalPages = Math.ceil(assessments.length / assessmentsPerPage);
-                const pages = [];
-                
-                // Show first page
-                if (totalPages > 0) pages.push(1);
-                
-                // Show pages around current page
-                const startPage = Math.max(2, currentPage - 1);
-                const endPage = Math.min(totalPages - 1, currentPage + 1);
-                
-                for (let i = startPage; i <= endPage; i++) {
-                  if (i !== pages[pages.length - 1]) pages.push(i);
-                }
-                
-                // Show last page if not already included
-                if (totalPages > 1 && !pages.includes(totalPages)) pages.push(totalPages);
-                
-                return pages.map(page => (
+              {pageNumbers.map((page, index) =>
+                page === "..." ? (
+                  <span key={`dots-${index}`} style={{ padding: '6px 10px', color: '#6b7280' }}>...</span>
+                ) : (
                   <button
                     key={page}
                     className="pts-btn-secondary"
-                    onClick={() => setCurrentPage(page)}
+                    onClick={() => setCurrentPage(page as number)}
                     style={{
                       padding: '6px 12px',
                       fontSize: '0.9rem',
@@ -1242,10 +1469,11 @@ const AssessmentCreation: React.FC = () => {
                   >
                     {page}
                   </button>
-                ));
-              })()}
+                )
+              )}
             </div>
-            
+
+            {/* Next Button */}
             <button
               className="pts-btn-secondary"
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(assessments.length / assessmentsPerPage)))}
@@ -1259,965 +1487,953 @@ const AssessmentCreation: React.FC = () => {
             >
               Next
             </button>
-            
-            <div style={{ fontSize: '0.9rem', color: '#6b7280', marginLeft: '15px' }}>
-              Page {currentPage} of {Math.ceil(assessments.length / assessmentsPerPage)}
-            </div>
+
           </div>
         )}
-        
+
+
         {/* Create Assessment Form - shown when toggle is inactive */}
         {!showAssessments && (
           <div>
             <h2 className="pts-form-title">Create New Assessment</h2>
 
             <form onSubmit={handleSubmit}>
-          <div className="pts-form-grid">
-            <div className="pts-form-group">
-              <label className="pts-form-label">Assessment Title *</label>
-              <input
-                type="text"
-                className="pts-form-input"
-                placeholder="Enter assessment title"
-                value={assessmentData.title}
-                onChange={(e) => handleInputChange("title", e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="pts-form-group">
-              <label className="pts-form-label">Department *</label>
-              <div className="pts-form-display">
-                {userDepartment || assessmentData.department || "Loading..."}
-              </div>
-              <input
-                type="hidden"
-                value={assessmentData.department}
-                name="department"
-              />
-            </div>
-
-            <div className="pts-form-group">
-              <label className="pts-form-label">Categories *</label>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                {categories.map((cat) => (
-                  <label key={cat} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={assessmentData.category.includes(cat)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          // Add category if not already present
-                          if (!assessmentData.category.includes(cat)) {
-                            handleInputChange("category", [...assessmentData.category, cat]);
-                          }
-                        } else {
-                          // Remove category if present
-                          handleInputChange("category", assessmentData.category.filter(c => c !== cat));
-                        }
-                      }}
-                      style={{ marginRight: '5px' }}
-                    />
-                    {cat}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="pts-form-group pts-short-field">
-              <label className="pts-form-label">Difficulty Level</label>
-              <select
-                className="pts-form-select"
-                value={assessmentData.difficulty}
-                onChange={(e) => handleInputChange("difficulty", e.target.value)}
-              >
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-            </div>
-
-            <div className="pts-form-group pts-short-field">
-              <label className="pts-form-label">Duration (minutes) *</label>
-              <input
-                type="number"
-                className="pts-form-input"
-                placeholder="Enter duration"
-                min="1"
-                value={assessmentData.duration}
-                onChange={(e) => handleInputChange("duration", parseInt(e.target.value) || 0)}
-                required
-              />
-            </div>
-
-            <div className="pts-form-group pts-short-field">
-              <label className="pts-form-label">Status</label>
-              <select
-                className="pts-form-select"
-                value={assessmentData.status}
-                onChange={(e) => handleInputChange("status", e.target.value)}
-              >
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Scheduling Section */}
-          <div className="pts-section-card">
-            <h3 className="pts-section-header">Scheduling</h3>
-            <div className="pts-scheduling-group">
-            <div className="pts-scheduling-row">
-              <div className="pts-form-group">
-                <label className="pts-form-label">Start Date *</label>
-                <input
-                  type="date"
-                  className="pts-form-input"
-                  value={startDateComponents.date}
-                  onChange={(e) => handleStartDateChange(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Start Time *</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input
-                    type="time"
-                    className="pts-form-input"
-                    value={startDateComponents.time}
-                    onChange={(e) => handleStartTimeChange(e.target.value)}
-                    required
-                    style={{ flex: 1 }}
-                  />
-                  <select
-                    className="pts-form-select"
-                    value={startDateComponents.period}
-                    onChange={(e) => handleStartPeriodChange(e.target.value)}
-                    style={{ width: '80px' }}
-                  >
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">End Date *</label>
-                <input
-                  type="date"
-                  className="pts-form-input"
-                  value={endDateComponents.date}
-                  onChange={(e) => handleEndDateChange(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">End Time *</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input
-                    type="time"
-                    className="pts-form-input"
-                    value={endDateComponents.time}
-                    onChange={(e) => handleEndTimeChange(e.target.value)}
-                    required
-                    style={{ flex: 1 }}
-                  />
-                  <select
-                    className="pts-form-select"
-                    value={endDateComponents.period}
-                    onChange={(e) => handleEndPeriodChange(e.target.value)}
-                    style={{ width: '80px' }}
-                  >
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pts-form-group">
-                <label className="pts-form-label">Timezone *</label>
-                <select
-                  className="pts-form-select"
-                  value={assessmentData.scheduling.timezone}
-                  onChange={(e) => handleSchedulingChange("timezone", e.target.value)}
-                  required
-                >
-                  <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
-                  <option value="America/New_York">America/New_York (EST)</option>
-                  <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
-                  <option value="Europe/London">Europe/London (GMT)</option>
-                  <option value="Europe/Paris">Europe/Paris (CET)</option>
-                  <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-          <div className="pts-form-group">
-            <label className="pts-form-label">Description</label>
-            <textarea
-              className="pts-form-textarea"
-              placeholder="Enter assessment description"
-              value={assessmentData.description}
-              onChange={(e) => handleInputChange("description", e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="pts-section-card">
-            <h3 className="pts-section-header">Instructions</h3>
-            <div className="pts-form-group">
-              <label className="pts-form-label">Instructions</label>
-              <textarea
-                className="pts-form-textarea"
-                placeholder="Enter assessment instructions"
-                value={assessmentData.instructions}
-                onChange={(e) => handleInputChange("instructions", e.target.value)}
-                rows={3}
-              />
-            </div>
-          </div>
-
-          {/* Reference Materials Section */}
-          <div className="pts-section-card">
-            <h3 className="pts-section-header">Reference Materials</h3>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <button
-                type="button"
-                className="pts-btn-secondary"
-                onClick={() => setShowReferenceMaterialForm(true)}
-              >
-                Add Reference Material
-              </button>
-            </div>
-
-            {assessmentData.referenceMaterials.length > 0 && (
-              <div style={{ marginBottom: "20px" }}>
-                {assessmentData.referenceMaterials.map((material) => (
-                  <div key={material.id} style={{
-                    background: "white",
-                    padding: "15px",
-                    borderRadius: "8px",
-                    marginBottom: "10px",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center"
-                  }}>
-                    <div>
-                      <h4 style={{ color: "#523C48", margin: "0 0 5px 0" }}>
-                        {material.name} ({material.type.toUpperCase()})
-                      </h4>
-                      <p style={{ color: "#523C48", margin: "0", fontSize: "0.9rem" }}>
-                        <a
-                          href={material.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => {
-                            // Validate URL before opening
-                            try {
-                              new URL(material.url);
-                            } catch {
-                              e.preventDefault();
-                              alert("Invalid URL format. Please check the reference material link.");
-                            }
-                          }}
-                          style={{
-                            color: "#007bff",
-                            textDecoration: "underline",
-                            cursor: "pointer"
-                          }}
-                        >
-                          {material.url}
-                        </a>
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="pts-btn-danger"
-                      onClick={() => removeReferenceMaterial(material.id)}
-                      style={{ marginLeft: "15px" }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {assessmentData.referenceMaterials.length === 0 && (
-              <div className="pts-empty-state">
-                <div className="pts-empty-state-icon"></div>
-                <div className="pts-empty-state-text">No reference materials added yet. Click "Add Reference Material" to attach PDFs, videos, or links.</div>
-              </div>
-            )}
-          </div>
-
-          {/* Add Reference Material Form Modal */}
-          {showReferenceMaterialForm && (
-            <div style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000
-            }}>
-              <div style={{
-                background: "white",
-                padding: "30px",
-                borderRadius: "8px",
-                width: "90%",
-                maxWidth: "600px",
-                maxHeight: "90vh",
-                overflowY: "auto"
-              }}>
-                <h3 style={{ color: "#523C48", marginTop: 0 }}>
-                  Add Reference Material
-                </h3>
-
+              <div className="pts-form-grid">
                 <div className="pts-form-group">
-                  <label className="pts-form-label">Name *</label>
+                  <label className="pts-form-label">Assessment Title *</label>
                   <input
                     type="text"
                     className="pts-form-input"
-                    placeholder="Enter reference material name"
-                    value={currentReferenceMaterial.name}
-                    onChange={(e) => handleReferenceMaterialChange("name", e.target.value)}
+                    placeholder="Enter assessment title"
+                    value={assessmentData.title}
+                    onChange={(e) => handleInputChange("title", e.target.value)}
                     required
                   />
                 </div>
 
                 <div className="pts-form-group">
-                  <label className="pts-form-label">URL *</label>
+                  <label className="pts-form-label">Department *</label>
+                  <div className="pts-form-display">
+                    {userDepartment || assessmentData.department || "Loading..."}
+                  </div>
                   <input
-                    type="url"
-                    className="pts-form-input"
-                    placeholder="Enter URL (e.g., https://example.com/material.pdf)"
-                    value={currentReferenceMaterial.url}
-                    onChange={(e) => handleReferenceMaterialChange("url", e.target.value)}
-                    required
+                    type="hidden"
+                    value={assessmentData.department}
+                    name="department"
                   />
                 </div>
 
                 <div className="pts-form-group">
-                  <label className="pts-form-label">Type *</label>
+                  <label className="pts-form-label">Categories *</label>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {categories.map((cat) => (
+                      <label key={cat} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={assessmentData.category.includes(cat)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              // Add category if not already present
+                              if (!assessmentData.category.includes(cat)) {
+                                handleInputChange("category", [...assessmentData.category, cat]);
+                              }
+                            } else {
+                              // Remove category if present
+                              handleInputChange("category", assessmentData.category.filter(c => c !== cat));
+                            }
+                          }}
+                          style={{ marginRight: '5px' }}
+                        />
+                        {cat}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pts-form-group pts-short-field">
+                  <label className="pts-form-label">Difficulty Level</label>
                   <select
                     className="pts-form-select"
-                    value={currentReferenceMaterial.type}
-                    onChange={(e) => handleReferenceMaterialChange("type", e.target.value)}
-                    required
+                    value={assessmentData.difficulty}
+                    onChange={(e) => handleInputChange("difficulty", e.target.value)}
                   >
-                    <option value="pdf">PDF Document</option>
-                    <option value="video">Video</option>
-                    <option value="link">Web Link</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
                   </select>
                 </div>
 
-                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                <div className="pts-form-group pts-short-field">
+                  <label className="pts-form-label">Duration (minutes) *</label>
+                  <input
+                    type="number"
+                    className="pts-form-input"
+                    placeholder="Enter duration"
+                    min="1"
+                    value={assessmentData.duration}
+                    onChange={(e) => handleDurationChange(parseInt(e.target.value) || 0)}
+                    required
+                  />
+                </div>
+
+                <div className="pts-form-group pts-short-field">
+                  <label className="pts-form-label">Status</label>
+                  <select
+                    className="pts-form-select"
+                    value={assessmentData.status}
+                    onChange={(e) => handleInputChange("status", e.target.value)}
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Scheduling Section */}
+              <div className="pts-section-card">
+                <h3 className="pts-section-header">Scheduling</h3>
+                <div className="pts-scheduling-group">
+                  <div className="pts-scheduling-row">
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Start Date *</label>
+                      <input
+                        type="date"
+                        className="pts-form-input"
+                        value={startDateComponents.date}
+                        onChange={(e) => handleStartDateChange(e.target.value)}
+                        min={getTodayDate()}
+                        required
+                      />
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Start Time *</label>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <input
+                          type="time"
+                          className="pts-form-input"
+                          value={startDateComponents.time}
+                          onChange={(e) => handleStartTimeChange(e.target.value)}
+                          required
+                          style={{ flex: 1 }}
+                        />
+                        <select
+                          className="pts-form-select"
+                          value={startDateComponents.period}
+                          onChange={(e) => handleStartPeriodChange(e.target.value)}
+                          style={{ width: '80px' }}
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">End Date *</label>
+                      <input
+                        type="date"
+                        className="pts-form-input"
+                        value={endDateComponents.date}
+                        onChange={(e) => handleEndDateChange(e.target.value)}
+                        min={getTodayDate()}
+                        required
+                      />
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">End Time *</label>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <input
+                          type="time"
+                          className="pts-form-input"
+                          value={endDateComponents.time}
+                          onChange={(e) => handleEndTimeChange(e.target.value)}
+                          required
+                          style={{ flex: 1 }}
+                        />
+                        <select
+                          className="pts-form-select"
+                          value={endDateComponents.period}
+                          onChange={(e) => handleEndPeriodChange(e.target.value)}
+                          style={{ width: '80px' }}
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Timezone *</label>
+                      <select
+                        className="pts-form-select"
+                        value={assessmentData.scheduling.timezone}
+                        onChange={(e) => handleSchedulingChange("timezone", e.target.value)}
+                        required
+                      >
+                        <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                        <option value="America/New_York">America/New_York (EST)</option>
+                        <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+                        <option value="Europe/London">Europe/London (GMT)</option>
+                        <option value="Europe/Paris">Europe/Paris (CET)</option>
+                        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+
+
+              {/* Reference Materials Section */}
+              <div className="pts-section-card">
+                <h3 className="pts-section-header">Reference Materials</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                   <button
                     type="button"
                     className="pts-btn-secondary"
-                    onClick={() => setShowReferenceMaterialForm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="pts-btn-primary"
-                    onClick={addReferenceMaterial}
+                    onClick={() => setShowReferenceMaterialForm(true)}
                   >
                     Add Reference Material
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Questions Section */}
-          <div className="pts-section-card">
-            <h3 className="pts-section-header">Questions</h3>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <div style={{ display: "flex", gap: "10px" }}>
-                {assessmentData.category.includes("MCQ") && (
-                  <button
-                    type="button"
-                    className="pts-btn-secondary"
-                    onClick={() => {
-                      setShowMcqForm(true);
-                      setShowProgrammingForm(false);
-                    }}
-                  >
-                    <List size={18} style={{ marginRight: '8px' }} />
-                    Add MCQ Question
-                  </button>
-                )}
-                {assessmentData.category.includes("Coding") && (
-                  <button
-                    type="button"
-                    className="pts-btn-secondary"
-                    onClick={() => {
-                      setShowProgrammingForm(true);
-                      setShowMcqForm(false);
-                    }}
-                  >
-                    <Code size={18} style={{ marginRight: '8px' }} />
-                    Add Programming Question
-                  </button>
-                )}
-                {!assessmentData.category.includes("MCQ") && !assessmentData.category.includes("Coding") && (
-                  <div className="pts-empty-state">
-                    <div className="pts-empty-state-icon">📝</div>
-                    <div className="pts-empty-state-text">Select category to add questions</div>
-                  </div>
-                )}
-              </div>
-            </div>
+                {assessmentData.referenceMaterials.length > 0 && (
+                  <div style={{ marginBottom: "20px" }}>
+                    {assessmentData.referenceMaterials.map((material) => (
+                      <div key={material.id} style={{
+                        background: "white",
+                        padding: "15px",
+                        borderRadius: "8px",
+                        marginBottom: "10px",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
+                      }}>
+                        <div>
+                          <h4 style={{ color: "#523C48", margin: "0 0 5px 0" }}>
+                            {material.name} ({material.type.toUpperCase()})
+                          </h4>
+                          <p style={{ color: "#523C48", margin: "0", fontSize: "0.9rem" }}>
+                            <a
+                              href={material.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                // Validate URL before opening
+                                try {
+                                  new URL(material.url);
+                                } catch {
+                                  e.preventDefault();
+                                  alert("Invalid URL format. Please check the reference material link.");
+                                }
+                              }}
+                              style={{
+                                color: "#007bff",
+                                textDecoration: "underline",
+                                cursor: "pointer"
+                              }}
+                            >
+                              {material.url}
+                            </a>
+                          </p>
+                        </div>
 
-            {assessmentData.questions.length > 0 && (
-              <div style={{ marginBottom: "20px" }}>
-                {assessmentData.questions.map((question, index) => (
-                  <div key={question.id} style={{
-                    background: "white",
-                    padding: "20px",
-                    borderRadius: "8px",
-                    marginBottom: "15px",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ color: "#523C48", margin: "0 0 10px 0" }}>
-                          Question {index + 1} ({question.marks} marks)
-                          {question.subcategory && ` - ${question.subcategory}`}
-                          {question.language && ` (${question.language})`}
-                        </h4>
-                        <p style={{ color: "#523C48", margin: "0 0 15px 0" }}>{question.text}</p>
-
-                        {/* Show options only for MCQ questions */}
-                        {question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "") && (
-                          <>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-                              {question.options.map((option, optIndex) => (
-                                <div key={optIndex} style={{
-                                  padding: "8px",
-                                  background: Array.isArray(question.correctAnswer) && question.correctAnswer.includes(String.fromCharCode(65 + optIndex)) ? "#d4edda" : "#f8f9fa",
-                                  borderRadius: "4px",
-                                  border: Array.isArray(question.correctAnswer) && question.correctAnswer.includes(String.fromCharCode(65 + optIndex)) ? "1px solid #28a745" : "1px solid #dee2e6"
-                                }}>
-                                  <strong>{String.fromCharCode(65 + optIndex)}.</strong> {option}
-                                  {Array.isArray(question.correctAnswer) && question.correctAnswer.includes(String.fromCharCode(65 + optIndex)) && (
-                                    <span style={{
-                                      background: "#28a745",
-                                      color: "white",
-                                      padding: "2px 6px",
-                                      borderRadius: "4px",
-                                      fontSize: "0.8rem",
-                                      marginLeft: "8px"
-                                    }}>
-                                      Correct
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-
-                        {/* For Programming questions, show starter code (without language) */}
-                        {question.starterCode && question.starterCode.trim() !== "" && (
-                          <div style={{
-                            padding: "10px",
-                            background: "#e9ecef",
-                            borderRadius: "4px",
-                            fontStyle: "italic",
-                            marginBottom: "15px"
-                          }}>
-                            Programming Question
-                            <div style={{
-                              marginTop: "8px",
-                              padding: "8px",
-                              background: "#fff",
-                              borderRadius: "4px",
-                              fontFamily: "monospace",
-                              fontSize: "0.9rem"
-                            }}>
-                              <strong>Starter Code:</strong>
-                              <pre style={{ margin: "5px 0 0 0" }}>{question.starterCode}</pre>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Test Cases Section for Programming Questions - Only show for programming questions */}
-                        {(question.starterCode && question.starterCode.trim() !== "") && (
-                          <div style={{ marginTop: "15px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                              <h4 style={{ color: "#523C48", margin: 0 }}>Test Cases</h4>
-                              <button
-                                type="button"
-                                className="pts-btn-secondary"
-                                onClick={() => {
-                                  setCurrentTestCase({
-                                    id: "",
-                                    input: "",
-                                    expectedOutput: ""
-                                  });
-                                  setShowTestCaseForm(true);
-                                  setTestCaseQuestionId(question.id); // Set the question ID for test cases
-                                }}
-                                style={{ padding: "5px 10px", fontSize: "0.9rem" }}
-                              >
-                                <Terminal size={16} style={{ marginRight: '6px' }} />
-                                Add Test Case
-                              </button>
-                            </div>
-
-                            <div style={{
-                              background: "#f8f9fa",
-                              borderRadius: "4px",
-                              padding: "10px",
-                              maxHeight: "200px",
-                              overflowY: "auto"
-                            }}>
-                              {question.testCases && question.testCases.length > 0 ? (
-                                question.testCases.map((testCase) => (
-                                  <div key={testCase.id} style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    padding: "8px",
-                                    borderBottom: "1px solid #dee2e6"
-                                  }}>
-                                    <div>
-                                      <div><strong>Input:</strong> {testCase.input}</div>
-                                      <div><strong>Expected Output:</strong> {testCase.expectedOutput}</div>
-                                    </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                      <button
-                                        type="button"
-                                        className="pts-btn-danger"
-                                        onClick={() => removeTestCase(question.id, testCase.id)}
-                                        style={{ padding: "3px 8px", fontSize: "0.8rem" }}
-                                      >
-                                        <X size={14} style={{ marginRight: '4px', display: 'inline' }} />
-                                        Remove
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))
-                              ) : (
-                                <p style={{ color: "#6c757d", margin: "0" }}>No test cases added yet</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
+                        <button
+                          type="button"
+                          className="pts-btn-danger"
+                          onClick={() => removeReferenceMaterial(material.id)}
+                          style={{ marginLeft: "15px" }}
+                        >
+                          Remove
+                        </button>
                       </div>
-
-                      <button
-                        type="button"
-                        className="pts-btn-danger"
-                        onClick={() => removeQuestion(question.id)}
-                        style={{ marginLeft: "15px" }}
-                      >
-                        <X size={16} style={{ marginRight: '6px', display: 'inline' }} />
-                        Remove
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {assessmentData.referenceMaterials.length === 0 && (
+                  <div className="pts-empty-state">
+                    <div className="pts-empty-state-icon"></div>
+                    <div className="pts-empty-state-text">No reference materials added yet. Click "Add Reference Material" to attach PDFs, videos, or links.</div>
+                  </div>
+                )}
               </div>
-            )}
 
-            {assessmentData.questions.length === 0 && assessmentData.category.length > 0 && (
-              <div className="pts-empty-state">
-                <div className="pts-empty-state-icon"></div>
-                <div className="pts-empty-state-text">No questions added yet. Start by adding MCQ or Programming questions to build your assessment.</div>
-              </div>
-            )}
-          </div>
+              {/* Add Reference Material Form Modal */}
+              {showReferenceMaterialForm && (
+                <div ref={referenceModalRef} style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0,0,0,0.5)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000
+                }}>
+                  <div style={{
+                    background: "white",
+                    padding: "30px",
+                    borderRadius: "8px",
+                    width: "90%",
+                    maxWidth: "600px",
+                    maxHeight: "90vh",
+                    overflowY: "auto"
+                  }}>
+                    <h3 style={{ color: "#523C48", marginTop: 0 }}>
+                      Add Reference Material
+                    </h3>
 
-          {/* Add MCQ Question Form Modal */}
-          {showMcqForm && (
-            <div style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000
-            }}>
-              <div style={{
-                background: "white",
-                padding: "30px",
-                borderRadius: "8px",
-                width: "90%",
-                maxWidth: "600px",
-                maxHeight: "90vh",
-                overflowY: "auto"
-              }}>
-                <h3 style={{ color: "#523C48", marginTop: 0 }}>
-                  Add MCQ Question
-                </h3>
-
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Question Text *</label>
-                  <textarea
-                    className="pts-form-textarea"
-                    placeholder="Enter your question here"
-                    value={currentQuestion.text}
-                    onChange={(e) => handleQuestionChange("text", e.target.value)}
-                    rows={3}
-                    required
-                  />
-                </div>
-
-                <div className="pts-form-grid">
-                  {currentQuestion.options.map((option, index) => (
-                    <div className="pts-form-group" key={index}>
-                      <label className="pts-form-label">Option {String.fromCharCode(65 + index)} *</label>
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Name *</label>
                       <input
                         type="text"
                         className="pts-form-input"
-                        placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
-                        value={option}
-                        onChange={(e) => handleQuestionChange("options", e.target.value, index)}
+                        placeholder="Enter reference material name"
+                        value={currentReferenceMaterial.name}
+                        onChange={(e) => handleReferenceMaterialChange("name", e.target.value)}
                         required
                       />
                     </div>
-                  ))}
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">URL *</label>
+                      <input
+                        type="url"
+                        className="pts-form-input"
+                        placeholder="Enter URL (e.g., https://example.com/material.pdf)"
+                        value={currentReferenceMaterial.url}
+                        onChange={(e) => handleReferenceMaterialChange("url", e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Type *</label>
+                      <select
+                        className="pts-form-select"
+                        value={currentReferenceMaterial.type}
+                        onChange={(e) => handleReferenceMaterialChange("type", e.target.value)}
+                        required
+                      >
+                        <option value="pdf">PDF Document</option>
+                        <option value="video">Video</option>
+                        <option value="link">Web Link</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="pts-btn-secondary"
+                        onClick={() => setShowReferenceMaterialForm(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="pts-btn-primary"
+                        onClick={addReferenceMaterial}
+                      >
+                        Add Reference Material
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              )}
 
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Correct Answer *</label>
-                  <select
-                    className="pts-form-select"
-                    value={Array.isArray(currentQuestion.correctAnswer) ? currentQuestion.correctAnswer[0] || "" : ""}
-                    onChange={(e) => handleQuestionChange("correctAnswer", [e.target.value])}
-                    required
-                  >
-                    <option value="">Select Correct Answer</option>
-                    {currentQuestion.options.map((option, index) => (
-                      <option key={index} value={String.fromCharCode(65 + index)}>
-                        {String.fromCharCode(65 + index)}. {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* MCQ Subcategory Selection */}
-                <div className="pts-form-group">
-                  <label className="pts-form-label">MCQ Subcategory *</label>
-                  <select
-                    className="pts-form-select"
-                    value={currentQuestion.subcategory || ""}
-                    onChange={(e) => handleQuestionChange("subcategory", e.target.value)}
-                    required
-                  >
-                    <option value="">Select Subcategory</option>
-                    {mcqSubcategories.map((subcat) => (
-                      <option key={subcat} value={subcat}>
-                        {subcat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Marks *</label>
-                  <input
-                    type="number"
-                    className="pts-form-input"
-                    placeholder="Enter marks"
-                    min="1"
-                    value={currentQuestion.marks}
-                    onChange={(e) => handleQuestionChange("marks", parseInt(e.target.value) || 1)}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="pts-btn-secondary"
-                    onClick={() => setShowMcqForm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="pts-btn-primary"
-                    onClick={addQuestion}
-                  >
-                    Add Question
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Add Programming Question Form Modal */}
-          {showProgrammingForm && (
-            <div style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000
-            }}>
-              <div style={{
-                background: "white",
-                padding: "30px",
-                borderRadius: "8px",
-                width: "90%",
-                maxWidth: "600px",
-                maxHeight: "90vh",
-                overflowY: "auto"
-              }}>
-                <h3 style={{ color: "#523C48", marginTop: 0 }}>
-                  Add Programming Question
-                </h3>
-
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Question Text *</label>
-                  <textarea
-                    className="pts-form-textarea"
-                    placeholder="Enter your question here"
-                    value={currentQuestion.text}
-                    onChange={(e) => handleQuestionChange("text", e.target.value)}
-                    rows={3}
-                    required
-                  />
-                </div>
-
-                {/* Starter Code Section */}
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Starter Code</label>
-                  <textarea
-                    className="pts-form-textarea"
-                    placeholder="Enter starter code"
-                    value={currentQuestion.starterCode || ""}
-                    onChange={(e) => handleQuestionChange("starterCode", e.target.value)}
-                    rows={4}
-                  />
-                </div>
-
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Marks *</label>
-                  <input
-                    type="number"
-                    className="pts-form-input"
-                    placeholder="Enter marks"
-                    min="1"
-                    value={currentQuestion.marks}
-                    onChange={(e) => handleQuestionChange("marks", parseInt(e.target.value) || 1)}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="pts-btn-secondary"
-                    onClick={() => setShowProgrammingForm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="pts-btn-primary"
-                    onClick={addQuestion}
-                  >
-                    Add Question
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Add Test Case Form Modal */}
-          {showTestCaseForm && (
-            <div style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000
-            }}>
-              <div style={{
-                background: "white",
-                padding: "30px",
-                borderRadius: "8px",
-                width: "90%",
-                maxWidth: "600px",
-                maxHeight: "90vh",
-                overflowY: "auto"
-              }}>
-                <h3 style={{ color: "#523C48", marginTop: 0 }}>
-                  Add Test Case
-                </h3>
-
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Input *</label>
-                  <textarea
-                    className="pts-form-textarea"
-                    placeholder="Enter input for the test case"
-                    value={currentTestCase.input}
-                    onChange={(e) => handleTestCaseChange("input", e.target.value)}
-                    rows={3}
-                    required
-                  />
-                  <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>
-                    This will be passed as standard input to the program
+              {/* Questions Section */}
+              <div className="pts-section-card">
+                <h3 className="pts-section-header">Questions</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    {assessmentData.category.includes("MCQ") && (
+                      <button
+                        type="button"
+                        className="pts-btn-secondary"
+                        onClick={() => {
+                          setShowMcqForm(true);
+                          setShowProgrammingForm(false);
+                        }}
+                      >
+                        <List size={18} style={{ marginRight: '8px' }} />
+                        Add MCQ Question
+                      </button>
+                    )}
+                    {assessmentData.category.includes("Coding") && (
+                      <button
+                        type="button"
+                        className="pts-btn-secondary"
+                        onClick={() => {
+                          setShowProgrammingForm(true);
+                          setShowMcqForm(false);
+                        }}
+                      >
+                        <Code size={18} style={{ marginRight: '8px' }} />
+                        Add Programming Question
+                      </button>
+                    )}
+                    {!assessmentData.category.includes("MCQ") && !assessmentData.category.includes("Coding") && (
+                      <div className="pts-empty-state">
+                        <div className="pts-empty-state-icon">📝</div>
+                        <div className="pts-empty-state-text">Select category to add questions</div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Expected Output *</label>
-                  <textarea
-                    className="pts-form-textarea"
-                    placeholder="Enter expected output"
-                    value={currentTestCase.expectedOutput}
-                    onChange={(e) => handleTestCaseChange("expectedOutput", e.target.value)}
-                    rows={3}
-                    required
-                  />
-                  <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>
-                    This is what the program should output for the given input
+                {assessmentData.questions.length > 0 && (
+                  <div style={{ marginBottom: "20px" }}>
+                    {assessmentData.questions.map((question, index) => (
+                      <div key={question.id} style={{
+                        background: "white",
+                        padding: "20px",
+                        borderRadius: "8px",
+                        marginBottom: "15px",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div style={{ flex: 1 }}>
+                            <h4 style={{ color: "#523C48", margin: "0 0 10px 0" }}>
+                              Question {index + 1} ({question.marks} marks)
+                              {question.subcategory && ` - ${question.subcategory}`}
+                              {question.language && ` (${question.language})`}
+                            </h4>
+                            <p style={{ color: "#523C48", margin: "0 0 15px 0" }}>{question.text}</p>
+
+                            {/* Show options only for MCQ questions */}
+                            {question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "") && (
+                              <>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                                  {question.options.map((option, optIndex) => (
+                                    <div key={optIndex} style={{
+                                      padding: "8px",
+                                      background: Array.isArray(question.correctAnswer) && question.correctAnswer.includes(String.fromCharCode(65 + optIndex)) ? "#d4edda" : "#f8f9fa",
+                                      borderRadius: "4px",
+                                      border: Array.isArray(question.correctAnswer) && question.correctAnswer.includes(String.fromCharCode(65 + optIndex)) ? "1px solid #28a745" : "1px solid #dee2e6"
+                                    }}>
+                                      <strong>{String.fromCharCode(65 + optIndex)}.</strong> {option}
+                                      {Array.isArray(question.correctAnswer) && question.correctAnswer.includes(String.fromCharCode(65 + optIndex)) && (
+                                        <span style={{
+                                          background: "#28a745",
+                                          color: "white",
+                                          padding: "2px 6px",
+                                          borderRadius: "4px",
+                                          fontSize: "0.8rem",
+                                          marginLeft: "8px"
+                                        }}>
+                                          Correct
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+
+                            {/* For Programming questions, show starter code (without language) */}
+                            {question.starterCode && question.starterCode.trim() !== "" && (
+                              <div style={{
+                                padding: "10px",
+                                background: "#e9ecef",
+                                borderRadius: "4px",
+                                fontStyle: "italic",
+                                marginBottom: "15px"
+                              }}>
+                                Programming Question
+                                <div style={{
+                                  marginTop: "8px",
+                                  padding: "8px",
+                                  background: "#fff",
+                                  borderRadius: "4px",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.9rem"
+                                }}>
+                                  <strong>Starter Code:</strong>
+                                  <pre style={{ margin: "5px 0 0 0" }}>{question.starterCode}</pre>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Test Cases Section for Programming Questions - Only show for programming questions */}
+                            {(question.starterCode && question.starterCode.trim() !== "") && (
+                              <div style={{ marginTop: "15px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                                  <h4 style={{ color: "#523C48", margin: 0 }}>Test Cases</h4>
+                                  <button
+                                    type="button"
+                                    className="pts-btn-secondary"
+                                    onClick={() => {
+                                      setCurrentTestCase({
+                                        id: "",
+                                        input: "",
+                                        expectedOutput: ""
+                                      });
+                                      setShowTestCaseForm(true);
+                                      setTestCaseQuestionId(question.id); // Set the question ID for test cases
+                                    }}
+                                    style={{ padding: "5px 10px", fontSize: "0.9rem" }}
+                                  >
+                                    <Terminal size={16} style={{ marginRight: '6px' }} />
+                                    Add Test Case
+                                  </button>
+                                </div>
+
+                                <div style={{
+                                  background: "#f8f9fa",
+                                  borderRadius: "4px",
+                                  padding: "10px",
+                                  maxHeight: "200px",
+                                  overflowY: "auto"
+                                }}>
+                                  {question.testCases && question.testCases.length > 0 ? (
+                                    question.testCases.map((testCase) => (
+                                      <div key={testCase.id} style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "8px",
+                                        borderBottom: "1px solid #dee2e6"
+                                      }}>
+                                        <div>
+                                          <div><strong>Input:</strong> {testCase.inputs?.input || testCase.input}</div>
+                                          <div><strong>Expected Output:</strong> {testCase.expectedOutput}</div>
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                          <button
+                                            type="button"
+                                            className="pts-btn-danger"
+                                            onClick={() => removeTestCase(question.id, testCase.id)}
+                                            style={{ padding: "3px 8px", fontSize: "0.8rem" }}
+                                          >
+                                            <X size={14} style={{ marginRight: '4px', display: 'inline' }} />
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p style={{ color: "#6c757d", margin: "0" }}>No test cases added yet</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+
+                          <button
+                            type="button"
+                            className="pts-btn-danger"
+                            onClick={() => removeQuestion(question.id)}
+                            style={{ marginLeft: "15px" }}
+                          >
+                            <X size={16} style={{ marginRight: '6px', display: 'inline' }} />
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {assessmentData.questions.length === 0 && assessmentData.category.length > 0 && (
+                  <div className="pts-empty-state">
+                    <div className="pts-empty-state-icon"></div>
+                    <div className="pts-empty-state-text">No questions added yet. Start by adding MCQ or Programming questions to build your assessment.</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Add MCQ Question Form Modal */}
+              {showMcqForm && (
+                <div ref={mcqModalRef} style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0,0,0,0.5)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000
+                }}>
+                  <div style={{
+                    background: "white",
+                    padding: "30px",
+                    borderRadius: "8px",
+                    width: "90%",
+                    maxWidth: "600px",
+                    maxHeight: "90vh",
+                    overflowY: "auto"
+                  }}>
+                    <h3 style={{ color: "#523C48", marginTop: 0 }}>
+                      Add MCQ Question
+                    </h3>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Question Text *</label>
+                      <textarea
+                        className="pts-form-textarea"
+                        placeholder="Enter your question here"
+                        value={currentQuestion.text}
+                        onChange={(e) => handleQuestionChange("text", e.target.value)}
+                        rows={3}
+                        required
+                      />
+                    </div>
+
+                    <div className="pts-form-grid">
+                      {currentQuestion.options.map((option, index) => (
+                        <div className="pts-form-group" key={index}>
+                          <label className="pts-form-label">Option {String.fromCharCode(65 + index)} *</label>
+                          <input
+                            type="text"
+                            className="pts-form-input"
+                            placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
+                            value={option}
+                            onChange={(e) => handleQuestionChange("options", e.target.value, index)}
+                            required
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Correct Answer *</label>
+                      <select
+                        className="pts-form-select"
+                        value={Array.isArray(currentQuestion.correctAnswer) ? currentQuestion.correctAnswer[0] || "" : ""}
+                        onChange={(e) => handleQuestionChange("correctAnswer", [e.target.value])}
+                        required
+                      >
+                        <option value="">Select Correct Answer</option>
+                        {currentQuestion.options.map((option, index) => (
+                          <option key={index} value={String.fromCharCode(65 + index)}>
+                            {String.fromCharCode(65 + index)}. {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* MCQ Subcategory Selection */}
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">MCQ Subcategory *</label>
+                      <select
+                        className="pts-form-select"
+                        value={currentQuestion.subcategory || ""}
+                        onChange={(e) => handleQuestionChange("subcategory", e.target.value)}
+                        required
+                      >
+                        <option value="">Select Subcategory</option>
+                        {mcqSubcategories.map((subcat) => (
+                          <option key={subcat} value={subcat}>
+                            {subcat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Marks *</label>
+                      <input
+                        type="number"
+                        className="pts-form-input"
+                        placeholder="Enter marks"
+                        min="1"
+                        value={currentQuestion.marks}
+                        onChange={(e) => handleQuestionChange("marks", parseInt(e.target.value) || 1)}
+                        required
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="pts-btn-secondary"
+                        onClick={() => setShowMcqForm(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="pts-btn-primary"
+                        onClick={addQuestion}
+                      >
+                        Add Question
+                      </button>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="pts-btn-secondary"
-                    onClick={() => setShowTestCaseForm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="pts-btn-primary"
-                    onClick={() => {
-                      // Add test case to the specified question
-                      if (testCaseQuestionId !== null) {
-                        addTestCase(testCaseQuestionId);
-                      }
-                    }}
-                  >
-                    Add Test Case
-                  </button>
+              {/* Add Programming Question Form Modal */}
+              {showProgrammingForm && (
+                <div ref={programmingModalRef} style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0,0,0,0.5)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000
+                }}>
+                  <div style={{
+                    background: "white",
+                    padding: "30px",
+                    borderRadius: "8px",
+                    width: "90%",
+                    maxWidth: "600px",
+                    maxHeight: "90vh",
+                    overflowY: "auto"
+                  }}>
+                    <h3 style={{ color: "#523C48", marginTop: 0 }}>
+                      Add Programming Question
+                    </h3>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Question Text *</label>
+                      <textarea
+                        className="pts-form-textarea"
+                        placeholder="Enter your question here"
+                        value={currentQuestion.text}
+                        onChange={(e) => handleQuestionChange("text", e.target.value)}
+                        rows={3}
+                        required
+                      />
+                    </div>
+
+                    {/* Starter Code Section */}
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Starter Code</label>
+                      <textarea
+                        className="pts-form-textarea"
+                        placeholder="Enter starter code"
+                        value={currentQuestion.starterCode || ""}
+                        onChange={(e) => handleQuestionChange("starterCode", e.target.value)}
+                        rows={4}
+                      />
+                    </div>
+
+                    {/* Instructions Section */}
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Instructions</label>
+                      <textarea
+                        className="pts-form-textarea"
+                        placeholder="Enter instructions for this programming question"
+                        value={currentQuestion.instructions || ""}
+                        onChange={(e) => handleQuestionChange("instructions", e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Marks *</label>
+                      <input
+                        type="number"
+                        className="pts-form-input"
+                        placeholder="Enter marks"
+                        min="1"
+                        value={currentQuestion.marks}
+                        onChange={(e) => handleQuestionChange("marks", parseInt(e.target.value) || 1)}
+                        required
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="pts-btn-secondary"
+                        onClick={() => setShowProgrammingForm(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="pts-btn-primary"
+                        onClick={addQuestion}
+                      >
+                        Add Question
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              )}
 
+              {/* Add Test Case Form Modal */}
+              {showTestCaseForm && (
+                <div ref={testCaseModalRef} style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: "rgba(0,0,0,0.5)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  zIndex: 1000
+                }}>
+                  <div style={{
+                    background: "white",
+                    padding: "30px",
+                    borderRadius: "8px",
+                    width: "90%",
+                    maxWidth: "600px",
+                    maxHeight: "90vh",
+                    overflowY: "auto"
+                  }}>
+                    <h3 style={{ color: "#523C48", marginTop: 0 }}>
+                      Add Test Case
+                    </h3>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Input *</label>
+                      <textarea
+                        className="pts-form-textarea"
+                        placeholder="Enter input for the test case"
+                        value={currentTestCase.input}
+                        onChange={(e) => handleTestCaseChange("input", e.target.value)}
+                        rows={3}
+                        required
+                      />
+                      <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>
+                        This will be passed as standard input to the program
+                      </div>
+                    </div>
+
+                    <div className="pts-form-group">
+                      <label className="pts-form-label">Expected Output *</label>
+                      <textarea
+                        className="pts-form-textarea"
+                        placeholder="Enter expected output"
+                        value={currentTestCase.expectedOutput}
+                        onChange={(e) => handleTestCaseChange("expectedOutput", e.target.value)}
+                        rows={3}
+                        required
+                      />
+                      <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>
+                        This is what the program should output for the given input
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="pts-btn-secondary"
+                        onClick={() => setShowTestCaseForm(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="pts-btn-primary"
+                        onClick={() => {
+                          // Add test case to the specified question
+                          if (testCaseQuestionId !== null) {
+                            addTestCase(testCaseQuestionId);
+                          }
+                        }}
+                      >
+                        Add Test Case
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "30px" }}>
+                <button
+                  type="button"
+                  className="pts-btn-secondary"
+                  onClick={() => {
+                    // Reset form
+                    setAssessmentData({
+                      title: "",
+                      duration: 60,
+                      department: "",
+                      difficulty: "",
+                      category: ["MCQ", "Coding"],
+                      questions: [],
+                      referenceMaterials: [],
+                      status: "ACTIVE",
+                      type: "DEPARTMENT_WISE",
+                      domain: "ksrce.ac.in",
+                      configuration: {
+                        maxAttempts: 2,
+                        passingScore: 60,
+                        randomizeQuestions: true,
+                        totalQuestions: 0
+                      },
+                      scheduling: {
+                        startDate: new Date().toISOString(),
+                        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                        timezone: "Asia/Kolkata"
+                      },
+                      target: {
+                        departments: [],
+                        years: [3, 4]
+                      },
+                      stats: {
+                        avgScore: 0,
+                        completed: 0,
+                        highestScore: 0,
+                        totalParticipants: 0
+                      },
+                      entities: [],
+                      isPublished: false
+                    });
+
+                    // Reset date/time components
+                    setStartDateComponents(extractTimeComponents(new Date().toISOString()));
+                    setEndDateComponents(extractTimeComponents(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()));
+
+                    // Reset question forms
+                    setShowMcqForm(false);
+                    setShowProgrammingForm(false);
+
+                    // Reset current question
+                    setCurrentQuestion({
+                      id: 0,
+                      text: "",
+                      options: ["", "", "", ""],
+                      correctAnswer: [],
+                      marks: 1,
+                      subcategory: "",
+                      starterCode: "",
+                      instructions: "",
+                      testCases: []
+                    });
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  type="submit"
+                  className="pts-btn-primary"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Creating..." : "Create Assessment"}
+                </button>
               </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "30px" }}>
-            <button
-              type="button"
-              className="pts-btn-secondary"
-              onClick={() => {
-                // Reset form
-                setAssessmentData({
-                  title: "",
-                  description: "",
-                  duration: 60,
-                  instructions: "",
-                  department: "",
-                  difficulty: "",
-                  category: ["MCQ", "Coding"],
-                  questions: [],
-                  referenceMaterials: [],
-                  status: "ACTIVE",
-                  type: "DEPARTMENT_WISE",
-                  domain: "ksrce.ac.in",
-                  configuration: {
-                    maxAttempts: 2,
-                    passingScore: 60,
-                    randomizeQuestions: true,
-                    totalQuestions: 0
-                  },
-                  scheduling: {
-                    startDate: new Date().toISOString(),
-                    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                    timezone: "Asia/Kolkata"
-                  },
-                  target: {
-                    departments: [],
-                    years: [3, 4]
-                  },
-                  stats: {
-                    avgScore: 0,
-                    completed: 0,
-                    highestScore: 0,
-                    totalParticipants: 0
-                  },
-                  entities: [],
-                  isPublished: false
-                });
-
-                // Reset date/time components
-                setStartDateComponents(extractTimeComponents(new Date().toISOString()));
-                setEndDateComponents(extractTimeComponents(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()));
-
-                // Reset question forms
-                setShowMcqForm(false);
-                setShowProgrammingForm(false);
-
-                // Reset current question
-                setCurrentQuestion({
-                  id: 0,
-                  text: "",
-                  options: ["", "", "", ""],
-                  correctAnswer: [],
-                  marks: 1,
-                  subcategory: "",
-                  starterCode: "",
-                  testCases: []
-                });
-              }}
-            >
-              Reset
-            </button>
-            <button
-              type="submit"
-              className="pts-btn-primary"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Creating..." : "Create Assessment"}
-            </button>
+            </form>
           </div>
-        </form>
+        )}
       </div>
-      )}
     </div>
-  </div>
-);
+  );
 };
 
 export default AssessmentCreation;
