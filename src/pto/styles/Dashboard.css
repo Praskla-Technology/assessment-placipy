@@ -1,5 +1,40 @@
 /* PTO Dashboard Styles - Purple & White Theme */
 
+/* Skeleton Loading Styles */
+.pto-skeleton {
+  background: linear-gradient(90deg, #f0e6ff 25%, #e2d6f2 50%, #f0e6ff 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.pto-skeleton-text {
+  height: 16px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.pto-skeleton-number {
+  height: 24px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.pto-skeleton-button {
+  border-radius: 6px;
+}
+
+/* Base Styles */
 /* Root Variables */
 :root {
   --primary-purple: #9768E1;
@@ -84,8 +119,8 @@
   -webkit-tap-highlight-color: rgba(151, 104, 225, 0.2);
 }
 
-/* Hamburger Menu Button */
-.hamburger-menu {
+/* Hamburger Menu Button - PTO Specific */
+.pto-hamburger-menu {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -95,12 +130,11 @@
   border: none;
   cursor: pointer;
   z-index: 1001;
-  position: fixed;
-  top: 15px;
-  left: 15px;
+  margin-right: 15px;
+  /* Add spacing from title */
 }
 
-.hamburger-menu span {
+.pto-hamburger-menu span {
   height: 3px;
   width: 100%;
   background: #9768E1;
@@ -110,29 +144,41 @@
   transform-origin: center;
 }
 
-.hamburger-menu.hidden {
-  display: none !important;
+.pto-hamburger-menu.inside {
+  position: relative;
+  top: auto;
+  left: auto;
+  margin-right: 12px;
 }
 
-.hamburger-menu:active {
+.pto-hamburger-menu.inside span {
+  background-color: white;
+}
+
+.pto-hamburger-menu:active {
   transform: scale(0.95);
 }
 
-.hamburger-menu span {
-  width: 100%;
-  height: 3px;
-  background-color: var(--primary-purple);
-  border-radius: 10px;
-  transition: all 0.3s linear;
-  display: block;
+/* Hide hamburger menu on desktop when sidebar is open */
+@media (min-width: 769px) {
+  .pto-dashboard.sidebar-open .pto-hamburger-menu:not(.inside) {
+    display: none;
+  }
 }
 
-.hamburger-menu.hidden {
-  display: none !important;
+/* Show hamburger menu on mobile */
+@media (max-width: 768px) {
+  .pto-hamburger-menu {
+    display: flex;
+  }
+
+  .pto-hamburger-menu.inside {
+    display: flex;
+  }
 }
 
 /* Sidebar Navigation */
-.dashboard-sidebar {
+.pto-sidebar {
   width: 250px;
   background: linear-gradient(135deg, #9768E1 0%, #523C48 100%);
   color: white;
@@ -149,16 +195,23 @@
   transition: transform 0.3s ease;
 }
 
-.dashboard-sidebar.open {
+.pto-sidebar.open {
   transform: translateX(0);
 }
 
-.sidebar-header {
+.pto-sidebar-header {
   padding: 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.pto-sidebar-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
 }
 
 .sidebar-logo {
@@ -180,7 +233,7 @@
   color: white;
 }
 
-.sidebar-menu {
+.pto-sidebar-menu {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -189,12 +242,12 @@
   overflow-x: hidden;
 }
 
-.sidebar-menu li {
+.pto-sidebar-menu li {
   margin: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.sidebar-link {
+.pto-sidebar-link {
   display: flex;
   align-items: center;
   padding: 15px 20px;
@@ -205,12 +258,12 @@
   cursor: pointer;
 }
 
-.sidebar-link:hover {
+.pto-sidebar-link:hover {
   background-color: rgba(255, 255, 255, 0.1);
   color: white;
 }
 
-.sidebar-link.active {
+.pto-sidebar-link.active {
   background-color: rgba(255, 255, 255, 0.15);
   color: white;
   border-left: 4px solid white;
@@ -326,18 +379,19 @@ li:nth-child(7) .sidebar-link:before {
   transform: scale(0.98);
 }
 
-.sidebar-overlay {
+.pto-sidebar-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 999;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1001;
   display: none;
+  cursor: pointer;
 }
 
-.sidebar-overlay.active {
+.pto-sidebar-overlay.active {
   display: block;
 }
 
@@ -347,19 +401,21 @@ li:nth-child(7) .sidebar-link:before {
   display: flex;
   flex-direction: column;
   transition: margin-left 0.3s ease;
-  width: calc(100% - 70px);
-  margin-left: 70px;
+  width: auto;
+  margin-left: 25px !important;
+  /* Match PTS default/closed spacing */
 }
 
 .pto-dashboard.sidebar-open .pto-main-content {
-  width: calc(100% - 250px);
-  margin-left: 250px;
+  width: auto;
+  margin-left: 280px !important;
+  /* Sidebar width to prevent overlap */
 }
 
 .pto-dashboard.sidebar-closed .pto-main-content {
-  width: calc(100% - 70px);
-  margin-left: 70px;
-  /* Match default spacing when sidebar is closed */
+  width: 100%;
+  margin-left: 1 !important;
+  margin-right: 1 !important;
 }
 
 /* Header - Full Width, No Parent Padding */
@@ -367,27 +423,32 @@ li:nth-child(7) .sidebar-link:before {
   background: #f0e6ff;
   padding: 20px 30px;
   border-bottom: 1px solid #e9ecef;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: margin-left 0.3s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+  transition: all 0.3s ease;
   z-index: 900;
   border-radius: 12px;
   margin-top: 16px;
-  margin-right: 26px;
+  margin-right: 32px !important;
+  /* Increased by 6px */
   margin-bottom: 12px;
-  width: calc(100% - 70px);
-  margin-left: 70px;
+  width: auto;
+  margin-left: 0;
 }
 
 .pto-dashboard.sidebar-open .pto-header {
-  width: calc(100% - 250px);
-  margin-left: 250px;
-  /* Align header with content when sidebar is open */
+  width: auto;
+  margin-left: 1px !important;
+  /* Sidebar width to prevent overlap */
+  padding-left: 15px !important;
+  /* Match content padding */
+  margin-right: 55px !important;
 }
 
 .pto-dashboard.sidebar-closed .pto-header {
-  width: calc(100% - 70px);
-  margin-left: 70px;
-  /* Align header with content when sidebar is closed */
+  width: auto;
+  margin-left: 0px;
+  padding-left: 35px !important;
+  /* Reset to default */
 }
 
 @media (max-width: 768px) {
@@ -395,12 +456,12 @@ li:nth-child(7) .sidebar-link:before {
     width: 100%;
     margin-left: 0;
   }
-  
+
   .pto-dashboard.sidebar-open .pto-header {
     width: 100%;
-    margin-left: 0;
+    margin-left: 0px;
   }
-  
+
   .pto-dashboard.sidebar-closed .pto-header {
     width: 100%;
     margin-left: 0;
@@ -436,12 +497,19 @@ li:nth-child(7) .sidebar-link:before {
   color: #523C48;
 }
 
-.pto-user-avatar {
+.pto-user-avatar-first-letter {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   border: 2px solid #9768E1;
-  object-fit: cover;
+  background: linear-gradient(135deg, #9768E1 0%, #7B4FC4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  text-transform: uppercase;
 }
 
 .pto-user-details {
@@ -487,17 +555,17 @@ li:nth-child(7) .sidebar-link:before {
     width: 100%;
     margin-left: 0;
   }
-  
+
   .pto-dashboard.sidebar-open .pto-main-content {
     width: 100%;
     margin-left: 0;
   }
-  
+
   .pto-dashboard.sidebar-closed .pto-main-content {
     width: 100%;
     margin-left: 0;
   }
-  
+
   /* Mobile Sidebar Styling */
   .dashboard-sidebar {
     position: fixed;
@@ -561,12 +629,9 @@ li:nth-child(7) .sidebar-link:before {
   }
 
   .pto-header {
-    padding: 15px 20px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-    padding-left: 60px;
-    /* Space for hamburger */
+    padding: 15px 15px;
+    width: 100%;
+    margin-left: 0;
   }
 
   .pto-header-title {
@@ -774,16 +839,26 @@ li:nth-child(7) .sidebar-link:before {
 /* Content Container - Matching PTS */
 .pto-content {
   flex: 1;
-  padding: 30px;
+  padding: 19px 17px 25px 1px !important;
+  /* Adjusted for visual alignment */
+  /* Top Right Bottom Left(35px) */
+  margin-right: 32px !important;
+  /* Match Header Right Margin */
+  margin-left: 0 !important;
   overflow-y: auto;
   background-color: #f8f9fa;
-  transition: margin-left 0.3s ease;
-  width: 100%;
+  transition: all 0.3s ease;
+  width: auto;
+  border-radius: 12px;
 }
 
 .pto-dashboard.sidebar-open .pto-content {
-  width: 100%;
-  /* Full width content when sidebar is open */
+  padding-left: 0px !important;
+  /* Adjusted to align text with header title */
+  /* Match Header Open Padding */
+  margin-left: 0px !important;
+  /* Match Header Open Margin */
+  width: auto;
 }
 
 .pto-dashboard.sidebar-closed .pto-content {
@@ -796,13 +871,13 @@ li:nth-child(7) .sidebar-link:before {
     width: 100%;
     margin-left: 0;
   }
-  
+
   .pto-dashboard.sidebar-open .pto-content {
     width: 100%;
     margin-left: 0;
     /* Content fills available space on mobile */
   }
-  
+
   .pto-dashboard.sidebar-closed .pto-content {
     width: 100%;
     margin-left: 0;
@@ -1027,49 +1102,75 @@ li:nth-child(7) .sidebar-link:before {
   }
 }
 
+/* Stats Card - Single Row Layout */
 .stat-card {
   background: white;
   border-radius: 12px;
-  padding: 25px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px 24px;
+  /* Increased padding for vertical size & visual balance */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  /* Slightly enhanced shadow */
   display: flex;
   align-items: center;
   gap: 20px;
+  /* Balanced gap between icon and content */
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   border: 1px solid rgba(151, 104, 225, 0.1);
   animation: ptoFadeInUp 0.4s ease both;
+  min-height: 80px;
+  /* Ensure minimum height for consistency */
+  justify-content: flex-start;
+  /* Ensure content stays left */
 }
 
 .stat-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 20px rgba(151, 104, 225, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(151, 104, 225, 0.15);
 }
 
 .stat-icon-wrapper {
-  width: 60px;
-  height: 60px;
+  /* Restored standard size for balance, 100px was likely too large for a row layout */
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  /* Prevent icon shrinking */
 }
 
+/* Single Row Content Layout */
 .stat-content {
-  flex: 1;
+  display: flex;
+  /* Removed flex: 1 to prevent unnecessary stretching */
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  /* Compact gap between text and number */
 }
 
+.stat-content h3,
 .stat-title {
-  font-size: 0.9rem;
-  color: var(--text-gray);
-  margin: 0 0 8px 0;
+  font-size: 0.95rem;
+  color: #6c757d;
+  margin: 0;
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.stat-content h3::after {
+  content: ":";
+  margin-left: 2px;
+  display: none;
 }
 
 .stat-value {
-  font-size: 2rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--primary-purple);
-  margin: 0 0 5px 0;
+  margin: 0;
+  line-height: 1;
 }
 
 .stat-change {
@@ -1310,6 +1411,20 @@ li:nth-child(7) .sidebar-link:before {
   margin-bottom: 30px;
   margin-top: 0 !important;
   padding-top: 0 !important;
+  /* Switch to flex to allow cards to be compact (fit-content) */
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 20px;
+}
+
+.pto-component-page .stats-grid .stat-card {
+  width: auto;
+  /* Only take necessary width */
+  flex-grow: 0;
+  /* Do not stretch */
+  min-width: 200px;
+  /* Optional: ensure not too tiny */
 }
 
 .pto-component-page .table-container {

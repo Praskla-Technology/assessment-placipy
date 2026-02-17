@@ -30,7 +30,7 @@ const PTODashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+
 
 
   /* ✅ Nav Items */
@@ -69,8 +69,13 @@ const PTODashboard: React.FC = () => {
   /* ✅ Logout */
   const handleLogout = () => navigate("/");
 
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const closeSidebar = () => setSidebarOpen(false);
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  const closeSidebar = () => {
+    setSidebarOpen(false);
+  };
 
   const [avatarUrl, setAvatarUrl] = useState<string>(
     (typeof window !== 'undefined' ? localStorage.getItem('ptoProfilePictureUrl') : null) ||
@@ -112,34 +117,35 @@ const PTODashboard: React.FC = () => {
   }, [loading, user]);
 
   return (
-    <div className="pto-dashboard">
-      {/* ✅ Mobile Hamburger */}
-      <button className={`hamburger-menu ${sidebarOpen ? 'hidden' : ''}`} onClick={toggleSidebar}>
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+    <div className={`pto-dashboard ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+      {/* ✅ Mobile Hamburger - Only show when sidebar is closed */}
 
       {/* ✅ Sidebar */}
-      <nav className={`dashboard-sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="sidebar-header">
-          <h2>PTO Portal</h2>
+      <nav className={`pto-sidebar ${sidebarOpen ? "open" : ""}`}>
+        <div className="pto-sidebar-header">
+          <div className="pto-sidebar-header-content">
+            <button className="pto-hamburger-menu inside" onClick={toggleSidebar}>
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+            <h2>PTO Portal</h2>
+          </div>
         </div>
 
-        <ul className="sidebar-menu">
+        <ul className="pto-sidebar-menu">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <li key={item.id}>
                 <Link
                   to={item.path}
-                  className={`sidebar-link ${activeTab === item.id ? "active" : ""}`}
+                  className={`pto-sidebar-link ${activeTab === item.id ? "active" : ""}`}
                   onClick={() => {
                     setActiveTab(item.id);
                     closeSidebar();
                   }}
                 >
-                  <Icon className="sidebar-icon" />
                   <span className="sidebar-label">{item.label}</span>
                 </Link>
               </li>
@@ -155,38 +161,46 @@ const PTODashboard: React.FC = () => {
               closeSidebar();
             }}
           >
-            <FaSignOutAlt className="sidebar-icon" />
             <span className="sidebar-label">Logout</span>
           </button>
         </div>
       </nav>
 
       {/* ✅ Overlay */}
-      {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar}></div>}
+      {sidebarOpen && <div className="pto-sidebar-overlay" onClick={closeSidebar}></div>}
 
       {/* ✅ MAIN - Matching  Structure Exactly */}
       <div className="pto-main-content">
         {/* Header - Full Width, No Padding on Parent */}
         <header className="pto-header">
-          <h1 className="pto-header-title">
-            {navItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
-          </h1>
-          <div
-            className="pto-user-info"
-            onClick={() => navigate('/pto/profile')}
-            style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-            title="Go to Profile Settings"
-          >
-            <img
-              src={avatarUrl}
-              alt="Profile"
-              className="pto-user-avatar"
-            />
-            <div className="pto-user-details">
-              <p className="pto-user-name">{displayName}</p>
-              <p className="pto-user-role">PTO</p>
+          <div className="pto-header-content">
+            <div className="pto-header-left">
+              {!sidebarOpen && (
+                <button className="pto-hamburger-menu" onClick={toggleSidebar}>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </button>
+              )}
+              <h1 className="pto-header-title">
+                {navItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+              </h1>
+            </div>
+            <div
+              className="pto-user-info"
+              onClick={() => navigate('/pto/profile')}
+              style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              title="Go to Profile Settings"
+            >
+              <div className="pto-user-avatar-first-letter">
+                {displayName.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="pto-user-details">
+                <p className="pto-user-name">{displayName}</p>
+                <p className="pto-user-role">PTO</p>
+              </div>
             </div>
           </div>
         </header>

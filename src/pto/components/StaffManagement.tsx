@@ -247,7 +247,7 @@ const StaffManagement: React.FC = () => {
       {/* Statistics */}
       <div className="stats-grid">
         {error && (<div className="admin-error"><p>{error}</p></div>)}
-        {loading && (<div className="admin-loading"><div className="spinner"></div><p>Loading staff...</p></div>)}
+        {error && (<div className="admin-error"><p>{error}</p></div>)}
         <div className="stat-card">
           <FaUser size={24} color="#9768E1" />
           <div className="stat-content">
@@ -339,39 +339,65 @@ const StaffManagement: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {staff.map(member => (
-              <tr key={member.id} onClick={(e) => e.stopPropagation()}>
-                <td>{member.name}</td>
-                <td>{member.email}</td>
-                <td>{member.phone}</td>
-                <td>PTS</td>
-                <td>{member.department}</td>
-                <td>
-                  <div className="action-buttons">
-                    <button 
-                      className="edit-btn text-btn" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleEditStaff(member);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      title="Edit"
-                      type="button"
-                    >
-                      <FaEdit style={{ marginRight: '6px' }} /> Edit
-                    </button>
-                    <button 
-                      className="icon-btn delete-btn" 
-                      onClick={() => handleDeleteStaff(member.id)}
-                      title="Delete"
-                    >
-                      <FaTrash />
-                    </button>
-                  </div>
+            {loading ? (
+              // Skeleton UI
+              Array.from({ length: 5 }).map((_, index) => (
+                <tr key={`skeleton-${index}`}>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '180px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '60px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div></td>
+                  <td>
+                    <div className="action-buttons">
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '60px', height: '30px' }}></div>
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '30px', height: '30px' }}></div>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              staff.map(member => (
+                <tr key={member.id} onClick={(e) => e.stopPropagation()}>
+                  <td>{member.name}</td>
+                  <td>{member.email}</td>
+                  <td>{member.phone}</td>
+                  <td>PTS</td>
+                  <td>{member.department}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button
+                        className="edit-btn text-btn"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleEditStaff(member);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        title="Edit"
+                        type="button"
+                      >
+                        <FaEdit style={{ marginRight: '6px' }} /> Edit
+                      </button>
+                      <button
+                        className="icon-btn delete-btn"
+                        onClick={() => handleDeleteStaff(member.id)}
+                        title="Delete"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+            {!loading && staff.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '16px' }}>
+                  No staff members found.
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
