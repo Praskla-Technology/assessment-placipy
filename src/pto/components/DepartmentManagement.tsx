@@ -60,14 +60,14 @@ const DepartmentManagement: React.FC = () => {
       try {
         const staff = await PTOService.getStaff();
         setStaffList(staff.map((s: StaffDto) => ({ id: s.id, name: s.name, department: s.department })));
-      } catch {}
+      } catch { }
     };
     const loadCatalog = async () => {
       try {
         const codes = await PTOService.getDepartmentCatalog();
         const normalized = (codes as any[]).map((c: any) => String(c?.code ?? c?.name ?? c ?? ''));
         setCatalog(normalized);
-      } catch {}
+      } catch { }
     };
     loadStaff();
     loadCatalog();
@@ -183,7 +183,7 @@ const DepartmentManagement: React.FC = () => {
       {/* Statistics Cards */}
       <div className="stats-grid">
         {error && (<div className="admin-error"><p>{error}</p></div>)}
-        {loading && (<div className="admin-loading"><div className="spinner"></div><p>Loading departments...</p></div>)}
+        {error && (<div className="admin-error"><p>{error}</p></div>)}
         <div className="stat-card">
           <FaBuilding size={24} color="#9768E1" />
           <div className="stat-content">
@@ -224,73 +224,73 @@ const DepartmentManagement: React.FC = () => {
               <th>Students</th>
               <th>Staff</th>
               <th>Assessments</th>
-              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {departments.map(dept => (
-              <tr key={dept.code} onClick={(e) => e.stopPropagation()}>
-                <td>{dept.name}</td>
-                <td>{dept.code}</td>
-                <td>{dept.students}</td>
-                <td>{dept.staff}</td>
-                <td>{dept.assessments}</td>
-                <td>
-                  {dept.active ? 'Active' : 'Inactive'}
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    <button 
-                      className="edit-btn text-btn" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleEditDepartment(dept);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      title="Edit"
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      className="icon-btn activate-btn" 
-                      onClick={() => handleActivateDepartment(dept.code)}
-                      disabled={dept.active}
-                      title="Activate Department"
-                    >
-                      <FaCheckCircle />
-                    </button>
-                    <button 
-                      className="icon-btn deactivate-btn" 
-                      onClick={() => handleDeactivateDepartment(dept.code)}
-                      disabled={!dept.active}
-                      title="Deactivate Department"
-                    >
-                      <FaTimesCircle />
-                    </button>
-                    <button 
-                      className="icon-btn assign-btn" 
-                      onClick={() => handleAssignStaff(dept)}
-                      title="Assign Staff"
-                    >
-                      <FaUserPlus />
-                    </button>
-                    <button 
-                      className="icon-btn delete-btn" 
-                      onClick={() => handleDeleteDepartment(dept.id)}
-                      title="Delete"
-                    >
-                      <FaTrash />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {loading ? (
+              // Skeleton UI
+              Array.from({ length: 5 }).map((_, index) => (
+                <tr key={`skeleton-${index}`}>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '120px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '60px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div></td>
+                  <td>
+                    <div className="action-buttons">
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '30px', height: '30px' }}></div>
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '30px', height: '30px' }}></div>
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '30px', height: '30px' }}></div>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              departments.map(dept => (
+                <tr key={dept.code} onClick={(e) => e.stopPropagation()}>
+                  <td>{dept.name}</td>
+                  <td>{dept.code}</td>
+                  <td>{dept.students}</td>
+                  <td>{dept.staff}</td>
+                  <td>{dept.assessments}</td>
+                  <td>
+                    <div className="action-buttons">
+                      <button
+                        className="edit-btn text-btn"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleEditDepartment(dept);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        title="Edit"
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="icon-btn assign-btn"
+                        onClick={() => handleAssignStaff(dept)}
+                        title="Assign Staff"
+                      >
+                        <FaUserPlus />
+                      </button>
+                      <button
+                        className="icon-btn delete-btn"
+                        onClick={() => handleDeleteDepartment(dept.id)}
+                        title="Delete"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
             {(!loading && !error && departments.length === 0) && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '16px' }}>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '16px' }}>
                   No departments added yet — click "Add Department" to create one.
                 </td>
               </tr>
@@ -392,16 +392,16 @@ const DepartmentManagement: React.FC = () => {
                     .map((s) => (
                       <div key={s.id} className="staff-item">
                         <span>{s.name}</span>
-                        <button 
+                        <button
                           className="icon-btn assign-btn"
                           onClick={async () => {
-                          await PTOService.assignStaffToDepartment(selectedDept.code, s.id);
-                          const refreshedStaff = await PTOService.getStaff();
-                          setStaffList(refreshedStaff.map((st: StaffDto) => ({ id: st.id, name: st.name, department: st.department })));
-                          const refreshedDepts = await PTOService.getDepartments();
-                          const mappedDepts: Department[] = refreshedDepts.map((d: Dept, idx) => ({ id: idx + 1, name: d.name, code: d.code, students: d.students, staff: d.staff, assessments: d.assessments, staffMembers: d.staffMembers || [], active: (d as any)?.active !== false }));
-                          setDepartments(mappedDepts);
-                        }}
+                            await PTOService.assignStaffToDepartment(selectedDept.code, s.id);
+                            const refreshedStaff = await PTOService.getStaff();
+                            setStaffList(refreshedStaff.map((st: StaffDto) => ({ id: st.id, name: st.name, department: st.department })));
+                            const refreshedDepts = await PTOService.getDepartments();
+                            const mappedDepts: Department[] = refreshedDepts.map((d: Dept, idx) => ({ id: idx + 1, name: d.name, code: d.code, students: d.students, staff: d.staff, assessments: d.assessments, staffMembers: d.staffMembers || [], active: (d as any)?.active !== false }));
+                            setDepartments(mappedDepts);
+                          }}
                         >
                           <FaUserPlus />
                         </button>
@@ -415,7 +415,7 @@ const DepartmentManagement: React.FC = () => {
                   {staffList.filter(s => (s.department || '') === selectedDept.code).map((s) => (
                     <div key={s.id} className="staff-item">
                       <span>{s.name}</span>
-                      <button 
+                      <button
                         className="icon-btn delete-btn"
                         onClick={async () => {
                           await PTOService.unassignStaffFromDepartment(selectedDept.code, s.id);

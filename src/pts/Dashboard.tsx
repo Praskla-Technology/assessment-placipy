@@ -11,7 +11,7 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
     totalAssessments: 0,
     activeAssessments: 0,
-    totalSubmissions: 0 
+    totalSubmissions: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,7 @@ const Dashboard: React.FC = () => {
     {
       title: "View Analytics",
       description: "Analyze student performance and generate detailed reports",
-      action: "stats", 
+      action: "stats",
       icon: <BarChart3 size={24} />
     }
   ]);
@@ -44,32 +44,32 @@ const Dashboard: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        
+
         // Wait for user data to be available
         if (!user) {
           throw new Error("User data not available");
         }
-        
+
         // Extract username and domain from email
         const email = user.email;
         const [username, domain] = email.split('@');
-        
+
         console.log("Dashboard: User email:", email);
         console.log("Dashboard: Extracted username:", username);
         console.log("Dashboard: Extracted domain:", domain);
-        
+
         // Fetch assessments created by the current user (owner)
         const response = await AssessmentService.getAssessmentsByOwner();
-        
+
         // Calculate completed today - this requires submission data which is not currently fetched
         // For now, we'll use a placeholder value or try to fetch submission data
         let completedToday = 0;
-        
+
         // Since we don't have submission data in this component, we'll set it to 0
         // In a real implementation, you would fetch submission data from an API
-        
+
         console.log("Dashboard: All assessments response:", response);
-        
+
         // Extract assessments array from response
         let assessments = [];
         if (response && typeof response === 'object') {
@@ -81,20 +81,20 @@ const Dashboard: React.FC = () => {
             assessments = response.items;
           }
         }
-        
+
         console.log("Dashboard: Raw assessments:", assessments);
-        
+
         // Store assessments for recent activity calculation
         setAssessments(assessments);
-        
+
         // Calculate counts - now including ALL assessments
         const totalAssessments = assessments.length;
-        const activeAssessments = assessments.filter((assessment: any) => 
+        const activeAssessments = assessments.filter((assessment: any) =>
           assessment.status === "ACTIVE"
         ).length;
-        
+
         console.log("Dashboard: Calculated stats:", { totalAssessments, activeAssessments });
-        
+
         // Fetch student analytics to get submission count
         let totalSubmissions = 0;
         try {
@@ -102,8 +102,8 @@ const Dashboard: React.FC = () => {
           // Extract total submissions from analytics data
           if (analyticsResponse && analyticsResponse.data) {
             // Use raw results count or other metric for total submissions
-            totalSubmissions = Array.isArray(analyticsResponse.data.rawResults) 
-              ? analyticsResponse.data.rawResults.length 
+            totalSubmissions = Array.isArray(analyticsResponse.data.rawResults)
+              ? analyticsResponse.data.rawResults.length
               : 0;
           }
         } catch (analyticsError) {
@@ -111,7 +111,7 @@ const Dashboard: React.FC = () => {
           // Fallback to 0 if analytics fetch fails
           totalSubmissions = 0;
         }
-        
+
         setStats(prevStats => ({
           ...prevStats,
           totalAssessments,
@@ -151,7 +151,7 @@ const Dashboard: React.FC = () => {
     const activities = recentAssessments.map((assessment, index) => {
       const createdDate = new Date(assessment.createdAt || assessment.updatedAt || Date.now());
       const timeDiff = Date.now() - createdDate.getTime();
-      
+
       // Format time difference
       let timeString = "";
       if (timeDiff < 60000) { // Less than 1 minute
@@ -190,8 +190,8 @@ const Dashboard: React.FC = () => {
   const handleQuickAction = (action: string) => {
     // Navigate to respective pages using React Router
     console.log(`Quick action: ${action}`);
-    
-    switch(action) {
+
+    switch (action) {
       case 'create':
         navigate('/pts/create');
         break;
@@ -236,7 +236,7 @@ const Dashboard: React.FC = () => {
             <div className="pts-skeleton pts-skeleton-text" style={{ width: '400px', height: '20px', borderRadius: '4px' }}></div>
           </div>
         </div>
-        
+
         {/* Statistics Cards Skeleton */}
         <div className="pts-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '30px' }}>
           <div className="pts-skeleton pts-stat-card" style={{ padding: '20px', borderRadius: '8px', minHeight: '120px' }}>
@@ -255,7 +255,7 @@ const Dashboard: React.FC = () => {
             <div className="pts-skeleton pts-skeleton-text" style={{ height: '18px', width: '70%', borderRadius: '4px' }}></div>
           </div>
         </div>
-        
+
         {/* Quick Actions Skeleton */}
         <div className="pts-actions-section" style={{ marginBottom: '30px' }}>
           <div className="pts-skeleton pts-skeleton-text" style={{ width: '150px', height: '28px', marginBottom: '20px', borderRadius: '4px' }}></div>
@@ -280,7 +280,7 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Recent Activity Skeleton */}
         <div className="pts-activity-section">
           <div className="pts-skeleton pts-skeleton-text" style={{ width: '180px', height: '28px', marginBottom: '20px', borderRadius: '4px' }}></div>

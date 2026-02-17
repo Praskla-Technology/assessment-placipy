@@ -104,7 +104,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: #343a40;
+  background-color: #f0e6ff;
   color: white;
 }
 
@@ -127,6 +127,7 @@ body {
 .dashboard-content p {
   color: #6c757d;
 }
+
 input[type="checkbox"] {
   width: 18px;
   height: 18px;

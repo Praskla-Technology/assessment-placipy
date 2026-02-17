@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  FaUsers, 
-  FaBuilding, 
-  FaClipboardList, 
+import {
+  FaUsers,
+  FaBuilding,
+  FaClipboardList,
   FaCalendarAlt
 } from 'react-icons/fa';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
@@ -17,11 +17,13 @@ const DashboardHome: React.FC = () => {
     totalDepartments: 0,
     completedToday: 0
   });
+  const [loading, setLoading] = useState<boolean>(true);
   const [departmentPerformanceData, setDepartmentPerformanceData] = useState<Array<{ name: string; students: number; avgScore: number; completed: number }>>([]);
   const [assessments, setAssessments] = useState<Array<{ id: string; title: string; subject: string; startTime: string; duration: string; status: 'ongoing' | 'upcoming' }>>([]);
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
       const data = await PTOService.getDashboard();
       setStats({
         totalAssessments: data.totalAssessments,
@@ -38,33 +40,34 @@ const DashboardHome: React.FC = () => {
       const ongoingCards: AssessmentCard[] = (data.ongoingTests as RawTest[]).map((t) => ({ id: t.id, title: t.name, subject: t.department || 'All', startTime: t.date || '', duration: `${t.duration || 0} mins`, status: 'ongoing' }));
       const upcomingCards: AssessmentCard[] = (data.upcomingTests as RawTest[]).map((t) => ({ id: t.id, title: t.name, subject: t.department || 'All', startTime: t.date || '', duration: `${t.duration || 0} mins`, status: 'upcoming' }));
       setAssessments([...ongoingCards, ...upcomingCards]);
+      setLoading(false);
     };
     load();
   }, []);
 
   // KPI Cards matching PRD overview
   const kpiCards = [
-    { 
-      label: 'TOTAL STUDENTS', 
-      value: stats.totalStudents, 
+    {
+      label: 'TOTAL STUDENTS',
+      value: stats.totalStudents,
       change: 'Across all departments',
       icon: FaUsers
     },
-    { 
-      label: 'DEPARTMENTS', 
-      value: stats.totalDepartments, 
+    {
+      label: 'DEPARTMENTS',
+      value: stats.totalDepartments,
       change: 'Active departments',
       icon: FaBuilding
     },
-    { 
-      label: 'TOTAL ASSESSMENTS', 
-      value: stats.totalAssessments, 
+    {
+      label: 'TOTAL ASSESSMENTS',
+      value: stats.totalAssessments,
       change: '+4 from last month',
       icon: FaClipboardList
     },
-    { 
-      label: 'ACTIVE ASSESSMENTS', 
-      value: stats.activeAssessments, 
+    {
+      label: 'ACTIVE ASSESSMENTS',
+      value: stats.activeAssessments,
       change: 'Currently running',
       icon: FaCalendarAlt
     },
@@ -92,22 +95,33 @@ const DashboardHome: React.FC = () => {
         </div>
       </div>
 
-      
 
+
+      {/* KPI Cards - Matching Image Style */}
       {/* KPI Cards - Matching Image Style */}
       <div className="pto-kpi-section">
         <div className="pto-kpi-grid">
-          {kpiCards.map((card, index) => (
-            <div
-              key={index}
-              className="pto-kpi-card pto-fade-in"
-              style={{ animationDelay: `${index * 80}ms` }}
-            >
-              <div className="pto-kpi-label">{card.label}</div>
-              <div className="pto-kpi-value">{card.value}</div>
-              <div className="pto-kpi-change">{card.change}</div>
-            </div>
-          ))}
+          {loading ? (
+            Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="pto-kpi-card">
+                <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
+                <div className="pto-skeleton pto-skeleton-number" style={{ width: '60px', height: '36px', marginTop: '10px' }}></div>
+                <div className="pto-skeleton pto-skeleton-text" style={{ width: '120px', marginTop: '5px' }}></div>
+              </div>
+            ))
+          ) : (
+            kpiCards.map((card, index) => (
+              <div
+                key={index}
+                className="pto-kpi-card pto-fade-in"
+                style={{ animationDelay: `${index * 80}ms` }}
+              >
+                <div className="pto-kpi-label">{card.label}</div>
+                <div className="pto-kpi-value">{card.value}</div>
+                <div className="pto-kpi-change">{card.change}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -115,18 +129,22 @@ const DashboardHome: React.FC = () => {
       <div className="pto-analytics-section">
         <h2 className="pto-section-title pto-fade-in">Performance by Department</h2>
         <div className="pto-chart-card pto-slide-in">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={departmentPerformanceData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="students" fill="#9768E1" name="Total Students" />
-              <Bar dataKey="avgScore" fill="#E4D5F8" name="Avg Score" />
-              <Bar dataKey="completed" fill="#A4878D" name="Completed Tests" />
-            </BarChart>
-          </ResponsiveContainer>
+          {loading ? (
+            <div className="pto-skeleton" style={{ width: '100%', height: '300px' }}></div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={departmentPerformanceData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="students" fill="#9768E1" name="Total Students" />
+                <Bar dataKey="avgScore" fill="#E4D5F8" name="Avg Score" />
+                <Bar dataKey="completed" fill="#A4878D" name="Completed Tests" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -135,50 +153,76 @@ const DashboardHome: React.FC = () => {
         <div className="tests-column">
           <h2 className="pto-section-title">Ongoing Tests</h2>
           <div className="tests-list">
-            {assessments.filter(a => a.status === 'ongoing').map((test, idx) => (
-              <div
-                key={test.id}
-                className="test-card ongoing pto-fade-in"
-                style={{ animationDelay: `${idx * 80}ms` }}
-              >
-                <div className="test-icon">
-                  <FaCalendarAlt size={18} color="#9768E1" />
+            {loading ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={idx} className="test-card ongoing">
+                  <div className="pto-skeleton" style={{ width: '40px', height: '40px', borderRadius: '8px', marginRight: '15px' }}></div>
+                  <div style={{ flex: 1 }}>
+                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div>
+                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
+                  </div>
                 </div>
-                <div className="test-content">
-                  <div className="test-name">{test.title}</div>
-                  <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
-                  <div className="test-date"><strong>Started:</strong> {test.startTime}</div>
-                  <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
-                </div>
-              </div>
-            ))}
-            {assessments.filter(a => a.status === 'ongoing').length === 0 && (
-              <div className="pto-empty-state">No ongoing tests</div>
+              ))
+            ) : (
+              assessments.filter(a => a.status === 'ongoing').length > 0 ? (
+                assessments.filter(a => a.status === 'ongoing').map((test, idx) => (
+                  <div
+                    key={test.id}
+                    className="test-card ongoing pto-fade-in"
+                    style={{ animationDelay: `${idx * 80}ms` }}
+                  >
+                    <div className="test-icon">
+                      <FaCalendarAlt size={18} color="#9768E1" />
+                    </div>
+                    <div className="test-content">
+                      <div className="test-name">{test.title}</div>
+                      <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
+                      <div className="test-date"><strong>Started:</strong> {test.startTime}</div>
+                      <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="pto-empty-state">No ongoing tests</div>
+              )
             )}
           </div>
         </div>
         <div className="tests-column">
           <h2 className="pto-section-title">Upcoming Tests</h2>
           <div className="tests-list">
-            {assessments.filter(a => a.status === 'upcoming').map((test, idx) => (
-              <div
-                key={test.id}
-                className="test-card pto-fade-in"
-                style={{ animationDelay: `${idx * 80}ms` }}
-              >
-                <div className="test-icon">
-                  <FaCalendarAlt size={18} color="#9768E1" />
+            {loading ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={idx} className="test-card">
+                  <div className="pto-skeleton" style={{ width: '40px', height: '40px', borderRadius: '8px', marginRight: '15px' }}></div>
+                  <div style={{ flex: 1 }}>
+                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div>
+                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
+                  </div>
                 </div>
-                <div className="test-content">
-                  <div className="test-name">{test.title}</div>
-                  <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
-                  <div className="test-date"><strong>Starts:</strong> {test.startTime}</div>
-                  <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
-                </div>
-              </div>
-            ))}
-            {assessments.filter(a => a.status === 'upcoming').length === 0 && (
-              <div className="pto-empty-state">No upcoming tests</div>
+              ))
+            ) : (
+              assessments.filter(a => a.status === 'upcoming').length > 0 ? (
+                assessments.filter(a => a.status === 'upcoming').map((test, idx) => (
+                  <div
+                    key={test.id}
+                    className="test-card pto-fade-in"
+                    style={{ animationDelay: `${idx * 80}ms` }}
+                  >
+                    <div className="test-icon">
+                      <FaCalendarAlt size={18} color="#9768E1" />
+                    </div>
+                    <div className="test-content">
+                      <div className="test-name">{test.title}</div>
+                      <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
+                      <div className="test-date"><strong>Starts:</strong> {test.startTime}</div>
+                      <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="pto-empty-state">No upcoming tests</div>
+              )
             )}
           </div>
         </div>
