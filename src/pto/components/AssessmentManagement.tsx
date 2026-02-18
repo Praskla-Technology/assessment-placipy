@@ -92,7 +92,7 @@ const AssessmentManagement: React.FC = () => {
   const [importText, setImportText] = useState('');
   const [importTargetId, setImportTargetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     department: '',
@@ -155,7 +155,7 @@ const AssessmentManagement: React.FC = () => {
     }
   };
 
-  
+
 
   const refreshAssessments = async () => {
     const data = await PTOService.getAssessments();
@@ -166,8 +166,8 @@ const AssessmentManagement: React.FC = () => {
       const start = getNested(a, ['timeWindow', 'start']) ?? getNested(a, ['scheduling', 'startDate']);
       const end = getNested(a, ['timeWindow', 'end']) ?? getNested(a, ['scheduling', 'endDate']);
       const createdName = asString(getProp(a, 'createdByName'));
-          const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
-          const createdUser = createdName || asString(createdEmail).split('@')[0];
+      const createdEmail = getProp(a, 'createdBy') ?? getProp(a, 'ownerEmail') ?? getNested(a, ['owner', 'email']) ?? getProp(a, 'createdByEmail');
+      const createdUser = createdName || asString(createdEmail).split('@')[0];
       const qs = getProp(a, 'questions');
       const totalQ = Array.isArray(qs) ? qs.length : asNumber(qs ?? getNested(a, ['configuration', 'totalQuestions']) ?? getProp(a, 'totalQuestions'));
       return {
@@ -181,8 +181,8 @@ const AssessmentManagement: React.FC = () => {
         attempts: asNumber(getProp(a, 'attempts') ?? getNested(a, ['configuration', 'maxAttempts']) ?? 1),
         questions: totalQ,
         status: (asString(getProp(a, 'status')).toLowerCase() === 'active') ? 'active' : 'inactive',
-            createdBy: createdUser || undefined
-          };
+        createdBy: createdUser || undefined
+      };
     });
     const filtered = mapped.filter(a => !(deletedIds || []).includes(a.id));
     setAssessments(prev => {
@@ -228,11 +228,11 @@ const AssessmentManagement: React.FC = () => {
     }
   };
 
-  
+
 
   // Legacy status toggle removed in favor of explicit actions
 
-  
+
 
   const [previewData, setPreviewData] = useState<AssessmentDetail | null>(null);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
@@ -283,7 +283,7 @@ const AssessmentManagement: React.FC = () => {
         let correctIndex = parseInt(ans, 10);
         if (Number.isNaN(correctIndex)) {
           const letter = String(ans).toUpperCase();
-          correctIndex = Math.max(0, ['A','B','C','D','E','F','G'].indexOf(letter));
+          correctIndex = Math.max(0, ['A', 'B', 'C', 'D', 'E', 'F', 'G'].indexOf(letter));
         }
         items.push({ text: q, options: opts, correctIndex });
       }
@@ -315,7 +315,7 @@ const AssessmentManagement: React.FC = () => {
         const ans = r[r.length - 1];
         let idx = parseInt(ans, 10);
         if (Number.isNaN(idx)) {
-          idx = Math.max(0, ['A','B','C','D','E','F','G'].indexOf(String(ans || '').toUpperCase()));
+          idx = Math.max(0, ['A', 'B', 'C', 'D', 'E', 'F', 'G'].indexOf(String(ans || '').toUpperCase()));
         }
         if (q && opts.length) parsed.push({ text: q, options: opts, correctIndex: idx });
       }
@@ -335,7 +335,7 @@ const AssessmentManagement: React.FC = () => {
       {/* Statistics */}
       <div className="stats-grid">
         {error && (<div className="admin-error"><p>{error}</p></div>)}
-        {loading && (<div className="admin-loading"><div className="spinner"></div><p>Loading assessments...</p></div>)}
+        {error && (<div className="admin-error"><p>{error}</p></div>)}
         <div className="stat-card">
           <FaClipboardList size={24} color="#9768E1" />
           <div className="stat-content">
@@ -381,63 +381,83 @@ const AssessmentManagement: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {/* Active Section */}
-            {assessments.filter(a => a.status === 'active').length > 0 && (
-              <tr><td colSpan={7}><strong>Active</strong></td></tr>
-            )}
-            {assessments.filter(a => a.status === 'active').map(assessment => (
-              <tr key={`active-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
-                <td>{assessment.name || '(Untitled)'} </td>
-                <td>{assessment.department}</td>
-                <td>{assessment.createdBy || '—'}</td>
-                <td>
-                  <span className={`type-badge ${assessment.type}`}>
-                    {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
-                  </span>
-                </td>
-                <td>{assessment.duration} min</td>
-                <td>
-                  <span className={`status-badge ${assessment.status}`}>Active</span>
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
-                    <button className="text-btn" onClick={() => handleDisable(assessment.id)} title="Deactivate" type="button">Deactivate</button>
-                    <button className="text-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }} title="Import Questions" type="button">Import</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            
-
-            {/* Inactive Section */}
-            {assessments.filter(a => a.status === 'inactive').length > 0 && (
-              <tr><td colSpan={7}><strong>Inactive</strong></td></tr>
-            )}
-              {assessments.filter(a => a.status === 'inactive').map(assessment => (
-                <tr key={`inactive-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
-                  <td>{assessment.name || '(Untitled)'} </td>
-                  <td>{assessment.department}</td>
-                  <td>{assessment.createdBy || '—'}</td>
+            {/* Loading Skeleton */}
+            {loading ? (
+              Array.from({ length: 5 }).map((_, index) => (
+                <tr key={`skeleton-${index}`}>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '180px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '80px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '120px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-button" style={{ width: '100px', height: '24px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '60px' }}></div></td>
+                  <td><div className="pto-skeleton pto-skeleton-button" style={{ width: '80px', height: '24px' }}></div></td>
                   <td>
-                    <span className={`type-badge ${assessment.type}`}>
-                      {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
-                    </span>
+                    <div className="action-buttons">
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '32px', height: '32px', borderRadius: '50%' }}></div>
+                      <div className="pto-skeleton pto-skeleton-button" style={{ width: '80px', height: '32px' }}></div>
+                    </div>
                   </td>
-                <td>{assessment.duration} min</td>
-                <td>
-                  <span className={`status-badge ${assessment.status}`}>Inactive</span>
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
-                      <button className="text-btn" onClick={() => handleActivate(assessment.id)} title="Activate" type="button">Activate</button>
-                      <button className="icon-btn delete-btn" onClick={() => handleDeleteAssessment(assessment.id)} title="Delete"><FaTrash /></button>
-                  </div>
-                </td>
                 </tr>
-              ))}
+              ))
+            ) : (
+              <>
+                {/* Active Section */}
+                {assessments.filter(a => a.status === 'active').length > 0 && (
+                  <tr><td colSpan={7}><strong>Active</strong></td></tr>
+                )}
+                {assessments.filter(a => a.status === 'active').map(assessment => (
+                  <tr key={`active-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
+                    <td>{assessment.name || '(Untitled)'} </td>
+                    <td>{assessment.department}</td>
+                    <td>{assessment.createdBy || '—'}</td>
+                    <td>
+                      <span className={`type-badge ${assessment.type}`}>
+                        {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
+                      </span>
+                    </td>
+                    <td>{assessment.duration} min</td>
+                    <td>
+                      <span className={`status-badge ${assessment.status}`}>Active</span>
+                    </td>
+                    <td>
+                      <div className="action-buttons">
+                        <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                        <button className="text-btn" onClick={() => handleDisable(assessment.id)} title="Deactivate" type="button">Deactivate</button>
+                        <button className="text-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }} title="Import Questions" type="button">Import</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {/* Inactive Section */}
+                {assessments.filter(a => a.status === 'inactive').length > 0 && (
+                  <tr><td colSpan={7}><strong>Inactive</strong></td></tr>
+                )}
+                {assessments.filter(a => a.status === 'inactive').map(assessment => (
+                  <tr key={`inactive-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
+                    <td>{assessment.name || '(Untitled)'} </td>
+                    <td>{assessment.department}</td>
+                    <td>{assessment.createdBy || '—'}</td>
+                    <td>
+                      <span className={`type-badge ${assessment.type}`}>
+                        {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
+                      </span>
+                    </td>
+                    <td>{assessment.duration} min</td>
+                    <td>
+                      <span className={`status-badge ${assessment.status}`}>Inactive</span>
+                    </td>
+                    <td>
+                      <div className="action-buttons">
+                        <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                        <button className="text-btn" onClick={() => handleActivate(assessment.id)} title="Activate" type="button">Activate</button>
+                        <button className="icon-btn delete-btn" onClick={() => handleDeleteAssessment(assessment.id)} title="Delete"><FaTrash /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -556,8 +576,8 @@ const AssessmentManagement: React.FC = () => {
                 <input
                   type="time"
                   value={formData.timeWindow.start}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
+                  onChange={(e) => setFormData({
+                    ...formData,
                     timeWindow: { ...formData.timeWindow, start: e.target.value }
                   })}
                 />
@@ -567,8 +587,8 @@ const AssessmentManagement: React.FC = () => {
                 <input
                   type="time"
                   value={formData.timeWindow.end}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
+                  onChange={(e) => setFormData({
+                    ...formData,
                     timeWindow: { ...formData.timeWindow, end: e.target.value }
                   })}
                 />
@@ -635,7 +655,7 @@ const AssessmentManagement: React.FC = () => {
                 </div>
               )}
               <div className="preview-item">
-                <strong>Status:</strong> 
+                <strong>Status:</strong>
                 <span className={`status-badge ${selectedAssessment.status}`}>
                   {selectedAssessment.status.charAt(0).toUpperCase() + selectedAssessment.status.slice(1)}
                 </span>
@@ -680,32 +700,32 @@ const AssessmentManagement: React.FC = () => {
         </div>
       )}
 
-      
+
     </div>
   );
 };
 
 export default AssessmentManagement;
-  const getProp = (obj: unknown, key: string): unknown => {
-    if (obj && typeof obj === 'object' && key in (obj as Record<string, unknown>)) {
-      return (obj as Record<string, unknown>)[key];
+const getProp = (obj: unknown, key: string): unknown => {
+  if (obj && typeof obj === 'object' && key in (obj as Record<string, unknown>)) {
+    return (obj as Record<string, unknown>)[key];
+  }
+  return undefined;
+};
+const getNested = (obj: unknown, keys: string[]): unknown => {
+  let cur: unknown = obj;
+  for (const k of keys) {
+    if (cur && typeof cur === 'object' && k in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[k];
+    } else {
+      return undefined;
     }
-    return undefined;
-  };
-  const getNested = (obj: unknown, keys: string[]): unknown => {
-    let cur: unknown = obj;
-    for (const k of keys) {
-      if (cur && typeof cur === 'object' && k in (cur as Record<string, unknown>)) {
-        cur = (cur as Record<string, unknown>)[k];
-      } else {
-        return undefined;
-      }
-    }
-    return cur;
-  };
-  const asString = (v: unknown, fallback = ''): string => {
-    return typeof v === 'string' ? v : String(v ?? fallback);
-  };
-  const asNumber = (v: unknown, fallback = 0): number => {
-    return typeof v === 'number' ? v : Number(v ?? fallback);
-  };
+  }
+  return cur;
+};
+const asString = (v: unknown, fallback = ''): string => {
+  return typeof v === 'string' ? v : String(v ?? fallback);
+};
+const asNumber = (v: unknown, fallback = 0): number => {
+  return typeof v === 'number' ? v : Number(v ?? fallback);
+};
