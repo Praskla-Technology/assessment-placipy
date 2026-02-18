@@ -1,7 +1,7 @@
 // @ts-nocheck
-const express = require('express');
-const AdminService = require('../services/AdminService');
-const authMiddleware = require('../auth/auth.middleware');
+import express from 'express';
+import AdminService from '../services/AdminService';
+import * as authMiddleware from '../auth/auth.middleware';
 
 const router = express.Router();
 const adminService = new AdminService();
@@ -28,11 +28,10 @@ const checkAdminRole = async (req, res, next) => {
     }
 
     // If none of the above, fetch user profile to check role
-    const { getUserAttributes } = require('../auth/cognito');
     try {
       const userAttributes = await getUserAttributes(req.user.username || req.user.sub);
       const userRole = userAttributes.find(attr => attr.Name === 'custom:role')?.Value;
-      
+
       if (userRole === 'Admin') {
         return next();
       }
@@ -40,15 +39,15 @@ const checkAdminRole = async (req, res, next) => {
       console.log('Error fetching user attributes:', error.message);
     }
 
-    return res.status(403).json({ 
-      success: false, 
-      message: 'Access denied. Admin role required.' 
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Admin role required.'
     });
   } catch (error) {
     console.error('Error in admin role check:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error during role verification.' 
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error during role verification.'
     });
   }
 };
@@ -94,7 +93,7 @@ router.get('/colleges', async (req, res) => {
 router.post('/colleges', async (req, res) => {
   try {
     const { name, domain, location, contactInfo } = req.body;
-    
+
     // Validation
     if (!name || !domain) {
       return res.status(400).json({
@@ -130,7 +129,7 @@ router.get('/colleges/:collegeId', async (req, res) => {
   try {
     const { collegeId } = req.params;
     const college = await adminService.getCollegeById(collegeId);
-    
+
     if (!college) {
       return res.status(404).json({
         success: false,
@@ -156,7 +155,7 @@ router.put('/colleges/:collegeId', async (req, res) => {
   try {
     const { collegeId } = req.params;
     const updates = req.body;
-    
+
     const college = await adminService.updateCollege(collegeId, {
       ...updates,
       updatedBy: req.user.userId
@@ -180,7 +179,7 @@ router.put('/colleges/:collegeId', async (req, res) => {
 router.delete('/colleges/:collegeId', async (req, res) => {
   try {
     const { collegeId } = req.params;
-    
+
     // Check if college has active users before deletion
     const hasUsers = await adminService.checkCollegeHasUsers(collegeId);
     if (hasUsers) {
@@ -233,7 +232,7 @@ router.get('/officers', async (req, res) => {
 router.post('/officers', async (req, res) => {
   try {
     const { name, email, collegeId, role, department, phone, permissions } = req.body;
-    
+
     // Validation
     if (!name || !email || !collegeId || !role) {
       return res.status(400).json({
@@ -268,7 +267,7 @@ router.post('/officers', async (req, res) => {
     // Determine success message based on Cognito creation status
     let successMessage = 'Officer created successfully';
     let authStatus = 'Authentication account created';
-    
+
     if (cognitoUserCreated === false) {
       successMessage = 'Officer created in database, but authentication setup needs attention';
       authStatus = cognitoError ? `Authentication account creation failed: ${cognitoError}` : 'Authentication account creation pending';
@@ -290,7 +289,7 @@ router.post('/officers', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating officer:', error);
-    
+
     // Provide more specific error messages
     let errorMessage = 'Failed to create officer';
     if (error.message.includes('authentication account')) {
@@ -298,7 +297,7 @@ router.post('/officers', async (req, res) => {
     } else if (error.message.includes('UsernameExistsException')) {
       errorMessage = 'An account with this email already exists';
     }
-    
+
     res.status(500).json({
       success: false,
       message: errorMessage,
@@ -311,7 +310,7 @@ router.put('/officers/:officerId', async (req, res) => {
   try {
     const { officerId } = req.params;
     const updates = req.body;
-    
+
     const officer = await adminService.updateOfficer(officerId, {
       ...updates,
       updatedBy: req.user.userId
@@ -335,7 +334,7 @@ router.put('/officers/:officerId', async (req, res) => {
 router.delete('/officers/:officerId', async (req, res) => {
   try {
     const { officerId } = req.params;
-    
+
     await adminService.deleteOfficer(officerId);
 
     res.json({
@@ -441,21 +440,21 @@ router.get('/reports/colleges', async (req, res) => {
 router.get('/profile', async (req, res) => {
   try {
     // Debug: Log the entire user object to see what's available
-    
+
     // Get email from the validated token - try multiple possible fields
-    let email = req.user.email || 
-                req.user['cognito:username'] || 
-                req.user.username || 
-                req.user.sub;
-    
+    let email = req.user.email ||
+      req.user['cognito:username'] ||
+      req.user.username ||
+      req.user.sub;
+
     // If the extracted value is not a valid email, try to fetch from Cognito
     if (!email || !email.includes('@')) {
-      const { getUserAttributes } = require('../auth/cognito');
+
       try {
         const userId = req.user.sub || req.user['cognito:username'] || req.user.username;
-        
+
         const userInfo = await getUserAttributes(userId);
-        
+
         // Extract email from Cognito attributes
         if (Array.isArray(userInfo)) {
           const emailAttr = userInfo.find(attr => attr.Name === 'email');
@@ -469,7 +468,7 @@ router.get('/profile', async (req, res) => {
         console.error('Error fetching from Cognito:', cognitoError);
       }
     }
-    
+
     // Validate email format
     if (!email || !email.includes('@')) {
       console.error('Invalid email after all attempts:', email);
@@ -478,9 +477,9 @@ router.get('/profile', async (req, res) => {
         message: 'Email not found in token or Cognito. Please ensure your account has a valid email.'
       });
     }
-    
+
     const profile = await adminService.getAdminProfile(email);
-    
+
     if (!profile) {
       return res.status(404).json({
         success: false,
@@ -505,18 +504,18 @@ router.get('/profile', async (req, res) => {
 router.put('/profile', async (req, res) => {
   try {
     // Get email from the validated token - try multiple possible fields
-    let email = req.user.email || 
-                req.user['cognito:username'] || 
-                req.user.username || 
-                req.user.sub;
-    
+    let email = req.user.email ||
+      req.user['cognito:username'] ||
+      req.user.username ||
+      req.user.sub;
+
     // If the extracted value is not a valid email, try to fetch from Cognito
     if (!email || !email.includes('@')) {
-      const { getUserAttributes } = require('../auth/cognito');
+
       try {
         const userId = req.user.sub || req.user['cognito:username'] || req.user.username;
         const userInfo = await getUserAttributes(userId);
-        
+
         if (Array.isArray(userInfo)) {
           const emailAttr = userInfo.find(attr => attr.Name === 'email');
           if (emailAttr) {
@@ -529,7 +528,7 @@ router.put('/profile', async (req, res) => {
         console.error('Error fetching from Cognito:', cognitoError);
       }
     }
-    
+
     if (!email || !email.includes('@')) {
       return res.status(400).json({
         success: false,
@@ -559,7 +558,7 @@ router.put('/profile', async (req, res) => {
 router.get('/settings', async (req, res) => {
   try {
     const settings = await adminService.getSystemSettings();
-    
+
     res.json({
       success: true,
       data: settings
@@ -667,4 +666,4 @@ router.get('/analytics/department-performance', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

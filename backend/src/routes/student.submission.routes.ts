@@ -1,9 +1,9 @@
 // @ts-nocheck
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const resultsService = require('../services/ResultsService');
-const { authenticateToken } = require('../auth/auth.middleware');
-const { getUserAttributes } = require('../auth/cognito');
+import resultsService from '../services/ResultsService';
+import { authenticateToken } from '../auth/auth.middleware';
+import { getUserAttributes } from '../auth/cognito';
 
 /**
  * POST /api/student/submit-assessment
@@ -19,12 +19,12 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
         // Try to get email from token first
         // Only use email if it's a valid email address (contains @)
         let studentEmail = (req.user?.email && req.user.email.includes('@')) ? req.user.email : null;
-        
+
         // Also check username if it contains @
         if (!studentEmail && req.user?.username && req.user.username.includes('@')) {
             studentEmail = req.user.username;
         }
-        
+
         // If no email in token, get it from Cognito
         if (!studentEmail) {
             const userId = req.user?.username || req.user?.sub;
@@ -41,9 +41,9 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
                 }
             }
         }
-        
+
         console.log('Extracted student email:', studentEmail);
-        
+
         if (!studentEmail) {
             console.error('Student email not found in token. User object:', req.user);
             return res.status(400).json({
@@ -67,7 +67,7 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
         console.log('Calling ResultService.saveAssessmentResult with normalized email:', req.body.email);
         // Call ResultService to save the result
         const result = await resultsService.saveAssessmentResult(req.body);
-        
+
         console.log('Result saved successfully:', result);
         res.status(200).json({
             success: true,
@@ -80,15 +80,15 @@ router.post('/submit-assessment', authenticateToken, async (req, res) => {
         console.error('Error name:', error.name);
         console.error('Error code:', error.code);
         console.error('Full error:', JSON.stringify(error, null, 2));
-        
+
         // Provide user-friendly error message
         let errorMessage = error.message || 'Failed to submit assessment';
-        
+
         // If it's a table not found error, provide helpful message
         if (error.message && error.message.includes('does not exist')) {
             errorMessage = `Database table not found. Please create the table "${process.env.RESULTS_TABLE_NAME || 'Assessment_placipy_asseessment_result'}" in DynamoDB with PK (String) and SK (String) as keys.`;
         }
-        
+
         res.status(500).json({
             success: false,
             message: errorMessage,
@@ -109,10 +109,10 @@ router.get('/results', authenticateToken, async (req, res) => {
         console.log('Request method:', req.method);
 
         // Try to get email from token first
-        let studentEmail = req.user?.email || 
-                          (req.user?.username && req.user.username.includes('@') ? req.user.username : null) ||
-                          (req.user?.sub && req.user.sub.includes('@') ? req.user.sub : null);
-        
+        let studentEmail = req.user?.email ||
+            (req.user?.username && req.user.username.includes('@') ? req.user.username : null) ||
+            (req.user?.sub && req.user.sub.includes('@') ? req.user.sub : null);
+
         // If no email in token, get it from Cognito
         if (!studentEmail) {
             const userId = req.user?.username || req.user?.sub;
@@ -129,7 +129,7 @@ router.get('/results', authenticateToken, async (req, res) => {
                 }
             }
         }
-        
+
         if (!studentEmail) {
             return res.status(400).json({
                 success: false,
@@ -140,7 +140,7 @@ router.get('/results', authenticateToken, async (req, res) => {
         console.log('Fetching results for student email:', studentEmail);
         const results = await resultsService.getStudentResults(studentEmail);
         console.log('Found results:', results.length);
-        
+
         // Always return success with data array (even if empty)
         res.status(200).json({
             success: true,
@@ -149,7 +149,7 @@ router.get('/results', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Error getting student results:', error);
         console.error('Error stack:', error.stack);
-        
+
         // Return empty array on error instead of failing
         res.status(200).json({
             success: true,
@@ -169,10 +169,10 @@ router.get('/results/:attemptId', authenticateToken, async (req, res) => {
         console.log('Attempt ID:', req.params.attemptId);
 
         // Try to get email from token first
-        let studentEmail = req.user?.email || 
-                          (req.user?.username && req.user.username.includes('@') ? req.user.username : null) ||
-                          (req.user?.sub && req.user.sub.includes('@') ? req.user.sub : null);
-        
+        let studentEmail = req.user?.email ||
+            (req.user?.username && req.user.username.includes('@') ? req.user.username : null) ||
+            (req.user?.sub && req.user.sub.includes('@') ? req.user.sub : null);
+
         // If no email in token, get it from Cognito
         if (!studentEmail) {
             const userId = req.user?.username || req.user?.sub;
@@ -189,9 +189,9 @@ router.get('/results/:attemptId', authenticateToken, async (req, res) => {
                 }
             }
         }
-        
+
         const { attemptId } = req.params;
-        
+
         if (!studentEmail) {
             return res.status(400).json({
                 success: false,
@@ -210,23 +210,23 @@ router.get('/results/:attemptId', authenticateToken, async (req, res) => {
         const decodedAttemptId = decodeURIComponent(attemptId);
         console.log('Decoded attempt ID:', decodedAttemptId);
         console.log('Using student email:', studentEmail);
-        
+
         const result = await resultsService.getResultByAttemptId(studentEmail, decodedAttemptId);
-        
+
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error getting result detail:', error);
-        
+
         if (error.message && (error.message.includes('not found') || error.message.includes('does not belong'))) {
             return res.status(404).json({
                 success: false,
                 message: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to retrieve result'
@@ -244,10 +244,10 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         console.log('User:', req.user);
 
         // Try to get email from token first
-        let studentEmail = req.user?.email || 
-                          (req.user?.username && req.user.username.includes('@') ? req.user.username : null) ||
-                          (req.user?.sub && req.user.sub.includes('@') ? req.user.sub : null);
-        
+        let studentEmail = req.user?.email ||
+            (req.user?.username && req.user.username.includes('@') ? req.user.username : null) ||
+            (req.user?.sub && req.user.sub.includes('@') ? req.user.sub : null);
+
         // If no email in token, get it from Cognito
         if (!studentEmail) {
             const userId = req.user?.username || req.user?.sub;
@@ -264,7 +264,7 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
                 }
             }
         }
-        
+
         if (!studentEmail) {
             return res.status(400).json({
                 success: false,
@@ -273,17 +273,17 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         }
 
         console.log('Fetching dashboard stats for student email:', studentEmail);
-        
+
         // Get student's results
         const results = await resultsService.getStudentResults(studentEmail);
         console.log('Found results:', results.length);
-        
+
         // Calculate statistics
         const completedCount = results.length;
         const averageScore = results.length > 0
             ? Math.round(results.reduce((sum: number, r: any) => sum + (r.percentage || 0), 0) / results.length)
             : 0;
-        
+
         // Get recent assessments (last 5, sorted by submittedAt)
         const recentResults = results
             .sort((a: any, b: any) => {
@@ -302,7 +302,7 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
                 percentage: result.percentage || 0,
                 submittedAt: result.submittedAt
             }));
-        
+
         // Performance data by assessment (student's performance in each assessment)
         // Sort by submittedAt (most recent first) and take top 10
         const performanceByAssessment = results
@@ -318,9 +318,9 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
                 score: result.percentage || 0,
                 submittedAt: result.submittedAt
             }));
-        
+
         const performanceData = performanceByAssessment;
-        
+
         res.status(200).json({
             success: true,
             data: {
@@ -340,5 +340,5 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;
 

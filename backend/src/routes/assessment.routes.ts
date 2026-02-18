@@ -1,8 +1,8 @@
 // @ts-nocheck
-const express = require('express');
-const authMiddleware = require('../auth/auth.middleware');
-const assessmentService = require('../services/AssessmentService');
-const { getUserAttributes } = require('../auth/cognito');
+import express from 'express';
+import * as authMiddleware from '../auth/auth.middleware';
+import assessmentService from '../services/AssessmentService';
+import { getUserAttributes } from '../auth/cognito';
 /**
  * Helper function to get user email from Cognito profile
  * Always fetches the actual email from the user's profile
@@ -10,21 +10,21 @@ const { getUserAttributes } = require('../auth/cognito');
 async function getEmailFromRequest(req) {
     // Get user ID from JWT token
     const userId = req.user?.['cognito:username'] || req.user?.username || req.user?.sub;
-    
+
     if (!userId) {
         throw new Error('User ID not found in authentication token');
     }
-    
+
     try {
         console.log('Fetching email from Cognito profile for user ID:', userId);
         // Always fetch email from Cognito profile to ensure accuracy
         const userInfo = await getUserAttributes(userId);
         const email = userInfo?.attributes?.email;
-        
+
         if (!email) {
             throw new Error('Email not found in user profile');
         }
-        
+
         console.log('Got email from Cognito profile:', email);
         return email.toLowerCase();
     } catch (error) {
@@ -46,13 +46,13 @@ router.get('/', authMiddleware.authenticateToken, async (req, res) => {
 
         // Get requester email from Cognito profile
         const requesterEmail = await getEmailFromRequest(req);
-        
+
         // Decode department parameter (it might be URL-encoded like "Information+Technology")
         const departmentParam = req.query.department ? decodeURIComponent(req.query.department as string) : undefined;
         console.log('=== Route Handler Department Filter ===');
         console.log('Raw department query param:', req.query.department);
         console.log('Decoded department param:', departmentParam);
-        
+
         const filters = {
             department: departmentParam,
             status: req.query.status,
@@ -60,14 +60,14 @@ router.get('/', authMiddleware.authenticateToken, async (req, res) => {
             clientDomain: requesterEmail.split('@')[1]
         };
         console.log('Final filters object:', JSON.stringify(filters, null, 2));
-        
+
         const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
         const lastKey = req.query.lastKey ? JSON.parse(req.query.lastKey as string) : null;
 
         const result = await assessmentService.getAllAssessments(filters, limit, lastKey);
         console.log('=== Route Handler Result ===');
         console.log('Number of assessments returned:', result.items.length);
-        console.log('Department values in returned assessments:', result.items.map((a: any) => ({ id: a.assessmentId, dept: a.department })));        
+        console.log('Department values in returned assessments:', result.items.map((a: any) => ({ id: a.assessmentId, dept: a.department })));
         res.status(200).json({
             success: true,
             data: result.items,
@@ -87,33 +87,33 @@ router.get('/my-assessments', authMiddleware.authenticateToken, async (req, res)
     try {
         console.log('=== Get My Assessments Request ===');
         console.log('User:', req.user);
-        
+
         // Get requester email from Cognito profile
         const requesterEmail = await getEmailFromRequest(req);
-        
+
         // Extract domain from user email
         const requesterDomain = requesterEmail.split('@')[1];
-        
+
         console.log('Requester email:', requesterEmail);
         console.log('Requester domain:', requesterDomain);
-        
+
         // Get all assessments for the requester's domain
         const filters = {
             clientDomain: requesterDomain
         };
-        
+
         // Call the assessment service to get all assessments
         const result = await assessmentService.getAllAssessments(filters);
-        
+
         // Filter assessments by the owner (createdBy field)
         const userAssessments = result.items.filter((assessment: any) => {
             // Check if the assessment was created by the current user
             // This can be checked by comparing the createdBy field with the requester email
             return assessment.createdBy && assessment.createdBy.toLowerCase() === requesterEmail.toLowerCase();
         });
-        
+
         console.log('Number of assessments found for user:', userAssessments.length);
-        
+
         res.status(200).json({
             success: true,
             data: userAssessments
@@ -139,7 +139,7 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
         const requesterEmail = await getEmailFromRequest(req);
         const domain = requesterEmail.split('@')[1];
         console.log('Extracted domain from user email:', domain);
-        
+
         // Validate assessment ID
         if (!id) {
             return res.status(400).json({
@@ -147,10 +147,10 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
                 message: 'Assessment ID is required'
             });
         }
-        
+
         console.log(`Calling getAssessmentById with id: ${id}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentById(id, domain);
-        
+
         // Check if we got a result
         if (!result) {
             console.log(`Assessment ${id} not found for domain ${domain}`);
@@ -159,14 +159,14 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
                 message: `Assessment ${id} not found for domain ${domain}. Please check if the assessment exists and you have access to it.`
             });
         }
-        
+
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment:', error);
-        
+
         // Provide more specific error messages
         if (error.message && error.message.includes('not found')) {
             return res.status(404).json({
@@ -174,7 +174,7 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
                 message: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment'
@@ -195,7 +195,7 @@ router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, 
         const requesterEmail = await getEmailFromRequest(req);
         const domain = requesterEmail.split('@')[1];
         console.log('Extracted domain from user email:', domain);
-        
+
         // Validate assessment ID
         if (!id) {
             return res.status(400).json({
@@ -203,7 +203,7 @@ router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, 
                 message: 'Assessment ID is required'
             });
         }
-        
+
         // Check if the method exists
         if (typeof assessmentService.getAssessmentWithQuestions !== 'function') {
             console.error('getAssessmentWithQuestions method not found on assessmentService');
@@ -212,10 +212,10 @@ router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, 
                 message: 'Method not implemented'
             });
         }
-        
+
         console.log(`Calling getAssessmentWithQuestions with id: ${id}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentWithQuestions(id, domain);
-        
+
         // Check if we got a result
         if (!result) {
             console.log(`Assessment ${id} not found for domain ${domain}`);
@@ -224,14 +224,14 @@ router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, 
                 message: `Assessment ${id} not found for domain ${domain}. Please check if the assessment exists and you have access to it.`
             });
         }
-        
+
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment with questions:', error);
-        
+
         // Provide more specific error messages
         if (error.message && error.message.includes('not found')) {
             return res.status(404).json({
@@ -239,7 +239,7 @@ router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, 
                 message: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment with questions'
@@ -270,19 +270,19 @@ router.get('/:id/questions', authMiddleware.authenticateToken, async (req, res) 
 
         console.log(`Calling getAssessmentQuestions with id: ${assessmentId}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentQuestions(assessmentId, domain);
-        
+
         // Check if assessment exists but has no questions
         if (result && Array.isArray(result) && result.length === 0) {
             console.log(`Assessment ${assessmentId} exists but has no questions`);
         }
-        
+
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment questions:', error);
-        
+
         // Provide more specific error messages
         if (error.message && error.message.includes('not found')) {
             return res.status(404).json({
@@ -290,7 +290,7 @@ router.get('/:id/questions', authMiddleware.authenticateToken, async (req, res) 
                 message: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment questions'
@@ -380,9 +380,9 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         });
 
         const result = await assessmentService.createAssessment(assessmentData, createdBy);
-        
+
         // Backend notifications disabled: frontend handles assessment_published notifications
-        
+
         res.status(201).json({
             success: true,
             data: result
@@ -433,9 +433,9 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
         const isBeingPublished = assessmentData.isPublished === true && wasPublished;
 
         const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
-        
+
         // Backend notifications disabled: frontend handles assessment_published notifications
-        
+
         res.status(200).json({
             success: true,
             data: result
@@ -461,7 +461,7 @@ router.delete('/:id', authMiddleware.authenticateToken, async (req, res) => {
         const requesterEmail = await getEmailFromRequest(req);
         const domain = requesterEmail.split('@')[1];
         console.log('Extracted domain from user email:', domain);
-        
+
         await assessmentService.deleteAssessment(id, domain);
         res.status(200).json({
             success: true,
@@ -654,4 +654,4 @@ router.get('/test-route', authMiddleware.authenticateToken, async (req, res) => 
     });
 });
 
-module.exports = router;
+export default router;

@@ -1,9 +1,9 @@
 // @ts-nocheck
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const studentService = require('../services/StudentService');
-const { authenticateToken } = require('../auth/auth.middleware');
-const { getUserAttributes } = require('../auth/cognito');
+import studentService from '../services/StudentService';
+import { authenticateToken } from '../auth/auth.middleware';
+import { getUserAttributes } from '../auth/cognito';
 
 /**
  * Helper function to get user email from Cognito profile
@@ -12,21 +12,21 @@ const { getUserAttributes } = require('../auth/cognito');
 async function getEmailFromRequest(req) {
     // Get user ID from JWT token
     const userId = req.user?.['cognito:username'] || req.user?.username || req.user?.sub;
-    
+
     if (!userId) {
         throw new Error('User ID not found in authentication token');
     }
-    
+
     try {
         console.log('Fetching email from Cognito profile for user ID:', userId);
         // Always fetch email from Cognito profile to ensure accuracy
         const userInfo = await getUserAttributes(userId);
         const email = userInfo?.attributes?.email;
-        
+
         if (!email) {
             throw new Error('Email not found in user profile');
         }
-        
+
         console.log('Got email from Cognito profile:', email);
         return email.toLowerCase();
     } catch (error) {
@@ -67,7 +67,7 @@ router.get('/:email', authenticateToken, async (req, res) => {
         const requesterEmail = await getEmailFromRequest(req);
         console.log('GET /api/students/:email - Requester email:', requesterEmail);
         const student = await studentService.getStudentByEmail(email, requesterEmail);
-        
+
         if (!student) {
             return res.status(404).json({
                 success: false,
@@ -107,7 +107,7 @@ router.post('/', authenticateToken, async (req, res) => {
         }
 
         const student = await studentService.upsertStudent(studentData, createdByEmail);
-        
+
         res.status(200).json({
             success: true,
             message: 'Student saved successfully',
@@ -130,10 +130,10 @@ router.put('/:email/status', authenticateToken, async (req, res) => {
     try {
         // Debug the user object
         console.log('req.user object:', JSON.stringify(req.user, null, 2));
-        
+
         const { email } = req.params;
         const { status } = req.body;
-        
+
         const updatedByEmail = await getEmailFromRequest(req);
         console.log('PUT /api/students/:email/status - Updater email:', updatedByEmail);
 
@@ -145,7 +145,7 @@ router.put('/:email/status', authenticateToken, async (req, res) => {
         }
 
         const student = await studentService.updateStudentStatus(email, status, updatedByEmail);
-        
+
         res.status(200).json({
             success: true,
             message: 'Student status updated successfully',
@@ -170,7 +170,7 @@ router.delete('/:email', authenticateToken, async (req, res) => {
         const requesterEmail = await getEmailFromRequest(req);
         console.log('DELETE /api/students/:email - Requester email:', requesterEmail);
         const result = await studentService.deleteStudent(email, requesterEmail);
-        
+
         res.status(200).json({
             success: true,
             message: 'Student deleted successfully',
@@ -185,4 +185,4 @@ router.delete('/:email', authenticateToken, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

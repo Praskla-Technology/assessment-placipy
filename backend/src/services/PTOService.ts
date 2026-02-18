@@ -1,9 +1,10 @@
 // @ts-nocheck
-const DynamoDBService = require('./DynamoDBService');
-const { registerUser, addUserToGroup } = require('../auth/cognito');
-const { v4: uuidv4 } = require('uuid');
-const { CognitoIdentityProviderClient, AdminDisableUserCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminUpdateUserAttributesCommand, AdminRemoveUserFromGroupCommand } = require('@aws-sdk/client-cognito-identity-provider');
-const { fromEnv } = require('@aws-sdk/credential-providers');
+import DynamoDBService from './DynamoDBService';
+import { registerUser, addUserToGroup } from '../auth/cognito';
+import { v4 as uuidv4 } from 'uuid';
+import { CognitoIdentityProviderClient, AdminDisableUserCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminUpdateUserAttributesCommand, AdminRemoveUserFromGroupCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { fromEnv } from '@aws-sdk/credential-providers';
+import AssessmentService from './AssessmentService';
 
 class PTOService {
   constructor() {
@@ -35,7 +36,7 @@ class PTOService {
         Username: username,
         UserAttributes: attrs
       }));
-    } catch (_) {}
+    } catch (_) { }
   }
 
   clientPkFromEmail(email) {
@@ -210,7 +211,7 @@ class PTOService {
       codes = current.map(d => (typeof d === 'string' ? d : d.code)).map(c => String(c || '').toUpperCase()).filter(Boolean);
     }
     const defaults = ['CE', 'ME', 'EEE', 'ECE', 'CSE', 'IT'];
-    const union = Array.from(new Set([ ...codes, ...defaults ]));
+    const union = Array.from(new Set([...codes, ...defaults]));
     return union;
   }
 
@@ -398,7 +399,7 @@ class PTOService {
         department: item.department,
         email: item.email
       });
-      try { await addUserToGroup(username, 'instructor'); } catch (_) {}
+      try { await addUserToGroup(username, 'instructor'); } catch (_) { }
     } catch (cogErr) {
       throw new Error('Cognito registration failed: ' + (cogErr?.message || cogErr));
     }
@@ -454,14 +455,14 @@ class PTOService {
       const oldEmail = current.Item.email || '';
       if (newEmail !== oldEmail) {
         const defaultPassword = 'Praskla@123';
-        try { await this.cognitoClient.send(new AdminDisableUserCommand({ UserPoolId: process.env.COGNITO_USER_POOL_ID, Username: oldEmail })); } catch (_) {}
+        try { await this.cognitoClient.send(new AdminDisableUserCommand({ UserPoolId: process.env.COGNITO_USER_POOL_ID, Username: oldEmail })); } catch (_) { }
         let createErrMsg = '';
         try {
           await this.cognitoClient.send(new AdminCreateUserCommand({
             UserPoolId: process.env.COGNITO_USER_POOL_ID,
             Username: newEmail,
             TemporaryPassword: defaultPassword,
-            UserAttributes: [ { Name: 'email', Value: newEmail }, { Name: 'email_verified', Value: 'true' } ],
+            UserAttributes: [{ Name: 'email', Value: newEmail }, { Name: 'email_verified', Value: 'true' }],
             MessageAction: 'SUPPRESS'
           }));
         } catch (e) {
@@ -470,8 +471,8 @@ class PTOService {
             throw new Error('Cognito re-provision failed: ' + createErrMsg);
           }
         }
-        try { await this.cognitoClient.send(new AdminSetUserPasswordCommand({ UserPoolId: process.env.COGNITO_USER_POOL_ID, Username: newEmail, Password: defaultPassword, Permanent: true })); } catch (_) {}
-        try { await addUserToGroup(newEmail, 'instructor'); } catch (_) {}
+        try { await this.cognitoClient.send(new AdminSetUserPasswordCommand({ UserPoolId: process.env.COGNITO_USER_POOL_ID, Username: newEmail, Password: defaultPassword, Permanent: true })); } catch (_) { }
+        try { await addUserToGroup(newEmail, 'instructor'); } catch (_) { }
         const newSk = `PTS#${newEmail}`;
         const newItem = { ...current.Item, SK: newSk, email: newEmail, updatedAt: now };
         if (updates.firstName !== undefined) newItem.firstName = updates.firstName;
@@ -504,7 +505,7 @@ class PTOService {
     if (exists && exists.Item) {
       await this.dynamoService.deleteItem({ Key: { PK: pk, SK: id } });
     } else {
-      const altId = id.startsWith('STAFF#') ? id.replace('STAFF#','PTS#') : id.replace('PTS#','STAFF#');
+      const altId = id.startsWith('STAFF#') ? id.replace('STAFF#', 'PTS#') : id.replace('PTS#', 'STAFF#');
       const alt = await this.dynamoService.getItem({ Key: { PK: pk, SK: altId } });
       if (alt && alt.Item) await this.dynamoService.deleteItem({ Key: { PK: pk, SK: altId } });
     }
@@ -558,8 +559,8 @@ class PTOService {
       }
     }
     await this.updateCognitoAttributes(userEmail, { firstName, lastName, fullName, role: 'Placement Training Officer', department: String(data.department || ''), email: emailOriginal });
-    try { await this.cognitoClient.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: process.env.COGNITO_USER_POOL_ID, Username: userEmail, GroupName: 'instructor' })); } catch (_) {}
-    try { const { addUserToGroup } = require('../auth/cognito'); await addUserToGroup(userEmail, 'PTO'); } catch (_) {}
+    try { await this.cognitoClient.send(new AdminRemoveUserFromGroupCommand({ UserPoolId: process.env.COGNITO_USER_POOL_ID, Username: userEmail, GroupName: 'instructor' })); } catch (_) { }
+    try { await addUserToGroup(userEmail, 'PTO'); } catch (_) { }
     return item;
   }
 
@@ -596,9 +597,10 @@ class PTOService {
       createdByName: i.createdByName
     }));
 
-    const assessmentService = require('./AssessmentService');
+
+
     const domain = (String(email || '').split('@')[1] || '').trim();
-    const all = await assessmentService.getAllAssessments({ clientDomain: domain });
+    const all = await AssessmentService.getAllAssessments({ clientDomain: domain });
     const mappedAlt = (all.items || []).map(m => ({
       id: String(m.SK || ''),
       name: m.title || m.name || '',
@@ -644,9 +646,8 @@ class PTOService {
   }
 
   async createAssessment(email, data) {
-    const assessmentService = require('./AssessmentService');
     const normalized = this.normalizeQuestions(data.questions || []);
-    const created = await assessmentService.createAssessment({
+    const created = await AssessmentService.createAssessment({
       title: data.name,
       description: '',
       duration: data.duration || 60,
@@ -744,16 +745,18 @@ class PTOService {
         }));
         const normalized = this.normalizeQuestions(updates.questions);
         const puts = normalized.map((q, index) => ({
-          PutRequest: { Item: {
-            PK: id,
-            SK: `QUESTION#${String(index + 1).padStart(3, '0')}`,
-            questionId: `${String(id).replace('ASSESSMENT#','')}_Q${index + 1}`,
-            questionNumber: index + 1,
-            text: q.text,
-            options: q.options,
-            correctAnswer: typeof q.correctIndex === 'number' ? q.correctIndex : 0,
-            marks: 1
-          } }
+          PutRequest: {
+            Item: {
+              PK: id,
+              SK: `QUESTION#${String(index + 1).padStart(3, '0')}`,
+              questionId: `${String(id).replace('ASSESSMENT#', '')}_Q${index + 1}`,
+              questionNumber: index + 1,
+              text: q.text,
+              options: q.options,
+              correctAnswer: typeof q.correctIndex === 'number' ? q.correctIndex : 0,
+              marks: 1
+            }
+          }
         }));
         const batch = [...deletes, ...puts];
         if (batch.length) await this.dynamoService.batchWrite(batch);
@@ -766,7 +769,7 @@ class PTOService {
   }
 
   normalizeQuestions(qs) {
-    const letters = ['A','B','C','D','E','F','G'];
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
     return (Array.isArray(qs) ? qs : []).map((q, i) => {
       const text = String(q.text || q.question || '').trim();
       const optionsRaw = q.options || q.choices || [];
@@ -775,7 +778,7 @@ class PTOService {
       let correctIndex = typeof answerRaw === 'number' ? answerRaw : letters.indexOf(String(answerRaw || '').toUpperCase());
       if (correctIndex < 0) correctIndex = 0;
       return {
-        id: q.id || `Q${i+1}`,
+        id: q.id || `Q${i + 1}`,
         text,
         options,
         correctIndex
@@ -798,7 +801,7 @@ class PTOService {
     const questions = items.filter(it => String(it.SK || '').startsWith('QUESTION#'))
       .sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0))
       .map((q, i) => ({
-        id: q.questionId || `Q${i+1}`,
+        id: q.questionId || `Q${i + 1}`,
         text: q.text,
         options: q.options || [],
         correctIndex: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0
@@ -840,7 +843,7 @@ class PTOService {
       const assessmentService = require('./AssessmentService');
       const domain = (String(email || '').split('@')[1] || '').trim();
       await assessmentService.deleteAssessment(assessmentId, domain);
-    } catch (_) {}
+    } catch (_) { }
     return true;
   }
 
@@ -1056,10 +1059,10 @@ class PTOService {
         bestScoresByEmail[em].set(testKey, Math.max(prevBest, percentage));
       }
     };
-    try { const r1 = await this.resultsTable.scanTable({}); mergeItems(r1.Items || []); } catch (_) {}
-    try { const r2 = await this.resultsTableAlt.scanTable({}); mergeItems(r2.Items || []); } catch (_) {}
-    try { const r3 = await this.resultsTableThird.scanTable({}); mergeItems(r3.Items || []); } catch (_) {}
-    try { const r4 = await this.resultsTableFourth.scanTable({}); mergeItems(r4.Items || []); } catch (_) {}
+    try { const r1 = await this.resultsTable.scanTable({}); mergeItems(r1.Items || []); } catch (_) { }
+    try { const r2 = await this.resultsTableAlt.scanTable({}); mergeItems(r2.Items || []); } catch (_) { }
+    try { const r3 = await this.resultsTableThird.scanTable({}); mergeItems(r3.Items || []); } catch (_) { }
+    try { const r4 = await this.resultsTableFourth.scanTable({}); mergeItems(r4.Items || []); } catch (_) { }
     Object.keys(out).forEach(em => {
       const testsSet = seenTestsByEmail[em] || new Set();
       const bestMap = bestScoresByEmail[em] || new Map();
@@ -1109,9 +1112,9 @@ class PTOService {
       }
     };
     const byAssess = {};
-    try { const r1 = await this.resultsTable.scanTable({}); mergeItems(r1.Items || [], byAssess); } catch (_) {}
-    try { const r2 = await this.resultsTableAlt.scanTable({}); mergeItems(r2.Items || [], byAssess); } catch (_) {}
-    try { const r3 = await this.resultsTableThird.scanTable({}); mergeItems(r3.Items || [], byAssess); } catch (_) {}
+    try { const r1 = await this.resultsTable.scanTable({}); mergeItems(r1.Items || [], byAssess); } catch (_) { }
+    try { const r2 = await this.resultsTableAlt.scanTable({}); mergeItems(r2.Items || [], byAssess); } catch (_) { }
+    try { const r3 = await this.resultsTableThird.scanTable({}); mergeItems(r3.Items || [], byAssess); } catch (_) { }
     const assessments = await this.getAssessments(email);
     const nameMap = new Map((assessments || []).map(a => [String(a.id || a.assessmentId || a.SK || ''), String(a.name || a.title || '')]));
     const rows = Object.keys(byAssess).map(aid => {
@@ -1137,4 +1140,6 @@ class PTOService {
   }
 }
 
-module.exports = PTOService;
+
+
+export default PTOService;

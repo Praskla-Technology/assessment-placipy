@@ -1,8 +1,17 @@
 // @ts-nocheck
-const DynamoDB = require('aws-sdk/clients/dynamodb');
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
+import { fromEnv } from "@aws-sdk/credential-providers";
 
-const dynamodb = new DynamoDB.DocumentClient({
-    region: process.env.AWS_REGION
+const dbClient = new DynamoDBClient({
+    region: process.env.AWS_REGION,
+    credentials: fromEnv()
+});
+
+const dynamodb = DynamoDBDocument.from(dbClient, {
+    marshallOptions: {
+        removeUndefinedValues: true
+    }
 });
 
 interface AssessmentItem {
@@ -202,7 +211,7 @@ class AssessmentService {
                 }
             };
             console.log('Scanning with params:', JSON.stringify(params, null, 2));
-            const result = await dynamodb.query(params).promise();
+            const result = await dynamodb.query(params);
             console.log(`Found ${result.Items?.length || 0} existing assessments for department ${deptCode}`);
             console.log('Found items:', JSON.stringify(result.Items, null, 2));
             const deptAssessments = result.Items as AssessmentItem[] || [];
@@ -332,7 +341,23 @@ class AssessmentService {
                 return baseQuestion;
             });
 
-            const assessment: AssessmentItem = {
+            // Helper to remove undefined values recursively
+            const removeUndefined = (obj: any): any => {
+                if (Array.isArray(obj)) {
+                    return obj.map(v => removeUndefined(v));
+                }
+                if (obj !== null && typeof obj === 'object') {
+                    return Object.entries(obj).reduce((acc, [key, value]) => {
+                        if (value !== undefined) {
+                            acc[key] = removeUndefined(value);
+                        }
+                        return acc;
+                    }, {} as any);
+                }
+                return obj;
+            };
+
+            const assessment: AssessmentItem = removeUndefined({
                 PK: `CLIENT#${domain}`,
                 SK: `ASSESSMENT#${assessmentId}`,
                 assessmentId: assessmentId,
@@ -373,7 +398,7 @@ class AssessmentService {
                 createdByName: assessmentData.createdByName || createdBy,
                 createdAt: createdAt,
                 updatedAt: createdAt
-            };
+            });
 
             console.log('Saving assessment with PK:', assessment.PK, 'and SK:', assessment.SK);
             const existingAssessmentParams: DynamoDB.DocumentClient.GetItemInput = {
@@ -385,7 +410,7 @@ class AssessmentService {
             };
 
             try {
-                const existingAssessment = await dynamodb.get(existingAssessmentParams).promise();
+                const existingAssessment = await dynamodb.get(existingAssessmentParams);
                 if (existingAssessment.Item) {
                     console.log(`Assessment with PK ${assessment.PK} and SK ${assessment.SK} already exists, regenerating assessment number`);
                     let newAssessmentNumber = assessmentNumber;
@@ -409,7 +434,7 @@ class AssessmentService {
                                 SK: assessment.SK
                             }
                         };
-                        const checkResult = await dynamodb.get(checkParams).promise();
+                        const checkResult = await dynamodb.get(checkParams);
                         if (!checkResult.Item) {
                             break;
                         }
@@ -425,7 +450,7 @@ class AssessmentService {
                 Item: assessment
             };
 
-            await dynamodb.put(assessmentParams).promise();
+            await dynamodb.put(assessmentParams);
 
             console.log('All questions:', JSON.stringify(questions, null, 2));
             const mcqQuestions = questions.filter((q) => q.entityType === 'mcq');
@@ -438,14 +463,14 @@ class AssessmentService {
 
                 console.log(`Creating ${mcqBatches.length} MCQ batches`);
                 for (let i = 0; i < mcqBatches.length; i++) {
-                    const batchItem: QuestionBatchItem = {
+                    const batchItem: QuestionBatchItem = removeUndefined({
                         PK: `CLIENT#${domain}`,
                         SK: `ASSESSMENT#${assessment.assessmentId}#MCQ_BATCH_${i + 1}`,
                         assessmentId: assessment.assessmentId,
                         department: assessmentData.department,
                         entityType: `mcq_batch_${i + 1}`,
                         questions: mcqBatches[i]
-                    };
+                    });
                     console.log(`Creating MCQ batch ${i + 1}:`, JSON.stringify(batchItem, null, 2));
 
                     const batchParams: DynamoDB.DocumentClient.PutItemInput = {
@@ -453,7 +478,7 @@ class AssessmentService {
                         Item: batchItem
                     };
 
-                    await dynamodb.put(batchParams).promise();
+                    await dynamodb.put(batchParams);
                     console.log(`Created MCQ batch ${i + 1}`);
                 }
             }
@@ -469,14 +494,14 @@ class AssessmentService {
 
                 console.log(`Creating ${codingBatches.length} Coding batches`);
                 for (let i = 0; i < codingBatches.length; i++) {
-                    const batchItem: QuestionBatchItem = {
+                    const batchItem: QuestionBatchItem = removeUndefined({
                         PK: `CLIENT#${domain}`,
                         SK: `ASSESSMENT#${assessment.assessmentId}#CODING_BATCH_${i + 1}`,
                         assessmentId: assessment.assessmentId,
                         department: assessmentData.department,
                         entityType: `coding_batch_${i + 1}`,
                         questions: codingBatches[i]
-                    };
+                    });
                     console.log(`Creating Coding batch ${i + 1}:`, JSON.stringify(batchItem, null, 2));
 
                     const batchParams: DynamoDB.DocumentClient.PutItemInput = {
@@ -484,7 +509,7 @@ class AssessmentService {
                         Item: batchItem
                     };
 
-                    await dynamodb.put(batchParams).promise();
+                    await dynamodb.put(batchParams);
                     console.log(`Created Coding batch ${i + 1}`);
                 }
             }
@@ -515,7 +540,7 @@ class AssessmentService {
             };
 
             console.log('Querying for assessment with params:', JSON.stringify(queryParams, null, 2));
-            const queryResult = await dynamodb.query(queryParams).promise();
+            const queryResult = await dynamodb.query(queryParams);
             console.log('Query result:', JSON.stringify(queryResult, null, 2));
 
             if (!queryResult.Items || queryResult.Items.length === 0) {
@@ -606,7 +631,7 @@ class AssessmentService {
                 }
 
                 console.log('Executing DynamoDB Query with params:', JSON.stringify(queryParams, null, 2));
-                const queryResult = await dynamodb.query(queryParams).promise();
+                const queryResult = await dynamodb.query(queryParams);
                 console.log('DynamoDB Query Result - Count:', queryResult.Count, 'ScannedCount:', queryResult.ScannedCount);
                 console.log('DynamoDB Query Result - Items before filtering:', queryResult.Items?.map((item: any) => ({
                     assessmentId: item.assessmentId,
@@ -681,7 +706,7 @@ class AssessmentService {
                 }
 
                 console.log('Executing DynamoDB Scan with params:', JSON.stringify(scanParams, null, 2));
-                const scanResult = await dynamodb.scan(scanParams).promise();
+                const scanResult = await dynamodb.scan(scanParams);
                 console.log('DynamoDB Scan Result - Count:', scanResult.Count, 'ScannedCount:', scanResult.ScannedCount);
                 console.log('DynamoDB Scan Result - Items before filtering:', scanResult.Items?.map((item: any) => ({
                     assessmentId: item.assessmentId,
@@ -732,11 +757,6 @@ class AssessmentService {
         }
     }
 
-    /**
-     * Get assessment questions by assessment ID and domain
-     * Automatically fetches all question batches and combines them into a single array
-     * Ensures that questions are only returned if they belong to a valid assessment
-     */
     async getAssessmentQuestions(assessmentId: string, domain: string): Promise<QuestionItem[]> {
         try {
             console.log(`Fetching questions for assessment ${assessmentId} in domain ${domain}`);
@@ -759,7 +779,7 @@ class AssessmentService {
             };
 
             console.log('Verifying assessment exists with params:', JSON.stringify(mainAssessmentParams, null, 2));
-            const mainAssessmentResult = await dynamodb.query(mainAssessmentParams).promise();
+            const mainAssessmentResult = await dynamodb.query(mainAssessmentParams);
             console.log('Assessment verification result:', JSON.stringify(mainAssessmentResult, null, 2));
 
             if (!mainAssessmentResult.Items || mainAssessmentResult.Items.length === 0) {
@@ -776,7 +796,7 @@ class AssessmentService {
             };
 
             console.log('Querying questions with params:', JSON.stringify(questionParams, null, 2));
-            const questionResult = await dynamodb.query(questionParams).promise();
+            const questionResult = await dynamodb.query(questionParams);
             console.log('Found', questionResult.Count, 'question items');
 
             if (!questionResult.Items || questionResult.Items.length === 0) {
@@ -792,7 +812,7 @@ class AssessmentService {
                 };
 
                 console.log('Querying questions with original params:', JSON.stringify(originalQuestionParams, null, 2));
-                const originalQuestionResult = await dynamodb.query(originalQuestionParams).promise();
+                const originalQuestionResult = await dynamodb.query(originalQuestionParams);
                 console.log('Found with original structure:', originalQuestionResult.Count, 'question items');
 
                 if (originalQuestionResult.Items && originalQuestionResult.Items.length > 0) {
@@ -843,10 +863,6 @@ class AssessmentService {
         }
     }
 
-    /**
-     * Get assessment with questions combined
-     * This method fetches the assessment metadata and automatically includes all questions
-     */
     async getAssessmentWithQuestions(assessmentId: string, domain: string): Promise<AssessmentWithQuestions> {
         try {
             console.log(`Fetching assessment ${assessmentId} with questions for domain ${domain}`);
@@ -885,7 +901,7 @@ class AssessmentService {
                 }
             };
 
-            const currentItemResult = await dynamodb.query(getCurrentItemParams).promise();
+            const currentItemResult = await dynamodb.query(getCurrentItemParams);
             const currentItem = currentItemResult.Items && currentItemResult.Items[0] as AssessmentItem;
 
             if (!currentItem) {
@@ -928,7 +944,7 @@ class AssessmentService {
                 updateParams.ExpressionAttributeNames = expressionAttributeNames;
             }
 
-            const updatedAssessment = await dynamodb.update(updateParams).promise();
+            const updatedAssessment = await dynamodb.update(updateParams);
 
             if (updates.questions && Array.isArray(updates.questions)) {
                 const batchParams: DynamoDB.DocumentClient.QueryInput = {
@@ -940,7 +956,7 @@ class AssessmentService {
                     }
                 };
 
-                const batchResult = await dynamodb.query(batchParams).promise();
+                const batchResult = await dynamodb.query(batchParams);
                 const batchItems = batchResult.Items || [];
 
                 for (const batchItem of batchItems) {
@@ -951,7 +967,7 @@ class AssessmentService {
                             SK: (batchItem as QuestionBatchItem).SK
                         }
                     };
-                    await dynamodb.delete(deleteParams).promise();
+                    await dynamodb.delete(deleteParams);
                 }
 
                 const mcqQuestions = updates.questions.filter((q: QuestionItem) => q.entityType === 'mcq');
@@ -976,7 +992,7 @@ class AssessmentService {
                             Item: batchItem
                         };
 
-                        await dynamodb.put(batchParams).promise();
+                        await dynamodb.put(batchParams);
                     }
                 }
 
@@ -1002,7 +1018,7 @@ class AssessmentService {
                             Item: batchItem
                         };
 
-                        await dynamodb.put(batchParams).promise();
+                        await dynamodb.put(batchParams);
                     }
                 }
             }
@@ -1016,7 +1032,7 @@ class AssessmentService {
                 }
             };
 
-            const batchQueryResult = await dynamodb.query(batchQueryParams).promise();
+            const batchQueryResult = await dynamodb.query(batchQueryParams);
             const batchItems = batchQueryResult.Items || [];
 
             let updatedQuestions: QuestionItem[] = [];
@@ -1041,7 +1057,7 @@ class AssessmentService {
                 ReturnValues: 'ALL_NEW'
             };
 
-            await dynamodb.update(entitiesUpdateParams).promise();
+            await dynamodb.update(entitiesUpdateParams);
 
             return {
                 ...updatedAssessment.Attributes as AssessmentItem,
@@ -1067,7 +1083,7 @@ class AssessmentService {
                 }
             };
 
-            const assessmentResult = await dynamodb.query(getAssessmentParams).promise();
+            const assessmentResult = await dynamodb.query(getAssessmentParams);
             const assessment = assessmentResult.Items && assessmentResult.Items[0] as AssessmentItem;
 
             if (!assessment) {
@@ -1082,7 +1098,7 @@ class AssessmentService {
                 }
             };
 
-            await dynamodb.delete(assessmentParams).promise();
+            await dynamodb.delete(assessmentParams);
 
             const batchQueryParams: DynamoDB.DocumentClient.QueryInput = {
                 TableName: this.questionsTableName,
@@ -1093,7 +1109,7 @@ class AssessmentService {
                 }
             };
 
-            const batchQueryResult = await dynamodb.query(batchQueryParams).promise();
+            const batchQueryResult = await dynamodb.query(batchQueryParams);
             const batchItems = batchQueryResult.Items || [];
 
             for (const batchItem of batchItems) {
@@ -1104,7 +1120,7 @@ class AssessmentService {
                         SK: (batchItem as QuestionBatchItem).SK
                     }
                 };
-                await dynamodb.delete(deleteParams).promise();
+                await dynamodb.delete(deleteParams);
             }
         } catch (error: unknown) {
             console.error('Error deleting assessment:', (error as Error).message);
@@ -1139,4 +1155,4 @@ class AssessmentService {
     }
 }
 
-module.exports = new AssessmentService();
+export default new AssessmentService();

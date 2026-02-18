@@ -1,20 +1,20 @@
 // @ts-nocheck
-const express = require('express');
-const authMiddleware = require('../auth/auth.middleware');
-const PTOService = require('../services/PTOService');
-const { getUserAttributes } = require('../auth/cognito');
+import express from 'express';
+import { authenticateToken } from '../auth/auth.middleware';
+import PTOService from '../services/PTOService';
+import { getUserAttributes } from '../auth/cognito';
 
 const router = express.Router();
 const ptoService = new PTOService();
-const XLSX = require('@e965/xlsx');
-const { AdminSetUserPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
+import * as XLSX from '@e965/xlsx';
+import { AdminSetUserPasswordCommand } from '@aws-sdk/client-cognito-identity-provider';
 
 router.use((req, res, next) => {
   const devBypass = process.env.DEV_ALLOW_PTO_NOAUTH === 'true';
   if (devBypass) {
     return next();
   }
-  return authMiddleware.authenticateToken(req, res, next);
+  return authenticateToken(req, res, next);
 });
 
 // Role guard: only PTO can access when using authenticated requests
@@ -51,7 +51,7 @@ async function getEmail(req) {
     try {
       const info = await getUserAttributes(userId);
       if (info?.attributes?.email) return String(info.attributes.email).trim();
-    } catch (_) {}
+    } catch (_) { }
   }
   throw new Error('Email not found in access token');
 }
@@ -304,10 +304,11 @@ router.post('/assessments', async (req, res) => {
   try {
     const email = await getEmail(req);
     const item = await ptoService.createAssessment(email, req.body);
-    
+
     // Send notifications to students when PTO creates an assessment
     try {
-      const notificationService = require('../services/NotificationService');
+      const notificationServiceModule = await import('../services/NotificationService');
+      const notificationService = notificationServiceModule.default || notificationServiceModule;
       // Use dynamic domain detection - collect students from all domains
       let studentEmails: string[] = [];
       // Extract domain from email, but handle missing/invalid email gracefully
@@ -325,7 +326,7 @@ router.post('/assessments', async (req, res) => {
               const deptStudents = await notificationService.getStudentsByDepartment(ptoDomain, dept);
               studentEmails.push(...deptStudents);
             }
-            
+
             // TODO: In a more advanced implementation, we would dynamically discover
             // all domains that have students in this department, but for now we
             // start with the PTO's domain which should cover most cases
@@ -354,7 +355,7 @@ router.post('/assessments', async (req, res) => {
           studentEmails,
           'assessment_published',
           `New Assessment: ${req.body.name}`,
-          req.body.scheduling?.startDate 
+          req.body.scheduling?.startDate
             ? `A new assessment "${req.body.name}" has been published and is scheduled.`
             : `A new assessment "${req.body.name}" has been published.`,
           `/student/assessments/${item.SK?.replace('ASSESSMENT#', '') || item.id}`,
@@ -369,7 +370,7 @@ router.post('/assessments', async (req, res) => {
       console.error('Error sending notifications for PTO-created assessment:', notifError);
       // Don't fail the request if notifications fail
     }
-    
+
     res.status(201).json({ success: true, data: item });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to create assessment', error: error.message });
@@ -612,4 +613,4 @@ router.delete('/messages/:messageId', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
