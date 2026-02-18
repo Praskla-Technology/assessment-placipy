@@ -122,6 +122,7 @@ body {
 .dashboard-content h2 {
   color: #495057;
   margin-bottom: 1rem;
+  padding:20px;
 }
 
 .dashboard-content p {

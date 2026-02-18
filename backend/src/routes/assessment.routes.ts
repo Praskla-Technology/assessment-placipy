@@ -298,6 +298,47 @@ router.get('/:id/questions', authMiddleware.authenticateToken, async (req, res) 
     }
 });
 
+// Get assessment questions with descriptions by ID
+router.get('/:id/questions-with-descriptions', authMiddleware.authenticateToken, async (req, res) => {
+    try {
+        console.log('=== Get Assessment Questions With Descriptions Request ===');
+        console.log('User:', req.user);
+        console.log('Params:', req.params);
+
+        const { id: assessmentId } = req.params;
+        const domain = req.user?.domain || req.headers['x-domain'] || 'default';
+
+        if (!assessmentId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+
+        console.log(`Calling getQuestionsWithDescriptions with id: ${assessmentId}, domain: ${domain}`);
+        const result = await assessmentService.getQuestionsWithDescriptions(assessmentId, domain);
+        
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        console.error('Error fetching assessment questions with descriptions:', error);
+        
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch assessment questions with descriptions'
+        });
+    }
+});
+
 // Create a new assessment (no role restrictions)
 router.post('/', authMiddleware.authenticateToken, async (req, res) => {
     try {
