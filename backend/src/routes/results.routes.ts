@@ -1,7 +1,7 @@
 // @ts-nocheck
-const express = require('express');
-const authMiddleware = require('../auth/auth.middleware');
-const resultsService = require('../services/ResultsService');
+import express from 'express';
+import * as authMiddleware from '../auth/auth.middleware';
+import resultsService from '../services/ResultsService';
 
 const router = express.Router();
 
@@ -14,14 +14,14 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         console.log('=== Save Assessment Result Request ===');
         console.log('User:', req.user);
         console.log('Body:', req.body);
-        
+
         const resultData = {
             ...req.body,
             studentId: req.user.sub || req.user.username,
             studentEmail: req.user.email,
             studentName: req.user.name || `${req.user.given_name || ''} ${req.user.family_name || ''}`.trim() || req.user.email
         };
-        
+
         const result = await resultsService.saveAssessmentResult(resultData);
         res.status(201).json({
             success: true,
@@ -64,11 +64,11 @@ router.get('/my-results/:assessmentId', authMiddleware.authenticateToken, async 
         console.log('=== Get Student Assessment Result Request ===');
         console.log('User:', req.user);
         console.log('Params:', req.params);
-        
+
         const { assessmentId } = req.params;
         const studentId = req.user.sub || req.user.username;
         const results = await resultsService.getStudentResults(studentId, assessmentId);
-        
+
         res.status(200).json({
             success: true,
             data: results
@@ -88,10 +88,10 @@ router.get('/assessment/:assessmentId', authMiddleware.authenticateToken, async 
         console.log('=== Get Assessment Results Request ===');
         console.log('User:', req.user);
         console.log('Params:', req.params);
-        
+
         const { assessmentId } = req.params;
         const results = await resultsService.getAssessmentResults(assessmentId);
-        
+
         res.status(200).json({
             success: true,
             data: results
@@ -111,11 +111,11 @@ router.get('/rank/:assessmentId', authMiddleware.authenticateToken, async (req, 
         console.log('=== Get Student Rank Request ===');
         console.log('User:', req.user);
         console.log('Params:', req.params);
-        
+
         const { assessmentId } = req.params;
         const studentId = req.user.sub || req.user.username;
         const rankData = await resultsService.getStudentRank(assessmentId, studentId);
-        
+
         res.status(200).json({
             success: true,
             data: rankData
@@ -135,10 +135,10 @@ router.get('/department-stats/:assessmentId', authMiddleware.authenticateToken, 
         console.log('=== Get Department Stats Request ===');
         console.log('User:', req.user);
         console.log('Params:', req.params);
-        
+
         const { assessmentId } = req.params;
         const stats = await resultsService.getDepartmentStats(assessmentId);
-        
+
         res.status(200).json({
             success: true,
             data: stats
@@ -158,11 +158,11 @@ router.get('/top-performers/:assessmentId', authMiddleware.authenticateToken, as
         console.log('=== Get Top Performers Request ===');
         console.log('User:', req.user);
         console.log('Params:', req.params);
-        
+
         const { assessmentId } = req.params;
         const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
         const topPerformers = await resultsService.getTopPerformers(assessmentId, limit);
-        
+
         res.status(200).json({
             success: true,
             data: topPerformers
@@ -176,4 +176,4 @@ router.get('/top-performers/:assessmentId', authMiddleware.authenticateToken, as
     }
 });
 
-module.exports = router;
+export default router;

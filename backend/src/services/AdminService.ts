@@ -1,6 +1,7 @@
 // @ts-nocheck
-const DynamoDBService = require('./DynamoDBService');
-const { v4: uuidv4 } = require('uuid');
+import DynamoDBService from './DynamoDBService';
+import { v4 as uuidv4 } from 'uuid';
+import { adminCreateUser, getUserAttributes } from '../auth/cognito';
 
 class AdminService {
   constructor() {
@@ -48,7 +49,7 @@ class AdminService {
       ]);
 
       const activeAssessments = assessments.filter(assessment => assessment.status === 'active' || assessment.status === 'ACTIVE');
-      
+
       return {
         totalColleges: colleges.length,
         totalOfficers: officers.length,
@@ -68,7 +69,7 @@ class AdminService {
     try {
       // Get all colleges
       const colleges = await this.getAllColleges();
-      
+
       // Get assessment results to calculate activity
       const resultsParams = {
         FilterExpression: 'begins_with(SK, :resultPrefix)',
@@ -77,7 +78,7 @@ class AdminService {
         }
       };
       const resultsData = await this.scanTable(resultsParams);
-      
+
       // Get all assessments
       const assessmentsParams = {
         FilterExpression: 'begins_with(SK, :assessmentPrefix)',
@@ -86,22 +87,22 @@ class AdminService {
         }
       };
       const assessmentsData = await this.scanTable(assessmentsParams);
-      
+
       // Calculate stats for each college
       const collegeStats = colleges.map(college => {
         const collegePK = college.id;
-        
+
         // Count students (unique emails in results)
         const collegeResults = resultsData.Items.filter(item => item.PK === collegePK);
         const uniqueStudents = new Set(collegeResults.map(r => r.email)).size;
-        
+
         // Count assessments
         const collegeAssessments = assessmentsData.Items.filter(item => item.PK === collegePK);
         const totalAssessments = collegeAssessments.length;
-        
+
         // Count completed assessments (from results)
         const completedAssessments = new Set(collegeResults.map(r => r.assessmentId)).size;
-        
+
         return {
           name: college.name,
           domain: college.domain,
@@ -111,13 +112,13 @@ class AdminService {
           activityScore: (completedAssessments * 2) + uniqueStudents + totalAssessments
         };
       });
-      
+
       // Sort by activity score and return top N
       return collegeStats
         .sort((a, b) => b.activityScore - a.activityScore)
         .slice(0, limit)
         .map(({ activityScore, ...rest }) => rest);
-        
+
     } catch (error) {
       console.error('Error getting top active colleges:', error);
       return [];
@@ -190,7 +191,7 @@ class AdminService {
   async updateCollege(collegeId, updates) {
     try {
       const pk = collegeId.startsWith('CLIENT#') ? collegeId : `CLIENT#${collegeId}`;
-      
+
       const updateExpression = [];
       const expressionAttributeNames = {};
       const expressionAttributeValues = {};
@@ -233,7 +234,7 @@ class AdminService {
   async deleteCollege(collegeId) {
     try {
       const pk = collegeId.startsWith('CLIENT#') ? collegeId : `CLIENT#${collegeId}`;
-      
+
       // First check if college has users
       const hasUsers = await this.checkCollegeHasUsers(pk);
       if (hasUsers) {
@@ -283,7 +284,7 @@ class AdminService {
       if (filters.collegeId) {
         // Get officers from specific college
         const pk = filters.collegeId.startsWith('CLIENT#') ? filters.collegeId : `CLIENT#${filters.collegeId}`;
-        
+
         // Query for legacy PTO# prefixes
         params = {
           KeyConditionExpression: 'PK = :pk AND begins_with(SK, :ptoPrefix)',
@@ -293,23 +294,23 @@ class AdminService {
           }
         };
         const result1 = await this.queryTable(params);
-        
+
         // Query for legacy PTS# prefixes
         params.ExpressionAttributeValues[':ptoPrefix'] = 'PTS#';
         const result2 = await this.queryTable(params);
-        
+
         // Query for new Placement Training Officer# prefixes
         params.ExpressionAttributeValues[':ptoPrefix'] = 'Placement Training Officer#';
         const result3 = await this.queryTable(params);
-        
+
         // Query for new Placement Training Staff# prefixes
         params.ExpressionAttributeValues[':ptoPrefix'] = 'Placement Training Staff#';
         const result4 = await this.queryTable(params);
-        
+
         // Query for Administrator# prefixes
         params.ExpressionAttributeValues[':ptoPrefix'] = 'Administrator#';
         const result5 = await this.queryTable(params);
-        
+
         const officers = [...result1.Items, ...result2.Items, ...result3.Items, ...result4.Items, ...result5.Items];
         return officers.map(item => this.formatOfficerData(item));
       } else {
@@ -324,7 +325,7 @@ class AdminService {
             ':adminPrefix': 'Administrator#'
           }
         };
-        
+
         const result = await this.scanTable(params);
         return result.Items.map(item => this.formatOfficerData(item));
       }
@@ -367,11 +368,10 @@ class AdminService {
       await this.putItem(officer);
 
       // STEP 2: Then create user in Cognito using Admin API
-      const { adminCreateUser } = require('../auth/cognito');
-      
+
       try {
         await adminCreateUser(username, defaultPassword, officerData.email, false);
-        
+
         // Update DynamoDB record to mark Cognito user as created
         const updateParams = {
           Key: {
@@ -386,10 +386,10 @@ class AdminService {
         };
         await this.updateItem(updateParams);
         officer.cognitoUserCreated = true;
-        
+
       } catch (cognitoError) {
         console.error('Error creating Cognito user:', cognitoError);
-        
+
         // Handle specific Cognito errors
         if (cognitoError.code === 'UsernameExistsException') {
           console.log(`User ${username} already exists in Cognito, marking as created`);
@@ -411,7 +411,7 @@ class AdminService {
           // For other Cognito errors, log but don't fail the entire operation
           // The officer record exists in DynamoDB, admin can retry Cognito creation later
           console.error(`Failed to create Cognito user for ${username}:`, cognitoError.message);
-          
+
           // Update DynamoDB with error info
           const updateParams = {
             Key: {
@@ -426,7 +426,7 @@ class AdminService {
             }
           };
           await this.updateItem(updateParams);
-          
+
           // Include warning in response but don't fail
           officer.cognitoUserCreated = false;
           officer.cognitoError = cognitoError.message;
@@ -435,13 +435,13 @@ class AdminService {
 
       // Return formatted officer data
       const formattedOfficer = this.formatOfficerData(officer);
-      
+
       // Add default password info to response (for admin notification)
       formattedOfficer.defaultPassword = defaultPassword;
-      formattedOfficer.loginInstructions = officer.cognitoUserCreated 
+      formattedOfficer.loginInstructions = officer.cognitoUserCreated
         ? `Default password: ${defaultPassword}. User must change password on first login.`
         : `Officer created in database. Authentication account creation ${officer.cognitoError ? 'failed: ' + officer.cognitoError : 'pending'}.`;
-      
+
       return formattedOfficer;
     } catch (error) {
       console.error('Error creating officer:', error);
@@ -453,7 +453,7 @@ class AdminService {
     try {
       // First find the officer to get the PK
       const officer = await this.findOfficerById(officerId);
-      
+
       if (!officer) {
         throw new Error('Officer not found');
       }
@@ -610,7 +610,7 @@ class AdminService {
       // Get recent items (last 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
+
       const params = {
         FilterExpression: '#updatedAt > :sevenDaysAgo',
         ExpressionAttributeNames: {
@@ -640,7 +640,7 @@ class AdminService {
     try {
       const assessments = await this.getAllAssessments(filters);
       const colleges = await this.getAllColleges();
-      
+
       return {
         assessmentPerformance: assessments.map(assessment => ({
           id: assessment.id,
@@ -670,7 +670,7 @@ class AdminService {
       for (const college of colleges) {
         const officers = await this.getAllOfficers({ collegeId: college.id });
         const students = await this.getStudentsByCollege(college.id);
-        
+
         reports.push({
           college: college,
           stats: {
@@ -714,7 +714,7 @@ class AdminService {
   async updateSystemSettings(settings) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       const item = {
         PK: 'GLOBAL#SETTINGS',
         SK: 'CONFIG',
@@ -738,7 +738,7 @@ class AdminService {
         console.error('Invalid email format provided:', email);
         throw new Error('Invalid email format');
       }
-      
+
       // Try to get admin profile from DynamoDB using ADMIN#PROFILE pattern
       let adminProfile = null;
       try {
@@ -753,7 +753,7 @@ class AdminService {
       } catch (dbError) {
         // Silently handle profile lookup failure
       }
-      
+
       if (adminProfile) {
         return {
           email: adminProfile.email || email,
@@ -774,14 +774,13 @@ class AdminService {
           profilePicture: adminProfile.profilePicture || ''
         };
       }
-      
+
       // If not found, try to get from Cognito
       console.log('Attempting to fetch from Cognito...');
-      const { getUserAttributes } = require('../auth/cognito');
       try {
         const cognitoAttributes = await getUserAttributes(email);
         console.log('Cognito attributes fetched successfully');
-        
+
         // Extract attributes from Cognito
         const attributes = {};
         if (Array.isArray(cognitoAttributes)) {
@@ -791,7 +790,7 @@ class AdminService {
         } else if (cognitoAttributes.attributes) {
           Object.assign(attributes, cognitoAttributes.attributes);
         }
-        
+
         return {
           email: attributes.email || email,
           name: attributes.name || '',
@@ -841,7 +840,7 @@ class AdminService {
   async updateAdminProfile(email, updates) {
     try {
       const timestamp = new Date().toISOString();
-      
+
       // Check if profile exists
       let existingProfile = null;
       try {
@@ -856,7 +855,7 @@ class AdminService {
       } catch (err) {
         // No existing profile found, will create new one
       }
-      
+
       // Prepare the profile data
       const profileData = {
         PK: 'ADMIN#PROFILE',
@@ -881,10 +880,10 @@ class AdminService {
         updatedAt: timestamp,
         createdAt: existingProfile?.createdAt || timestamp
       };
-      
+
       // Save to DynamoDB
       await this.putItem(profileData);
-      
+
       // Return the updated profile
       return this.getAdminProfile(email);
     } catch (error) {
@@ -910,7 +909,7 @@ class AdminService {
   // Helper method to normalize legacy role formats
   normalizeRole(role) {
     if (!role) return 'Placement Training Officer'; // Default for empty roles
-    
+
     switch (role.toLowerCase()) {
       case 'pto':
         return 'Placement Training Officer';
@@ -1039,7 +1038,7 @@ class AdminService {
       };
 
       const result = await this.scanTable(params);
-      
+
       return result.Items.map(item => ({
         assessmentId: item.assessmentId,
         studentEmail: item.email,
@@ -1066,7 +1065,7 @@ class AdminService {
   async getPerformanceOverview() {
     try {
       const results = await this.getAssessmentResults();
-      
+
       if (results.length === 0) {
         return {
           totalResults: 0,
@@ -1224,7 +1223,7 @@ class AdminService {
   async getDepartmentPerformance() {
     try {
       const results = await this.getAssessmentResults();
-      
+
       const deptMap = {};
       results.forEach(result => {
         const dept = result.department || 'Unknown';
@@ -1259,4 +1258,4 @@ class AdminService {
   }
 }
 
-module.exports = AdminService;
+export default AdminService;

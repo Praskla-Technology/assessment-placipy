@@ -1,8 +1,8 @@
 // @ts-nocheck
-const express = require('express');
-const authMiddleware = require('../auth/auth.middleware');
-const studentAssessmentService = require('../services/StudentAssessmentService');
-const { getUserAttributes } = require('../auth/cognito');
+import express from 'express';
+import * as authMiddleware from '../auth/auth.middleware';
+import studentAssessmentService from '../services/StudentAssessmentService';
+import { getUserAttributes } from '../auth/cognito';
 
 const router = express.Router();
 
@@ -13,21 +13,21 @@ const router = express.Router();
 async function getEmailFromRequest(req) {
     // Get user ID from JWT token
     const userId = req.user?.['cognito:username'] || req.user?.username || req.user?.sub;
-    
+
     if (!userId) {
         throw new Error('User ID not found in authentication token');
     }
-    
+
     try {
         console.log('Fetching email from Cognito profile for user ID:', userId);
         // Always fetch email from Cognito profile to ensure accuracy
         const userInfo = await getUserAttributes(userId);
         const email = userInfo?.attributes?.email;
-        
+
         if (!email) {
             throw new Error('Email not found in user profile');
         }
-        
+
         console.log('Got email from Cognito profile:', email);
         return email.toLowerCase();
     } catch (error) {
@@ -47,7 +47,7 @@ router.get('/:assessmentId/with-questions', authMiddleware.authenticateToken, as
         console.log('Headers:', req.headers);
 
         const { assessmentId } = req.params;
-        
+
         // Validate assessment ID
         if (!assessmentId) {
             return res.status(400).json({
@@ -55,22 +55,22 @@ router.get('/:assessmentId/with-questions', authMiddleware.authenticateToken, as
                 message: 'Assessment ID is required'
             });
         }
-        
+
         // Get requester email for domain-based filtering using robust extraction
         const requesterEmail = await getEmailFromRequest(req);
         console.log(`Fetching assessment ${assessmentId} with questions for user: ${requesterEmail}`);
         const result = await studentAssessmentService.getAssessmentWithQuestions(assessmentId, requesterEmail);
-        
+
         if (!result) {
             return res.status(404).json({
                 success: false,
                 message: `Assessment ${assessmentId} not found`
             });
         }
-        
+
         // Separate assessment metadata and questions
         const { assessment, questions } = result;
-        
+
         res.status(200).json({
             success: true,
             data: {
@@ -80,14 +80,14 @@ router.get('/:assessmentId/with-questions', authMiddleware.authenticateToken, as
         });
     } catch (error: any) {
         console.error('Error fetching student assessment with questions:', error);
-        
+
         if (error.message && error.message.includes('not found')) {
             return res.status(404).json({
                 success: false,
                 message: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment with questions'
@@ -97,4 +97,4 @@ router.get('/:assessmentId/with-questions', authMiddleware.authenticateToken, as
 
 console.log('Student assessment routes defined');
 
-module.exports = router;
+export default router;
