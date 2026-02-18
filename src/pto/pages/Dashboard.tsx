@@ -8,7 +8,7 @@ import {
   FaUserGraduate,
   FaChartBar,
   FaUserCircle,
-  FaSignOutAlt,
+  FaSignOutAlt, 
 } from "react-icons/fa";
 import { useUser } from "../../contexts/UserContext";
 import AuthService from "../../services/auth.service";

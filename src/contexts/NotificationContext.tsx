@@ -51,7 +51,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     const saveStoredNotifications = (arr: Notification[]) => {
         try {
-            localStorage.setItem(STORAGE_NOTIFS, JSON.stringify(arr.slice(0, 200)));
+            localStorage.setItem(STORAGE_NOTIFS, JSON.stringify(arr.slice(0, 25)));
         } catch (e) {
             console.error('Failed to save local notifications', e);
         }
@@ -69,10 +69,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             PK: 'TEMP'
         };
         const current = [tempNotification, ...loadStoredNotifications()];
-        saveStoredNotifications(current);
-        tempNotificationsRef.current = current;
-        setNotifications(current);
-        setUnreadCount(current.filter(n => !n.isRead).length);
+        // Keep only 25 most recent notifications
+        const trimmed = current.slice(0, 25);
+        saveStoredNotifications(trimmed);
+        tempNotificationsRef.current = trimmed;
+        setNotifications(trimmed);
+        setUnreadCount(trimmed.filter(n => !n.isRead).length);
         window.dispatchEvent(new CustomEvent('newNotification', { detail: tempNotification }));
         return tempNotification;
     }, []);
@@ -85,7 +87,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const fetchNotifications = useCallback(async () => {
         try {
             // Since notifications are not stored in DB, we'll use temporary notifications
-            const tempNotifications = loadStoredNotifications();
+            let tempNotifications = loadStoredNotifications();
+            
+            // Trim to 25 most recent notifications
+            if (tempNotifications.length > 25) {
+                tempNotifications = tempNotifications.slice(0, 25);
+                saveStoredNotifications(tempNotifications);
+            }
             
             // Sort by createdAt descending (newest first)
             const sortedNotifications = [...tempNotifications].sort((a, b) => {
@@ -133,12 +141,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark notification as read
     const markAsRead = useCallback(async (notificationId: string) => {
         try {
-            const updated = loadStoredNotifications().map(notif => {
+            let updated = loadStoredNotifications().map(notif => {
                 if (notif.SK === notificationId) {
                     return { ...notif, isRead: true };
                 }
                 return notif;
             });
+            
+            // Trim to 25 most recent notifications
+            if (updated.length > 25) {
+                updated = updated.slice(0, 25);
+            }
+            
             saveStoredNotifications(updated);
             tempNotificationsRef.current = updated;
             setNotifications(updated);
@@ -152,7 +166,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark all notifications as read
     const markAllAsRead = useCallback(async () => {
         try {
-            const updated = loadStoredNotifications().map(notif => ({ ...notif, isRead: true }));
+            let updated = loadStoredNotifications().map(notif => ({ ...notif, isRead: true }));
+            
+            // Trim to 25 most recent notifications
+            if (updated.length > 25) {
+                updated = updated.slice(0, 25);
+            }
+            
             saveStoredNotifications(updated);
             tempNotificationsRef.current = updated;
             setNotifications(updated);
@@ -166,7 +186,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Remove notification
     const removeNotification = useCallback(async (notificationId: string) => {
         try {
-            const updated = loadStoredNotifications().filter(notif => notif.SK !== notificationId);
+            let updated = loadStoredNotifications().filter(notif => notif.SK !== notificationId);
+            
+            // Trim to 25 most recent notifications
+            if (updated.length > 25) {
+                updated = updated.slice(0, 25);
+            }
+            
             saveStoredNotifications(updated);
             tempNotificationsRef.current = updated;
             setNotifications(updated);
@@ -218,14 +244,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                     if (!item || !item.assessmentId || !item.scheduledAt) return;
                     const target = new Date(item.scheduledAt).getTime();
                     const diffMin = Math.floor((target - now) / 60000);
-                    [10, 5, 1].forEach(m => {
+                    [5].forEach(m => {
                         if (diffMin === m) {
                             const key = makeKey(item.assessmentId, m);
                             if (shouldFire(key)) {
                                 markFired(key);
                                 addNotification({
                                     type: 'reminder',
-                                    title: m === 10 ? 'Test starts in 10 minutes' : m === 5 ? 'Test starts in 5 minutes' : 'Test starts in 1 minute',
+                                    title: 'Test starts in 5 minutes',
                                     message: 'Get ready to begin your assessment.',
                                     link: `/student/assessments`,
                                     priority: 'high'

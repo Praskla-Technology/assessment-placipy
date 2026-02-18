@@ -62,6 +62,7 @@ interface QuestionItem {
     questionId: string;
     questionNumber: number;
     question: string;
+    description: string;
     points: number;
     difficulty: string;
     subcategory: string;
@@ -254,10 +255,16 @@ class AssessmentService {
 
             console.log('Processing questions:', JSON.stringify(assessmentData.questions, null, 2));
             const questions: QuestionItem[] = assessmentData.questions.map((question: any, index: number) => {
+                // Validate that description is provided
+                if (!question.description || question.description.trim() === '') {
+                    throw new Error(`Question ${index + 1} must have a description`);
+                }
+
                 const baseQuestion: QuestionItem = {
                     questionId: `Q_${String(index + 1).padStart(3, '0')}`,
                     questionNumber: index + 1,
                     question: question.text || question.question,
+                    description: question.description.trim(),
                     points: question.marks || question.points || 1,
                     difficulty: (question.difficulty || assessmentData.difficulty || 'MEDIUM').toUpperCase(),
                     subcategory: question.subcategory || 'technical'
@@ -1102,6 +1109,32 @@ class AssessmentService {
         } catch (error: unknown) {
             console.error('Error deleting assessment:', (error as Error).message);
             throw new Error('Failed to delete assessment: ' + (error as Error).message);
+        }
+    }
+
+    /**
+     * Fetch questions with descriptions for a specific assessment
+     * @param assessmentId - The ID of the assessment
+     * @param domain - The domain/organization
+     * @returns Array of questions with descriptions
+     */
+    async getQuestionsWithDescriptions(assessmentId: string, domain: string): Promise<QuestionItem[]> {
+        try {
+            const questions = await this.getAssessmentQuestions(assessmentId, domain);
+            
+            // Log questions with descriptions for debugging
+            console.log('Questions with descriptions:', 
+                questions.map(q => ({
+                    questionId: q.questionId,
+                    question: q.question,
+                    description: q.description
+                }))
+            );
+            
+            return questions;
+        } catch (error: unknown) {
+            console.error('Error fetching questions with descriptions:', (error as Error).message);
+            throw new Error('Failed to fetch questions with descriptions: ' + (error as Error).message);
         }
     }
 }

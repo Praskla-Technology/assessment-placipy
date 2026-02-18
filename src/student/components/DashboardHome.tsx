@@ -4,6 +4,7 @@ import StudentAssessmentService from '../../services/student.assessment.service'
 import ResultsService from '../../services/results.service';
 import { useNotifications } from '../../contexts/useNotifications';
 import { isToday, formatTimeHM } from '../../student/utils/timeUtils';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const DashboardHome: React.FC = () => {
   const { user } = useUser();
@@ -22,12 +23,24 @@ const DashboardHome: React.FC = () => {
     submittedAt?: string;
     isResultPublished?: boolean;
   }
-  
+
+  // Helper function to convert assessment ID format
+  const formatAssessmentId = (assessmentId: string) => {
+    // Extract the number from assessment ID like "ASSESS_CE_004"
+    const match = assessmentId.match(/(\d+)$/);
+    if (match) {
+      const number = parseInt(match[1], 10);
+      return `Assessment-${number}`;
+    }
+    // Fallback to original ID if no number found
+    return assessmentId;
+  };
+
   const [recentAssessments, setRecentAssessments] = useState<AssessmentResult[]>([]);
-  const [performanceData, setPerformanceData] = useState<Array<{subject: string, score: number}>>([]);
+  const [performanceData, setPerformanceData] = useState<Array<{ subject: string, score: number }>>([]);
   const [loading, setLoading] = useState(true);
 
-  
+
   // Dynamic stats data
   const stats = [
     { title: 'Active Tests', value: activeAssessmentsCount, change: '' },
@@ -46,34 +59,73 @@ const DashboardHome: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+
         // Fetch all assessments to get active count
         const assessmentsResponse = await StudentAssessmentService.getAllAssessments(
           user?.department ? { department: user.department } : undefined
         );
         console.log('Fetched assessments:', assessmentsResponse);
-        
+
         // Safely extract assessments array from response
-        const assessments = Array.isArray(assessmentsResponse?.data) 
-          ? assessmentsResponse.data 
-          : Array.isArray(assessmentsResponse) 
-          ? assessmentsResponse 
-          : [];
-        
-        // Filter active assessments (currently active based on dates)
+        const assessments = Array.isArray(assessmentsResponse?.data)
+          ? assessmentsResponse.data
+          : Array.isArray(assessmentsResponse)
+            ? assessmentsResponse
+            : [];
+
+        // Fetch student's results to determine attempted assessments
+        const resultsResponse = await ResultsService.getStudentResults().catch(() => ({ success: true, data: [] }));
+        console.log('Fetched results for dashboard:', resultsResponse);
+
+        // Get list of attempted assessment IDs with completion dates
+        const results = resultsResponse?.data || resultsResponse || [];
+        const attemptedAssessments = new Map<string, Date>();
+
+        if (Array.isArray(results)) {
+          results.forEach((result: any) => {
+            if (result.assessmentId) {
+              const completionDate = result.submittedAt ? new Date(result.submittedAt) : new Date();
+              attemptedAssessments.set(result.assessmentId, completionDate);
+            }
+          });
+        }
+
+        // Calculate active assessments count (matching 'all' filter logic in Assessments component)
         const now = new Date();
-        const activeCount = assessments.filter((assessment: { scheduling?: { startDate: string; endDate: string }; createdAt: string; status: string }) => {
-          const startDate = new Date(assessment.scheduling?.startDate || assessment.createdAt);
+        const activeCount = assessments.filter((assessment: {
+          scheduling?: { startDate: string; endDate: string };
+          createdAt: string;
+          status: string;
+          assessmentId: string;
+        }) => {
+          const isAttempted = attemptedAssessments.has(assessment.assessmentId);
+
+          // Check if assessment has ended based on date
           const endDate = new Date(assessment.scheduling?.endDate || new Date());
-          return assessment.status === 'ACTIVE' && startDate <= now && endDate >= now;
+          const hasEnded = now > endDate;
+
+          // Active assessments are those that are not attempted and not ended
+          return !isAttempted && !hasEnded;
         }).length;
-        
+
         setActiveAssessmentsCount(activeCount);
+
+        // Calculate completed assessments count (matching 'completed' filter logic)
+        const completedCount = assessments.filter((assessment: {
+          scheduling?: { endDate: string };
+          assessmentId: string;
+        }) => {
+          const isAttempted = attemptedAssessments.has(assessment.assessmentId);
+          if (!isAttempted) return false;
+
+          // Check if completed within last 5 days
+          const completionDate = attemptedAssessments.get(assessment.assessmentId)!;
+          const daysSinceCompletion = (Date.now() - completionDate.getTime()) / (1000 * 60 * 60 * 24);
+          return daysSinceCompletion <= 5;
+        }).length;
 
         // Frontend notifications: Today assessments and upcoming reminders
         try {
-          const sessionId = localStorage.getItem('notif_session_id') || String(Date.now());
-          localStorage.setItem('notif_session_id', sessionId);
           const upcoming: Array<{ assessmentId: string; scheduledAt: string }> = [];
           interface AssessmentItem {
             [key: string]: unknown;
@@ -84,16 +136,21 @@ const DashboardHome: React.FC = () => {
             createdAt: string;
             title?: string;
           }
-          
+
           const items: AssessmentItem[] = assessments;
           items.forEach((a) => {
             const start = a?.scheduling?.startDate || a?.createdAt;
             const aid = a?.assessmentId || a?.id;
             if (!aid || !start) return;
-            if (a.status === 'ACTIVE' && isToday(start)) {
-              const flagKey = `notif_today_${aid}_${sessionId}`;
+
+            // Check for Today's Active Assessments
+            // We use user.email to ensure we track 'seen' status per user
+            // We remove 'sessionId' so this persists across logins for the same user
+            if (user?.email && a.status === 'ACTIVE' && isToday(start)) {
+              const flagKey = `notif_shown_${user.email}_${aid}`;
+
               if (!localStorage.getItem(flagKey)) {
-                localStorage.setItem(flagKey, '1');
+                localStorage.setItem(flagKey, 'true');
                 addNotification({
                   type: 'assessment_published',
                   title: 'New Assessment Today',
@@ -109,126 +166,68 @@ const DashboardHome: React.FC = () => {
         } catch (e) {
           console.error('Assessment notification logic failed', e);
         }
-        
-        // Fetch dashboard statistics (completed tests, average score, recent assessments, performance)
+
+        // Fetch dashboard statistics (average score, recent assessments, performance)
         try {
           const statsResponse = await ResultsService.getDashboardStats();
           console.log('Fetched dashboard stats:', statsResponse);
-          
+
           if (statsResponse.success && statsResponse.data) {
-            setCompletedAssessmentsCount(statsResponse.data.completedTests || 0);
+            // Use our calculated completed count instead of backend
+            setCompletedAssessmentsCount(completedCount);
             setAverageScore(statsResponse.data.averageScore || 0);
-            
+
             // Set recent assessments
             if (statsResponse.data.recentAssessments && Array.isArray(statsResponse.data.recentAssessments)) {
               // Map assessment IDs to titles from assessments list
               const assessmentsMap = new Map(
                 assessments.map((a: { assessmentId: string; title: string }) => [a.assessmentId, a.title])
               );
-              
+
               const recentWithTitles = statsResponse.data.recentAssessments.map((result: AssessmentResult) => ({
                 ...result,
                 name: assessmentsMap.get(result.assessmentId) || result.assessmentId,
                 id: result.assessmentId
               }));
-              
+
               setRecentAssessments(recentWithTitles);
             } else {
               setRecentAssessments([]);
             }
-            
+
             // Set performance data (map assessment IDs to titles)
             if (statsResponse.data.performanceData && Array.isArray(statsResponse.data.performanceData)) {
               const assessmentsMap = new Map(
                 assessments.map((a: { assessmentId: string; title: string }) => [a.assessmentId, a.title])
               );
-              
+
               interface PerfData {
                 assessmentId?: string;
                 subject: string;
                 score: number;
               }
-              
+
               const performanceWithTitles = statsResponse.data.performanceData.map((perf: PerfData) => ({
                 ...perf,
-                subject: assessmentsMap.get(perf.assessmentId) || perf.assessmentId || perf.subject
+                subject: perf.assessmentId || perf.subject
               }));
-              
+
               setPerformanceData(performanceWithTitles);
             } else {
               setPerformanceData([]);
             }
 
-            // PTO announcements -> local notifications
-            try {
-              interface Announcement {
-                id?: string;
-                SK?: string;
-                title: string;
-                createdAt?: string;
-                content?: string;
-                message?: string;
-              }
-              
-              const announcements = (statsResponse.data as { announcements?: Announcement[] }).announcements || [];
-              if (Array.isArray(announcements)) {
-                const seenKey = 'student_announcements_seen';
-                const seenIds = new Set<string>((JSON.parse(localStorage.getItem(seenKey) || '[]')) as string[]);
-                announcements.forEach((ann: Announcement) => {
-                  const id = String(ann.id || ann.SK || `${ann.title}-${ann.createdAt || ''}`);
-                  if (!seenIds.has(id)) {
-                    addNotification({
-                      type: 'announcement',
-                      title: ann.title || 'Announcement',
-                      message: ann.message || ann.content || '',
-                      link: '/student/notifications',
-                      priority: 'low'
-                    });
-                    seenIds.add(id);
-                  }
-                });
-                localStorage.setItem(seenKey, JSON.stringify(Array.from(seenIds)));
-              }
-            } catch (_unused: unknown) {
-              // no announcements available
-              void _unused; // Mark as intentionally unused
-            }
           }
         } catch (statsError: unknown) {
           console.log('Error fetching dashboard stats:', statsError);
-          // Set defaults if stats fetch fails
-          setCompletedAssessmentsCount(0);
+          // Set defaults if stats fetch fails, but use our calculated completed count
+          setCompletedAssessmentsCount(completedCount);
           setAverageScore(0);
           setRecentAssessments([]);
           setPerformanceData([]);
         }
 
-        // Results published notification
-        try {
-          const res = await ResultsService.getStudentResults();
-          const list: AssessmentResult[] = res?.data || res || [];
-          const seenKey = 'notif_results_seen_ids';
-          const seen = new Set<string>((JSON.parse(localStorage.getItem(seenKey) || '[]')) as string[]);
-          list.forEach((r) => {
-            const aid = r?.assessmentId;
-            if (!aid) return;
-            const published = r?.isResultPublished ?? true;
-            if (published && !seen.has(aid)) {
-              addNotification({
-                type: 'result_published',
-                title: 'Your results are available',
-                message: 'View your latest assessment results.',
-                link: `/student/results`,
-                priority: 'medium'
-              });
-              seen.add(aid);
-            }
-          });
-          localStorage.setItem(seenKey, JSON.stringify(Array.from(seen)));
-        } catch (e) {
-          console.error('Result notification logic failed', e);
-        }
-        
+
 
       } catch (err: unknown) {
         console.error('Error fetching data:', err);
@@ -246,10 +245,6 @@ const DashboardHome: React.FC = () => {
     };
 
     fetchData();
-    
-    // Refresh data every 30 seconds for real-time updates
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
   }, [addNotification, user]);
 
   return (
@@ -279,10 +274,10 @@ const DashboardHome: React.FC = () => {
 
         <div style={{ zIndex: 1, position: 'relative' }}>
           <div style={{ fontSize: '0.9rem', opacity: 0.9, marginBottom: '10px' }}>{currentDate}</div>
-                  <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 700 }}>
-                    Welcome back, {/** prefer the real user name from context */}
-                    {user?.name ? ` ${user.name}` : ' Student'}!
-                  </h1>
+          <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 700 }}>
+            Welcome back, {/** prefer the real user name from context */}
+            {user?.name ? ` ${user.name}` : ' Student'}!
+          </h1>
 
         </div>
         <div aria-hidden="true" style={{ position: 'absolute', right: 24, opacity: 0.15, zIndex: 0 }}>
@@ -295,11 +290,11 @@ const DashboardHome: React.FC = () => {
         </div>
       </div>
 
-      
 
-      <div className="stats-grid">
+
+      <div className="std_stats-grid">
         {stats.map((stat, index) => (
-          <div className="stat-card" key={index}>
+          <div className="std_stat-card" key={index}>
             <h3>{stat.title}</h3>
             <p className="stat-value">{stat.value}</p>
             {stat.change && <p className="stat-change">{stat.change}</p>}
@@ -316,20 +311,10 @@ const DashboardHome: React.FC = () => {
             recentAssessments.map(assessment => (
               <div className="assessment-card" key={assessment.id || assessment.assessmentId}>
                 <div className="assessment-header">
-                  <h3>{assessment.name || assessment.assessmentId}</h3>
+                  <h3>{formatAssessmentId(assessment.assessmentId)}</h3>
                   <span className={`status-badge ${assessment.status || 'pending'}`}>
                     {(assessment.status || 'Pending').charAt(0).toUpperCase() + (assessment.status || 'Pending').slice(1)}
                   </span>
-                </div>
-                <div className="progress-container">
-                  <span>Score: {assessment.score || 0} / {assessment.maxScore || 0} ({assessment.percentage || 0}%)</span>
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
-                      style={{ width: `${assessment.percentage || 0}%` }}
-                    ></div>
-                  </div>
-                  <span>{assessment.percentage || 0}%</span>
                 </div>
                 {assessment.submittedAt && (
                   <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '8px' }}>
@@ -346,155 +331,83 @@ const DashboardHome: React.FC = () => {
         </div>
       </div>
 
-      <div className="performance-section" style={{ 
-        background: '#FFFFFF', 
-        borderRadius: '16px', 
-        padding: '24px', 
+      <div className="performance-section" style={{
+        background: '#FFFFFF',
+        borderRadius: '10px',
+        padding: '0px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        marginTop: '24px'
+        marginTop: '24px',
+        width: '1250px',
+        marginLeft: '70px',
       }}>
-        <h2 style={{ marginBottom: '24px', fontSize: '20px', fontWeight: 600, color: '#111827' }}>Performance Summary</h2>
+        <h2 style={{ padding: '24px 24px 0', marginBottom: '24px', fontSize: '20px', fontWeight: 600, color: '#111827' }}>Performance Summary</h2>
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>Loading performance data...</div>
         ) : performanceData.length > 0 ? (
-          <div style={{ width: '100%', padding: '20px 0' }}>
-            {/* Chart Container */}
-            <div style={{ 
-              position: 'relative', 
-              width: '100%', 
-              height: '300px',
-              display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'space-around',
-              padding: '20px 40px 40px 60px',
-              borderBottom: '2px solid #E5E7EB',
-              borderLeft: '2px solid #E5E7EB'
-            }}>
-              {/* Y-axis labels */}
-              <div style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                bottom: 40,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                width: '40px',
-                paddingRight: '10px',
-                alignItems: 'flex-end'
-              }}>
-                {[100, 80, 60, 40, 20, 0].map((value) => (
-                  <span key={value} style={{
-                    fontSize: '12px',
-                    color: '#6B7280',
-                    fontWeight: 500
-                  }}>
-                    {value}
-                  </span>
-                ))}
-              </div>
-
-              {/* Bars */}
-              {performanceData.map((subject, index) => {
-                const clamped = Math.max(0, Math.min(100, subject.score));
-                const barHeight = (clamped / 100) * 240; // Max height is 240px (300px - 60px padding)
-                const barWidth = Math.max(60, Math.min(120, 400 / performanceData.length));
-                
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      flex: 1,
-                      maxWidth: '150px',
-                      height: '100%',
-                      justifyContent: 'flex-end',
-                      position: 'relative'
+          <div style={{ width: '100%', padding: '0 24px 24px' }}>
+            <div style={{ width: '100%', height: 400 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={performanceData}
+                  margin={{
+                    top: 20,
+                    right: 30,
+                    left: 20,
+                    bottom: 60,
+                  }}
+                  barSize={40}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis
+                    dataKey="subject"
+                    scale="point"
+                    padding={{ left: 20, right: 20 }}
+                    tickFormatter={(value) => formatAssessmentId(value)}
+                    angle={-45}
+                    textAnchor="end"
+                    interval={0}
+                    tick={{ fontSize: 11, fill: '#6B7280' }}
+                    tickMargin={10}
+                    axisLine={{ stroke: '#E5E7EB' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fontSize: 11, fill: '#6B7280' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickCount={6}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#F3F4F6' }}
+                    contentStyle={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      border: '1px solid #E5E7EB',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                     }}
-                  >
-                    {/* Bar */}
-                    <div
-                      style={{
-                        width: `${barWidth}px`,
-                        height: `${barHeight}px`,
-                        minHeight: clamped > 0 ? '4px' : '0',
-                        background: '#9768E1',
-                        borderRadius: '4px 4px 0 0',
-                        transition: 'height 0.8s ease',
-                        position: 'relative',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 4px rgba(151, 104, 225, 0.2)'
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.opacity = '0.8';
-                        (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.opacity = '1';
-                        (e.currentTarget as HTMLDivElement).style.transform = 'scaleY(1)';
-                      }}
-                    >
-                      {/* Value label on top of bar */}
-                      {clamped > 0 && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '-25px',
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: '#111827',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {clamped}%
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* X-axis label */}
-                    <div style={{
-                      marginTop: '8px',
-                      fontSize: '12px',
-                      color: '#374151',
-                      fontWeight: 500,
-                      textAlign: 'center',
-                      wordBreak: 'break-word',
-                      maxWidth: `${barWidth}px`
-                    }}>
-                      {subject.subject}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Legend */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginTop: '20px',
-              gap: '8px'
-            }}>
-              <div style={{
-                width: '16px',
-                height: '16px',
-                background: '#9768E1',
-                borderRadius: '2px'
-              }}></div>
-              <span style={{
-                fontSize: '14px',
-                color: '#374151',
-                fontWeight: 500
-              }}>
-                Performance Score
-              </span>
+                    itemStyle={{
+                      color: '#111827',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                    }}
+                    formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Score']}
+                    labelStyle={{ marginBottom: '4px', color: '#6B7280', fontSize: '12px' }}
+                    labelFormatter={(label) => formatAssessmentId(label)}
+                  />
+                  <Bar
+                    dataKey="score"
+                    fill="#9768E1"
+                    radius={[4, 4, 0, 0]}
+                    animationDuration={1500}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         ) : (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#666', background: '#F9FAFB', borderRadius: '12px' }}>
+          <div style={{ padding: '40px', textAlign: 'center', color: '#666', background: '#F9FAFB', margin: '24px', borderRadius: '12px' }}>
             <p style={{ margin: 0, fontSize: '14px' }}>No performance data available yet.</p>
             <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>Complete assessments to see your performance.</p>
           </div>

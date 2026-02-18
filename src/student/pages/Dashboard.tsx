@@ -33,11 +33,10 @@ const StudentDashboard: React.FC = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Navigation items (removed profile)
+  // Navigation items (removed profile and results)
   const navItems = useMemo(() => [
     { id: 'dashboard', label: 'Dashboard', path: '/student' },
     { id: 'assessments', label: 'Assessments', path: '/student/assessments' },
-    { id: 'results', label: 'Results & Reports', path: '/student/results' },
     { id: 'notifications', label: 'Notifications', path: '/student/notifications' },
   ], []);
 
@@ -155,9 +154,9 @@ const StudentDashboard: React.FC = () => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
     };
-    
+
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       window.removeEventListener('resize', handleResize);
     };
@@ -177,12 +176,12 @@ const StudentDashboard: React.FC = () => {
         <nav className={`dashboard-sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
             <div className="sidebar-header-content">
-              <button className="hamburger-menu inside" onClick={toggleSidebar}>
-                <span></span>
-                <span></span>
-                <span></span>
-              </button>
               <h2 className="sidebar-title">Student Portal</h2>
+              <button className="sidebar-close-btn" onClick={closeSidebar} aria-label="Close sidebar">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             </div>
           </div>
           <ul className="sidebar-menu">
@@ -216,7 +215,7 @@ const StudentDashboard: React.FC = () => {
             <div className="dashboard-header-content">
               <div className="dashboard-header-left">
                 {!sidebarOpen && (
-                  <button className="hamburger-menu" onClick={toggleSidebar}>
+                  <button className="std_hamburger-menu" onClick={toggleSidebar}>
                     <span></span>
                     <span></span>
                     <span></span>
@@ -227,7 +226,7 @@ const StudentDashboard: React.FC = () => {
                 </h1>
               </div>
               <div className="user-info">
-                <NotificationBell />
+                {!isAssessmentActive && <NotificationBell />}
                 <Link to="/student/profile" className="profile-btn" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
                   <div className="user-avatar-first-letter">
                     {user?.name ? user.name.charAt(0).toUpperCase() : 'S'}
@@ -257,7 +256,7 @@ const StudentDashboard: React.FC = () => {
         </div>
       </main>
 
-      {activePopup && (
+      {!isAssessmentActive && activePopup && (
         <NotificationPopup
           notification={activePopup}
           onClose={() => setActivePopup(null)}
