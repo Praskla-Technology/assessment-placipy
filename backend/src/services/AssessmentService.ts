@@ -264,16 +264,17 @@ class AssessmentService {
 
             console.log('Processing questions:', JSON.stringify(assessmentData.questions, null, 2));
             const questions: QuestionItem[] = assessmentData.questions.map((question: any, index: number) => {
-                // Validate that description is provided
-                if (!question.description || question.description.trim() === '') {
-                    throw new Error(`Question ${index + 1} must have a description`);
+                // Use description if provided, fall back to question text
+                const questionDescription = (question.description || question.text || '').trim();
+                if (!questionDescription) {
+                    throw new Error(`Question ${index + 1} must have a description or text`);
                 }
 
                 const baseQuestion: QuestionItem = {
                     questionId: `Q_${String(index + 1).padStart(3, '0')}`,
                     questionNumber: index + 1,
                     question: question.text || question.question,
-                    description: question.description.trim(),
+                    description: questionDescription,
                     points: question.marks || question.points || 1,
                     difficulty: (question.difficulty || assessmentData.difficulty || 'MEDIUM').toUpperCase(),
                     subcategory: question.subcategory || 'technical'
@@ -567,11 +568,11 @@ class AssessmentService {
         }
     }
 
-    async getAllAssessments(filters: { clientDomain?: string; department?: string; status?: string; } = {}, limit: number = 50, lastKey?: DynamoDB.DocumentClient.Key): Promise<{ items: AssessmentItem[]; lastKey?: DynamoDB.DocumentClient.Key; hasMore: boolean }> {
+    async getAllAssessments(filters: { clientDomain?: string; department?: string; status?: string; } = {}, lastKey?: DynamoDB.DocumentClient.Key): Promise<{ items: AssessmentItem[]; lastKey?: DynamoDB.DocumentClient.Key; hasMore: boolean }> {
         try {
             console.log('=== getAllAssessments called ===');
             console.log('Initial Filters:', filters);
-            console.log('Limit:', limit);
+            console.log('Limit: none (fetching all)');
             console.log('LastKey:', lastKey);
 
             const filterExpressions: string[] = [];
@@ -606,8 +607,7 @@ class AssessmentService {
                     ExpressionAttributeValues: {
                         ':pk': `CLIENT#${filters.clientDomain}`,
                         ':sk_prefix': 'ASSESSMENT#'
-                    },
-                    Limit: limit
+                    }
                 };
 
                 if (filterExpressions.length > 0) {
@@ -677,8 +677,7 @@ class AssessmentService {
                 };
             } else {
                 const scanParams: DynamoDB.DocumentClient.ScanInput = {
-                    TableName: this.assessmentsTableName,
-                    Limit: limit
+                    TableName: this.assessmentsTableName
                 };
 
                 filterExpressions.push('begins_with(PK, :pk_prefix) AND begins_with(SK, :sk_prefix)');
@@ -1137,16 +1136,16 @@ class AssessmentService {
     async getQuestionsWithDescriptions(assessmentId: string, domain: string): Promise<QuestionItem[]> {
         try {
             const questions = await this.getAssessmentQuestions(assessmentId, domain);
-            
+
             // Log questions with descriptions for debugging
-            console.log('Questions with descriptions:', 
+            console.log('Questions with descriptions:',
                 questions.map(q => ({
                     questionId: q.questionId,
                     question: q.question,
                     description: q.description
                 }))
             );
-            
+
             return questions;
         } catch (error: unknown) {
             console.error('Error fetching questions with descriptions:', (error as Error).message);

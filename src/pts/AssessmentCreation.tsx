@@ -176,6 +176,8 @@ const AssessmentCreation: React.FC = () => {
   const pageNumbers = useMemo<readonly (number | string)[]>(() => {
     const pages: (number | string)[] = [];
 
+    if (totalPages <= 1) return pages;
+
     if (totalPages <= 7) {
       for (let i = 1; i <= totalPages; i++) pages.push(i);
       return pages;
@@ -188,13 +190,13 @@ const AssessmentCreation: React.FC = () => {
 
     if (currentPage <= 3) {
       start = 2;
-      end = 4;
-    } else if (currentPage >= totalPages - 3) {
-      start = totalPages - 3;
+      end = Math.min(5, totalPages - 1);
+    } else if (currentPage >= totalPages - 2) {
+      start = Math.max(2, totalPages - 4);
       end = totalPages - 1;
     } else {
-      start = currentPage;
-      end = currentPage + 3;
+      start = currentPage - 1;
+      end = currentPage + 1;
     }
 
     if (start > 2) pages.push("...");
@@ -208,13 +210,23 @@ const AssessmentCreation: React.FC = () => {
     return pages;
   }, [currentPage, totalPages]);
 
+  // Sync department from user context whenever user loads (handles async user load)
+  useEffect(() => {
+    if (user?.department) {
+      setAssessmentData(prev => ({
+        ...prev,
+        department: prev.department || (user.department ?? '')
+      }));
+    }
+  }, [user]);
+
   useEffect(() => {
     const fetchAssessments = async () => {
       try {
         setLoadingAssessments(true);
-        const res = await AssessmentService.getAllAssessments(); // 👈 your API
+        const res = await AssessmentService.getAssessmentsByOwner(); // only this PTS's assessments
         setAssessments(res?.data || []);
-        setCurrentPage(1); // IMPORTANT for pagination
+        setCurrentPage(1);
         setShowAssessments(true); // default tab
       } catch (err) {
         console.error("Failed to fetch assessments", err);
@@ -753,14 +765,12 @@ const AssessmentCreation: React.FC = () => {
     try {
       await AssessmentService.deleteAssessment(assessmentId);
 
-      // Remove the deleted assessment from the state
-      setAssessments(prev => prev.filter(assessment => assessment.assessmentId !== assessmentId));
-
       // Show success message
       alert('Assessment deleted successfully!');
 
-      // Refresh the list
+      // Refresh the list and reset pagination to page 1
       await fetchAssessments();
+      setCurrentPage(1);
     } catch (error) {
       console.error('Error deleting assessment:', error);
       alert('Failed to delete assessment: ' + (error as Error).message);
@@ -1123,11 +1133,11 @@ const AssessmentCreation: React.FC = () => {
       console.log('Assessment created successfully:', response);
       setSuccessMessage("Assessment created successfully!");
 
-      // Reset form
+      // Reset form but keep department from user context
       setAssessmentData({
         title: "",
         duration: 60,
-        department: "",
+        department: user?.department || "",
         difficulty: "",
         category: ["MCQ", "Coding"],
         questions: [],
@@ -1337,73 +1347,126 @@ const AssessmentCreation: React.FC = () => {
                 <p>No assessments found for this PTS</p>
               </div>
             ) : (
-              <div className="table-container" style={{
-                background: "white",
-                borderRadius: "8px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                border: "1px solid #e9ecef",
-                overflow: "hidden"
-              }}>
-                <table className="data-table" style={{
-                  width: "100%",
-                  borderCollapse: "collapse"
+              <>
+                <div className="table-container" style={{
+                  background: "white",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                  border: "1px solid #e9ecef",
+                  overflow: "hidden"
                 }}>
-                  <thead style={{
-                    backgroundColor: "#9768E1",
-                    color: "white"
+                  <table className="data-table" style={{
+                    width: "100%",
+                    borderCollapse: "collapse"
                   }}>
-                    <tr>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Assessment ID</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Title</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Difficulty</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Categories</th>
-                      <th style={{ padding: "12px", textAlign: "center" }}>Questions</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Duration</th>
-                      <th style={{ padding: "12px", textAlign: "left" }}>Scheduling</th>
-                      <th style={{ padding: "12px", textAlign: "center" }}>View Results</th>
-                      <th style={{ padding: "12px", textAlign: "center" }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentAssessments.map((assessment, index) => {
-                      const globalIndex = (currentPage - 1) * assessmentsPerPage + index;
-                      return (
-                        <tr key={assessment.assessmentId || globalIndex} style={{
-                          backgroundColor: globalIndex % 2 === 0 ? "#f9f9f9" : "white",
-                          borderBottom: "1px solid #ddd"
-                        }}>
-                          <td style={{ padding: "12px" }}>{assessment.assessmentId || 'N/A'}</td>
-                          <td style={{ padding: "12px" }}>{assessment.title || 'N/A'}</td>
-                          <td style={{ padding: "12px" }}>{assessment.difficulty || 'N/A'}</td>
-                          <td style={{ padding: "12px" }}>{Array.isArray(assessment.category) ? assessment.category.join(', ') : assessment.category || 'N/A'}</td>
-                          <td style={{ padding: "12px", textAlign: "center" }}>{assessment.configuration?.totalQuestions || 0}</td>
-                          <td style={{ padding: "12px" }}>{assessment.duration || assessment.configuration?.duration || 'N/A'} min</td>
-                          <td style={{ padding: "12px" }}>{new Date(assessment.scheduling?.startDate || '').toLocaleDateString() || 'N/A'}</td>
-                          <td style={{ padding: "12px", textAlign: "center" }}>
-                            <button
-                              className="pts-btn-secondary"
-                              onClick={() => exportResults(assessment.assessmentId)}
-                              style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-                            >
-                              <Download size={16} style={{ display: 'inline' }} />
-                            </button>
-                          </td>
-                          <td style={{ padding: "12px", textAlign: "center" }}>
-                            <button
-                              className="pts-btn-danger"
-                              onClick={() => deleteAssessment(assessment.assessmentId)}
-                              style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-                            >
-                              <Trash2 size={19} style={{ marginRight: '4px', display: 'inline' }} />
+                    <thead style={{
+                      backgroundColor: "#9768E1",
+                      color: "white"
+                    }}>
+                      <tr>
+                        <th style={{ padding: "12px", textAlign: "left" }}>Assessment ID</th>
+                        <th style={{ padding: "12px", textAlign: "left" }}>Title</th>
+                        <th style={{ padding: "12px", textAlign: "left" }}>Difficulty</th>
+                        <th style={{ padding: "12px", textAlign: "left" }}>Categories</th>
+                        <th style={{ padding: "12px", textAlign: "center" }}>Questions</th>
+                        <th style={{ padding: "12px", textAlign: "left" }}>Duration</th>
+                        <th style={{ padding: "12px", textAlign: "left" }}>Scheduling</th>
+                        <th style={{ padding: "12px", textAlign: "center" }}>View Results</th>
+                        <th style={{ padding: "12px", textAlign: "center" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentAssessments.map((assessment, index) => {
+                        const globalIndex = (currentPage - 1) * assessmentsPerPage + index;
+                        return (
+                          <tr key={assessment.assessmentId || globalIndex} style={{
+                            backgroundColor: globalIndex % 2 === 0 ? "#f9f9f9" : "white",
+                            borderBottom: "1px solid #ddd"
+                          }}>
+                            <td style={{ padding: "12px" }}>{assessment.assessmentId || 'N/A'}</td>
+                            <td style={{ padding: "12px" }}>{assessment.title || 'N/A'}</td>
+                            <td style={{ padding: "12px" }}>{assessment.difficulty || 'N/A'}</td>
+                            <td style={{ padding: "12px" }}>{Array.isArray(assessment.category) ? assessment.category.join(', ') : assessment.category || 'N/A'}</td>
+                            <td style={{ padding: "12px", textAlign: "center" }}>{assessment.configuration?.totalQuestions || 0}</td>
+                            <td style={{ padding: "12px" }}>{assessment.duration || assessment.configuration?.duration || 'N/A'} min</td>
+                            <td style={{ padding: "12px" }}>{new Date(assessment.scheduling?.startDate || '').toLocaleDateString() || 'N/A'}</td>
+                            <td style={{ padding: "12px", textAlign: "center" }}>
+                              <button
+                                className="pts-btn-secondary"
+                                onClick={() => exportResults(assessment.assessmentId)}
+                                style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                              >
+                                <Download size={16} style={{ display: 'inline' }} />
+                              </button>
+                            </td>
+                            <td style={{ padding: "12px", textAlign: "center" }}>
+                              <button
+                                className="pts-btn-danger"
+                                onClick={() => deleteAssessment(assessment.assessmentId)}
+                                style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                              >
+                                <Trash2 size={19} style={{ marginRight: '4px', display: 'inline' }} />
 
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination info + controls — centered below table */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '16px', gap: '10px' }}>
+                  <span style={{ color: '#6b7280', fontSize: '0.9rem' }}>
+                    Showing {Math.min((currentPage - 1) * assessmentsPerPage + 1, assessments.length)}–{Math.min(currentPage * assessmentsPerPage, assessments.length)} of {assessments.length} assessments
+                  </span>
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        className="pts-btn-secondary"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        style={{ padding: '6px 14px', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.5 : 1, cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
+                      >
+                        ← Prev
+                      </button>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        {pageNumbers.map((page, index) =>
+                          page === "..." ? (
+                            <span key={`dots-${index}`} style={{ padding: '6px 8px', color: '#6b7280' }}>...</span>
+                          ) : (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page as number)}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '0.9rem',
+                                backgroundColor: currentPage === page ? '#9768E1' : 'white',
+                                color: currentPage === page ? 'white' : '#374151',
+                                border: currentPage === page ? '1px solid #9768E1' : '1px solid #d1d5db',
+                                minWidth: '34px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontWeight: currentPage === page ? 600 : 400
+                              }}
+                            >
+                              {page}
                             </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          )
+                        )}
+                      </div>
+                      <button
+                        className="pts-btn-secondary"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        style={{ padding: '6px 14px', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.5 : 1, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -1429,67 +1492,7 @@ const AssessmentCreation: React.FC = () => {
           </div>
         )}
 
-        {/* Pagination Controls */}
-        {showAssessments && assessments.length > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '20px' }}>
 
-            {/* Previous Button */}
-            <button
-              className="pts-btn-secondary"
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              style={{
-                padding: '8px 16px',
-                fontSize: '0.9rem',
-                opacity: currentPage === 1 ? 0.5 : 1,
-                cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Previous
-            </button>
-
-            {/* Page Numbers */}
-            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-              {pageNumbers.map((page, index) =>
-                page === "..." ? (
-                  <span key={`dots-${index}`} style={{ padding: '6px 10px', color: '#6b7280' }}>...</span>
-                ) : (
-                  <button
-                    key={page}
-                    className="pts-btn-secondary"
-                    onClick={() => setCurrentPage(page as number)}
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '0.9rem',
-                      backgroundColor: currentPage === page ? '#9768E1' : 'white',
-                      color: currentPage === page ? 'white' : '#374151',
-                      border: currentPage === page ? '1px solid #9768E1' : '1px solid #d1d5db',
-                      minWidth: '36px'
-                    }}
-                  >
-                    {page}
-                  </button>
-                )
-              )}
-            </div>
-
-            {/* Next Button */}
-            <button
-              className="pts-btn-secondary"
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(assessments.length / assessmentsPerPage)))}
-              disabled={currentPage === Math.ceil(assessments.length / assessmentsPerPage) || assessments.length === 0}
-              style={{
-                padding: '8px 16px',
-                fontSize: '0.9rem',
-                opacity: currentPage === Math.ceil(assessments.length / assessmentsPerPage) || assessments.length === 0 ? 0.5 : 1,
-                cursor: (currentPage === Math.ceil(assessments.length / assessmentsPerPage) || assessments.length === 0) ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Next
-            </button>
-
-          </div>
-        )}
 
 
         {/* Create Assessment Form - shown when toggle is inactive */}
@@ -2432,7 +2435,7 @@ const AssessmentCreation: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 };
 

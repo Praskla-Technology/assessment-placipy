@@ -61,10 +61,9 @@ router.get('/', authMiddleware.authenticateToken, async (req, res) => {
         };
         console.log('Final filters object:', JSON.stringify(filters, null, 2));
 
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
         const lastKey = req.query.lastKey ? JSON.parse(req.query.lastKey as string) : null;
 
-        const result = await assessmentService.getAllAssessments(filters, limit, lastKey);
+        const result = await assessmentService.getAllAssessments(filters, lastKey);
         console.log('=== Route Handler Result ===');
         console.log('Number of assessments returned:', result.items.length);
         console.log('Department values in returned assessments:', result.items.map((a: any) => ({ id: a.assessmentId, dept: a.department })));
@@ -317,21 +316,21 @@ router.get('/:id/questions-with-descriptions', authMiddleware.authenticateToken,
 
         console.log(`Calling getQuestionsWithDescriptions with id: ${assessmentId}, domain: ${domain}`);
         const result = await assessmentService.getQuestionsWithDescriptions(assessmentId, domain);
-        
+
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment questions with descriptions:', error);
-        
+
         if (error.message && error.message.includes('not found')) {
             return res.status(404).json({
                 success: false,
                 message: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment questions with descriptions'

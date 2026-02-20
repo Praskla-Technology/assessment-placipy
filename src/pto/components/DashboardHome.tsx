@@ -20,6 +20,7 @@ const DashboardHome: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [departmentPerformanceData, setDepartmentPerformanceData] = useState<Array<{ name: string; students: number; avgScore: number; completed: number }>>([]);
   const [assessments, setAssessments] = useState<Array<{ id: string; title: string; subject: string; startTime: string; duration: string; status: 'ongoing' | 'upcoming' }>>([]);
+  const [activeTab, setActiveTab] = useState<'ongoing' | 'upcoming'>('ongoing');
 
   useEffect(() => {
     const load = async () => {
@@ -37,9 +38,42 @@ const DashboardHome: React.FC = () => {
       );
       type AssessmentCard = { id: string; title: string; subject: string; startTime: string; duration: string; status: 'ongoing' | 'upcoming' };
       type RawTest = { id: string; name: string; department?: string; date?: string; duration?: number };
-      const ongoingCards: AssessmentCard[] = (data.ongoingTests as RawTest[]).map((t) => ({ id: t.id, title: t.name, subject: t.department || 'All', startTime: t.date || '', duration: `${t.duration || 0} mins`, status: 'ongoing' }));
-      const upcomingCards: AssessmentCard[] = (data.upcomingTests as RawTest[]).map((t) => ({ id: t.id, title: t.name, subject: t.department || 'All', startTime: t.date || '', duration: `${t.duration || 0} mins`, status: 'upcoming' }));
-      setAssessments([...ongoingCards, ...upcomingCards]);
+
+      // Merge both lists and reclassify by date on the frontend
+      const allTests = [
+        ...(data.ongoingTests as RawTest[]),
+        ...(data.upcomingTests as RawTest[])
+      ];
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const tomorrowStart = new Date(todayStart);
+      tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+      const classifiedCards: AssessmentCard[] = allTests
+        .filter((t) => {
+          // Drop tests with no date or a past date
+          if (!t.date) return false;
+          const testDay = new Date(t.date);
+          testDay.setHours(0, 0, 0, 0);
+          return testDay >= todayStart; // keep today + future only
+        })
+        .map((t) => {
+          const testDay = new Date(t.date!);
+          testDay.setHours(0, 0, 0, 0);
+          const status: 'ongoing' | 'upcoming' =
+            testDay.getTime() === todayStart.getTime() ? 'ongoing' : 'upcoming';
+          return {
+            id: t.id,
+            title: t.name,
+            subject: t.department || 'All',
+            startTime: new Date(t.date!).toLocaleDateString(),
+            duration: `${t.duration || 0} mins`,
+            status
+          };
+        });
+
+      setAssessments(classifiedCards);
       setLoading(false);
     };
     load();
@@ -128,103 +162,131 @@ const DashboardHome: React.FC = () => {
       {/* Department Performance Analytics */}
       <div className="pto-analytics-section">
         <h2 className="pto-section-title pto-fade-in">Performance by Department</h2>
-        <div className="pto-chart-card pto-slide-in">
-          {loading ? (
-            <div className="pto-skeleton" style={{ width: '100%', height: '300px' }}></div>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={departmentPerformanceData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="students" fill="#9768E1" name="Total Students" />
-                <Bar dataKey="avgScore" fill="#E4D5F8" name="Avg Score" />
-                <Bar dataKey="completed" fill="#A4878D" name="Completed Tests" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+        <div className="pto-chart-card pto-slide-in" style={{ display: 'flex', alignItems: 'flex-start', gap: '24px' }}>
+          {/* Chart */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {loading ? (
+              <div className="pto-skeleton" style={{ width: '100%', height: '300px' }}></div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={departmentPerformanceData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="students" fill="#9768E1" name="Total Students" />
+                  <Bar dataKey="avgScore" fill="#E4D5F8" name="Avg Score" />
+                  <Bar dataKey="completed" fill="#A4878D" name="Completed Tests" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Custom Legend — top-right */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px', minWidth: '160px' }}>
+            {[
+              { color: '#9768E1', label: 'Total Students' },
+              { color: '#E4D5F8', label: 'Avg Score', border: '1px solid #c8a8f0' },
+              { color: '#A4878D', label: 'Completed Tests' },
+            ].map(({ color, label, border }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{
+                  display: 'inline-block', width: '14px', height: '14px',
+                  borderRadius: '3px', background: color,
+                  border: border || 'none', flexShrink: 0
+                }} />
+                <span style={{ fontSize: '0.88rem', color: '#374151', fontWeight: 500 }}>{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Tests Overview */}
-      <div className="tests-section">
-        <div className="tests-column">
-          <h2 className="pto-section-title">Ongoing Tests</h2>
-          <div className="tests-list">
-            {loading ? (
-              Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="test-card ongoing">
-                  <div className="pto-skeleton" style={{ width: '40px', height: '40px', borderRadius: '8px', marginRight: '15px' }}></div>
-                  <div style={{ flex: 1 }}>
-                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div>
-                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              assessments.filter(a => a.status === 'ongoing').length > 0 ? (
-                assessments.filter(a => a.status === 'ongoing').map((test, idx) => (
-                  <div
-                    key={test.id}
-                    className="test-card ongoing pto-fade-in"
-                    style={{ animationDelay: `${idx * 80}ms` }}
-                  >
-                    <div className="test-icon">
-                      <FaCalendarAlt size={18} color="#9768E1" />
-                    </div>
-                    <div className="test-content">
-                      <div className="test-name">{test.title}</div>
-                      <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
-                      <div className="test-date"><strong>Started:</strong> {test.startTime}</div>
-                      <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="pto-empty-state">No ongoing tests</div>
-              )
-            )}
-          </div>
+      {/* Tests Overview — Tabbed */}
+      <div className="tests-section" style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', width: 'fit-content' }}>
+          <button
+            onClick={() => setActiveTab('ongoing')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '8px 18px', borderRadius: '8px', border: 'none',
+              cursor: 'pointer', fontWeight: 600, fontSize: '0.92rem',
+              backgroundColor: activeTab === 'ongoing' ? '#9768E1' : 'white',
+              color: activeTab === 'ongoing' ? 'white' : '#6b7280',
+              boxShadow: activeTab === 'ongoing' ? '0 2px 8px rgba(151,104,225,0.35)' : '0 0 0 1.5px #d1d5db',
+              transition: 'all 0.18s ease'
+            }}
+          >
+            🟢 Ongoing
+            <span style={{
+              background: activeTab === 'ongoing' ? 'rgba(255,255,255,0.25)' : '#e5e7eb',
+              color: activeTab === 'ongoing' ? 'white' : '#374151',
+              borderRadius: '999px', padding: '1px 8px', fontSize: '0.8rem', fontWeight: 700
+            }}>
+              {assessments.filter(a => a.status === 'ongoing').length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('upcoming')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '8px 18px', borderRadius: '8px', border: 'none',
+              cursor: 'pointer', fontWeight: 600, fontSize: '0.92rem',
+              backgroundColor: activeTab === 'upcoming' ? '#9768E1' : 'white',
+              color: activeTab === 'upcoming' ? 'white' : '#6b7280',
+              boxShadow: activeTab === 'upcoming' ? '0 2px 8px rgba(151,104,225,0.35)' : '0 0 0 1.5px #d1d5db',
+              transition: 'all 0.18s ease'
+            }}
+          >
+            📅 Upcoming
+            <span style={{
+              background: activeTab === 'upcoming' ? 'rgba(255,255,255,0.25)' : '#e5e7eb',
+              color: activeTab === 'upcoming' ? 'white' : '#374151',
+              borderRadius: '999px', padding: '1px 8px', fontSize: '0.8rem', fontWeight: 700
+            }}>
+              {assessments.filter(a => a.status === 'upcoming').length}
+            </span>
+          </button>
         </div>
-        <div className="tests-column">
-          <h2 className="pto-section-title">Upcoming Tests</h2>
-          <div className="tests-list">
-            {loading ? (
-              Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="test-card">
-                  <div className="pto-skeleton" style={{ width: '40px', height: '40px', borderRadius: '8px', marginRight: '15px' }}></div>
-                  <div style={{ flex: 1 }}>
-                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div>
-                    <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
-                  </div>
+
+        {/* Tab content */}
+        <div className="tests-list" style={{ width: '100%' }}>
+          {loading ? (
+            Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className={`test-card ${activeTab === 'ongoing' ? 'ongoing' : ''}`}>
+                <div className="pto-skeleton" style={{ width: '40px', height: '40px', borderRadius: '8px', marginRight: '15px' }}></div>
+                <div style={{ flex: 1 }}>
+                  <div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div>
+                  <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
                 </div>
-              ))
-            ) : (
-              assessments.filter(a => a.status === 'upcoming').length > 0 ? (
-                assessments.filter(a => a.status === 'upcoming').map((test, idx) => (
-                  <div
-                    key={test.id}
-                    className="test-card pto-fade-in"
-                    style={{ animationDelay: `${idx * 80}ms` }}
-                  >
-                    <div className="test-icon">
-                      <FaCalendarAlt size={18} color="#9768E1" />
-                    </div>
-                    <div className="test-content">
-                      <div className="test-name">{test.title}</div>
-                      <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
-                      <div className="test-date"><strong>Starts:</strong> {test.startTime}</div>
-                      <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
-                    </div>
+              </div>
+            ))
+          ) : assessments.filter(a => a.status === activeTab).length > 0 ? (
+            assessments.filter(a => a.status === activeTab).map((test, idx) => (
+              <div
+                key={test.id}
+                className={`test-card ${activeTab === 'ongoing' ? 'ongoing' : ''} pto-fade-in`}
+                style={{ animationDelay: `${idx * 60}ms` }}
+              >
+                <div className="test-icon">
+                  <FaCalendarAlt size={18} color="#9768E1" />
+                </div>
+                <div className="test-content">
+                  <div className="test-name">{test.title}</div>
+                  <div className="test-detail"><strong>Department:</strong> {test.subject}</div>
+                  <div className="test-date">
+                    <strong>{activeTab === 'ongoing' ? 'Started:' : 'Starts:'}</strong> {test.startTime}
                   </div>
-                ))
-              ) : (
-                <div className="pto-empty-state">No upcoming tests</div>
-              )
-            )}
-          </div>
+                  <div className="test-duration"><strong>Duration:</strong> {test.duration}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="pto-empty-state">
+              No {activeTab === 'ongoing' ? 'ongoing' : 'upcoming'} tests
+            </div>
+          )}
         </div>
       </div>
 
