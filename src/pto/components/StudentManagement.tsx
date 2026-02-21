@@ -72,24 +72,24 @@ const StudentManagement: React.FC = () => {
         const catalog = await PTOService.getDepartmentCatalog();
         const codes = Array.isArray(catalog)
           ? catalog.map((d: any) => {
-              if (typeof d === 'string') return d;
-              if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
-              return String(d || '').toUpperCase();
-            }).filter((c: string) => !!c && c !== '[OBJECT OBJECT]')
+            if (typeof d === 'string') return d;
+            if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
+            return String(d || '').toUpperCase();
+          }).filter((c: string) => !!c && c !== '[OBJECT OBJECT]')
           : [];
         const unique = Array.from(new Set(codes));
         setDepartments(['all', ...unique]);
         try {
           const asses = await PTOService.getAssessments();
-          const mappedAss = (asses || []).map((a: any) => ({ id: String(a.id || a.assessmentId || a.SK || ''), name: String(a.name || a.title || ''), department: String(a.department || (Array.isArray((a.target||{}).departments) ? (a.target as any).departments[0] : '')), status: String((a.status || '').toLowerCase()) }));
+          const mappedAss = (asses || []).map((a: any) => ({ id: String(a.id || a.assessmentId || a.SK || ''), name: String(a.name || a.title || ''), department: String(a.department || (Array.isArray((a.target || {}).departments) ? (a.target as any).departments[0] : '')), status: String((a.status || '').toLowerCase()) }));
           setAssessments([{ id: 'all', name: 'All Assessments', department: '' }, ...mappedAss.filter(x => x.id && x.name)]);
-        } catch {}
+        } catch { }
         try {
           const ann = await PTOService.listAnnouncements({ limit: 10 });
           const items = (ann.items || []).slice().sort((a: any, b: any) => String(b.createdAt || b.SK).localeCompare(String(a.createdAt || a.SK)));
           const uniq = Array.from(new Map(items.map((x: any) => [String(x.SK || x.id), x])).values());
           setAnnouncements(uniq);
-        } catch {}
+        } catch { }
       } catch (e: any) {
         setError(e.message || 'Failed to load students');
       } finally {
@@ -122,8 +122,8 @@ const StudentManagement: React.FC = () => {
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.email.toLowerCase().includes(searchTerm.toLowerCase());
+      student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = filterDepartment === 'all' || deptCodeFromValue(student.department) === deptCodeFromValue(filterDepartment);
     let matchesAssessment = true;
     if (filterAssessment !== 'all') {
@@ -139,7 +139,7 @@ const StudentManagement: React.FC = () => {
   return (
     <div className="pto-component-page">
       {error && <div className="admin-error"><p>{error}</p></div>}
-      {loading && <div className="admin-loading"><div className="spinner"></div><p>Loading students...</p></div>}
+      {error && <div className="admin-error"><p>{error}</p></div>}
       {/* Statistics */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -167,12 +167,15 @@ const StudentManagement: React.FC = () => {
 
       {/* Action Buttons */}
       <div className="action-buttons-section">
+
         <button
           className="secondary-btn"
           onClick={refreshMetrics}
           disabled={metricsLoading}
         >
+
           <FaSyncAlt /> {metricsLoading ? 'Refreshing…' : 'Refresh Metrics'}
+
         </button>
       </div>
 

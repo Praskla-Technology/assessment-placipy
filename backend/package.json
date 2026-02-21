@@ -13,14 +13,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@aws-sdk/client-cognito-identity-provider": "^3.922.0",
-    "@aws-sdk/client-dynamodb": "^3.990.0",
-    "@aws-sdk/credential-providers": "^3.922.0",
-    "@aws-sdk/lib-dynamodb": "^3.990.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.893.0",
+    "@aws-sdk/client-dynamodb": "^3.893.0",
+    "@aws-sdk/credential-providers": "^3.893.0",
+    "@aws-sdk/lib-dynamodb": "^3.893.0",
     "@e965/xlsx": "^0.20.3",
     "@types/multer": "^2.0.0",
     "@types/uuid": "^10.0.0",
- 
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
