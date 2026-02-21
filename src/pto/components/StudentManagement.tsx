@@ -84,24 +84,24 @@ const StudentManagement: React.FC = () => {
         const catalog = await PTOService.getDepartmentCatalog();
         const codes = Array.isArray(catalog)
           ? catalog.map((d: any) => {
-              if (typeof d === 'string') return d;
-              if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
-              return String(d || '').toUpperCase();
-            }).filter((c: string) => !!c && c !== '[OBJECT OBJECT]')
+            if (typeof d === 'string') return d;
+            if (d && typeof d === 'object') return String(d.code || '').toUpperCase();
+            return String(d || '').toUpperCase();
+          }).filter((c: string) => !!c && c !== '[OBJECT OBJECT]')
           : [];
         const unique = Array.from(new Set(codes));
         setDepartments(['all', ...unique]);
         try {
           const asses = await PTOService.getAssessments();
-          const mappedAss = (asses || []).map((a: any) => ({ id: String(a.id || a.assessmentId || a.SK || ''), name: String(a.name || a.title || ''), department: String(a.department || (Array.isArray((a.target||{}).departments) ? (a.target as any).departments[0] : '')), status: String((a.status || '').toLowerCase()) }));
+          const mappedAss = (asses || []).map((a: any) => ({ id: String(a.id || a.assessmentId || a.SK || ''), name: String(a.name || a.title || ''), department: String(a.department || (Array.isArray((a.target || {}).departments) ? (a.target as any).departments[0] : '')), status: String((a.status || '').toLowerCase()) }));
           setAssessments([{ id: 'all', name: 'All Assessments', department: '' }, ...mappedAss.filter(x => x.id && x.name)]);
-        } catch {}
+        } catch { }
         try {
           const ann = await PTOService.listAnnouncements({ limit: 10 });
           const items = (ann.items || []).slice().sort((a: any, b: any) => String(b.createdAt || b.SK).localeCompare(String(a.createdAt || a.SK)));
           const uniq = Array.from(new Map(items.map((x: any) => [String(x.SK || x.id), x])).values());
           setAnnouncements(uniq);
-        } catch {}
+        } catch { }
       } catch (e: any) {
         setError(e.message || 'Failed to load students');
       } finally {
@@ -134,8 +134,8 @@ const StudentManagement: React.FC = () => {
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.email.toLowerCase().includes(searchTerm.toLowerCase());
+      student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = filterDepartment === 'all' || deptCodeFromValue(student.department) === deptCodeFromValue(filterDepartment);
     let matchesAssessment = true;
     if (filterAssessment !== 'all') {
@@ -169,7 +169,7 @@ const StudentManagement: React.FC = () => {
         try {
           await PTOService.sendMessage(em, `${messageData.subject}\n\n${messageData.message}`, attachments);
           sent += 1;
-        } catch (e) {}
+        } catch (e) { }
       }
       setIsMessageModalOpen(false);
       setMessageData({ subject: '', message: '', tags: '' });
@@ -210,27 +210,27 @@ const StudentManagement: React.FC = () => {
       const res = await PTOService.getMessageHistory({ recipientId: conversationFor, limit: 20, nextToken: messagesNextToken });
       setMessages([...(messages || []), ...(res.items || [])]);
       setMessagesNextToken(res.nextToken || null);
-    } catch {}
+    } catch { }
     setMessagesLoading(false);
   };
 
   const markRead = async (msg: { messageId: string }) => {
     try {
       await PTOService.markMessageRead({ recipientId: conversationFor, messageId: msg.messageId });
-    } catch {}
+    } catch { }
   };
 
   const deleteMessage = async (msg: { messageId: string }) => {
     try {
       await PTOService.deleteMessage({ recipientId: conversationFor, messageId: msg.messageId });
       setMessages(prev => (prev || []).filter(m => m.messageId !== msg.messageId));
-    } catch {}
+    } catch { }
   };
 
   return (
     <div className="pto-component-page">
       {error && <div className="admin-error"><p>{error}</p></div>}
-      {loading && <div className="admin-loading"><div className="spinner"></div><p>Loading students...</p></div>}
+      {error && <div className="admin-error"><p>{error}</p></div>}
       {/* Statistics */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -258,7 +258,7 @@ const StudentManagement: React.FC = () => {
 
       {/* Action Buttons */}
       <div className="action-buttons-section">
-        <button 
+        <button
           className="primary-btn"
           onClick={() => {
             setIsMessageModalOpen(true);
@@ -281,7 +281,7 @@ const StudentManagement: React.FC = () => {
         >
           Inbox
         </button>
-        <button 
+        <button
           className="secondary-btn"
           onClick={() => {
             setSelectedStudents([]);
@@ -433,50 +433,64 @@ const StudentManagement: React.FC = () => {
 
       {/* Students Table */}
       {!isInboxPage && (
-      <div className="table-container">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  checked={selectedStudents.length === filteredStudents.length && filteredStudents.length > 0}
-                  onChange={handleSelectAll}
-                />
-              </th>
-              <th>Name</th>
-              <th>Roll Number</th>
-              <th>Department</th>
-              <th>Email</th>
-              <th>Tests Participated</th>
-              <th>Average Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStudents.map(student => (
-              <tr key={student.id}>
-                <td>
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>
                   <input
                     type="checkbox"
-                    checked={selectedStudents.includes(student.id)}
-                    onChange={() => handleSelectStudent(student.id)}
+                    checked={selectedStudents.length === filteredStudents.length && filteredStudents.length > 0}
+                    onChange={handleSelectAll}
                   />
-                </td>
-                <td>{student.name}</td>
-                <td>{student.rollNumber}</td>
-                <td>{student.department}</td>
-                <td>{student.email}</td>
-                <td>{student.testsParticipated}</td>
-                <td>
-                  <span className={`score-badge ${student.avgScore >= 80 ? 'high' : student.avgScore >= 70 ? 'medium' : 'low'}`}>
-                    {student.avgScore}%
-                  </span>
-                </td>
+                </th>
+                <th>Name</th>
+                <th>Roll Number</th>
+                <th>Department</th>
+                <th>Email</th>
+                <th>Tests Participated</th>
+                <th>Average Score</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, index) => (
+                  <tr key={`skeleton-${index}`}>
+                    <td><div className="pto-skeleton pto-skeleton-button" style={{ width: '16px', height: '16px' }}></div></td>
+                    <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '140px' }}></div></td>
+                    <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div></td>
+                    <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '60px' }}></div></td>
+                    <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '180px' }}></div></td>
+                    <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div></td>
+                    <td><div className="pto-skeleton pto-skeleton-button" style={{ width: '50px', height: '24px' }}></div></td>
+                  </tr>
+                ))
+              ) : (
+                filteredStudents.map(student => (
+                  <tr key={student.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedStudents.includes(student.id)}
+                        onChange={() => handleSelectStudent(student.id)}
+                      />
+                    </td>
+                    <td>{student.name}</td>
+                    <td>{student.rollNumber}</td>
+                    <td>{student.department}</td>
+                    <td>{student.email}</td>
+                    <td>{student.testsParticipated}</td>
+                    <td>
+                      <span className={`score-badge ${student.avgScore >= 80 ? 'high' : student.avgScore >= 70 ? 'medium' : 'low'}`}>
+                        {student.avgScore}%
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Send Message Modal */}
@@ -484,7 +498,7 @@ const StudentManagement: React.FC = () => {
         <div className="modal-overlay" onClick={() => setIsMessageModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>
-              {selectedStudents.length > 0 
+              {selectedStudents.length > 0
                 ? `Send Message to ${selectedStudents.length} Student(s)`
                 : 'Send Announcement to All Students'}
             </h3>
@@ -535,8 +549,8 @@ const StudentManagement: React.FC = () => {
               </div>
             )}
             <div className="modal-actions">
-              <button 
-                className="primary-btn" 
+              <button
+                className="primary-btn"
                 onClick={selectedStudents.length > 0 ? handleSendMessage : handleSendAnnouncement}
               >
                 <FaEnvelope /> Send

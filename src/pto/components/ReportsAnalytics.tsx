@@ -7,6 +7,7 @@ import PTOService from '../../services/pto.service';
 const ReportsAnalytics: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [reportType, setReportType] = useState('department');
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [departments, setDepartments] = useState<string[]>(['all']);
 
@@ -17,6 +18,7 @@ const ReportsAnalytics: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
+        setLoading(true);
         const dash = await PTOService.getDashboard();
         const perf = dash.departmentPerformance.map((d: { code?: string; name?: string; students?: number; avgScore?: number; completed?: number }) => ({ name: String(d?.name ?? d?.code ?? ''), students: Number(d?.students ?? 0), avgScore: Number(d?.avgScore ?? 0), completed: Number(d?.completed ?? 0) }));
         setDeptPerf(perf);
@@ -41,7 +43,7 @@ const ReportsAnalytics: React.FC = () => {
       } catch (e: unknown) {
         console.error(e);
       } finally {
-        // no-op
+        setLoading(false);
       }
     };
     load();
@@ -115,7 +117,7 @@ const ReportsAnalytics: React.FC = () => {
   const exportToExcel = () => {
     // Create CSV content (Excel compatible)
     let csvContent = '';
-    
+
     if (reportType === 'department') {
       csvContent = 'Department,Total Students,Average Score,Completed Tests\n';
       filteredData.forEach(dept => {
@@ -256,15 +258,15 @@ const ReportsAnalytics: React.FC = () => {
 
     printWindow.document.write(htmlContent);
     printWindow.document.close();
-    
+
     // Wait for content to load, then print
     setTimeout(() => {
       printWindow.print();
     }, 250);
   };
 
-  const filteredData = selectedDepartment === 'all' 
-    ? departmentPerformanceData 
+  const filteredData = selectedDepartment === 'all'
+    ? departmentPerformanceData
     : departmentPerformanceData.filter(d => deptCodeFromValue(d.name) === deptCodeFromValue(selectedDepartment));
 
   return (
@@ -315,39 +317,65 @@ const ReportsAnalytics: React.FC = () => {
             <h3 className="section-title">Department-wise Performance</h3>
           </div>
           <div className="chart-container">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={filteredData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="students" fill="#9768E1" name="Total Students" />
-                <Bar dataKey="avgScore" fill="#E4D5F8" name="Avg Score" />
-                <Bar dataKey="completed" fill="#A4878D" name="Completed Tests" />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="pto-skeleton" style={{ width: '100%', height: '300px', borderRadius: '8px' }}></div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={filteredData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="students" fill="#9768E1" name="Total Students" />
+                  <Bar dataKey="avgScore" fill="#E4D5F8" name="Avg Score" />
+                  <Bar dataKey="completed" fill="#A4878D" name="Completed Tests" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
           <div className="stats-cards">
-            {filteredData.map((dept, idx) => (
-              <div key={idx} className="stat-card">
-                <h4>{dept.name} Department</h4>
-                <div className="stat-details">
-                  <div className="stat-item">
-                    <span className="stat-label">Total Students:</span>
-                    <span className="stat-value">{dept.students}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Average Score:</span>
-                    <span className="stat-value">{dept.avgScore}%</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Completed Tests:</span>
-                    <span className="stat-value">{dept.completed}</span>
+            {loading ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={`skeleton-${idx}`} className="stat-card">
+                  <div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div>
+                  <div className="stat-details">
+                    <div className="stat-item">
+                      <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
+                      <div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div>
+                    </div>
+                    <div className="stat-item">
+                      <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
+                      <div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div>
+                    </div>
+                    <div className="stat-item">
+                      <div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div>
+                      <div className="pto-skeleton pto-skeleton-text" style={{ width: '40px' }}></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              filteredData.map((dept, idx) => (
+                <div key={idx} className="stat-card">
+                  <h4>{dept.name} Department</h4>
+                  <div className="stat-details">
+                    <div className="stat-item">
+                      <span className="stat-label">Total Students:</span>
+                      <span className="stat-value">{dept.students}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Average Score:</span>
+                      <span className="stat-value">{dept.avgScore}%</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Completed Tests:</span>
+                      <span className="stat-value">{dept.completed}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -359,17 +387,21 @@ const ReportsAnalytics: React.FC = () => {
             <h3 className="section-title">Student-level Analytics</h3>
           </div>
           <div className="chart-container">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={studentAnalyticsData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="accuracy" stroke="#9768E1" name="Accuracy %" />
-                <Line type="monotone" dataKey="attempts" stroke="#E4D5F8" name="Attempts" />
-              </LineChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="pto-skeleton" style={{ width: '100%', height: '300px', borderRadius: '8px' }}></div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={studentAnalyticsData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="accuracy" stroke="#9768E1" name="Accuracy %" />
+                  <Line type="monotone" dataKey="attempts" stroke="#E4D5F8" name="Attempts" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
           <div className="top-performers-section">
             <h3 className="section-title">Top Performers</h3>
@@ -385,23 +417,35 @@ const ReportsAnalytics: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {topPerformers.map((performer) => (
-                    <tr key={performer.rank}>
-                      <td>
-                        <span className={`rank-badge rank-${performer.rank}`}>
-                          {performer.rank}
-                        </span>
-                      </td>
-                      <td>{performer.name}</td>
-                      <td>{performer.department}</td>
-                      <td>
-                        <span className={`score-badge ${performer.score >= 90 ? 'high' : performer.score >= 80 ? 'medium' : 'low'}`}>
-                          {performer.score}%
-                        </span>
-                      </td>
-                      <td>{performer.tests}</td>
-                    </tr>
-                  ))}
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={`skeleton-${idx}`}>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '30px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '150px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '100px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-button" style={{ width: '60px', height: '24px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '50px' }}></div></td>
+                      </tr>
+                    ))
+                  ) : (
+                    topPerformers.map((performer) => (
+                      <tr key={performer.rank}>
+                        <td>
+                          <span className={`rank-badge rank-${performer.rank}`}>
+                            {performer.rank}
+                          </span>
+                        </td>
+                        <td>{performer.name}</td>
+                        <td>{performer.department}</td>
+                        <td>
+                          <span className={`score-badge ${performer.score >= 90 ? 'high' : performer.score >= 80 ? 'medium' : 'low'}`}>
+                            {performer.score}%
+                          </span>
+                        </td>
+                        <td>{performer.tests}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -416,18 +460,22 @@ const ReportsAnalytics: React.FC = () => {
             <h3 className="section-title">Attendance and Completion Reports</h3>
           </div>
           <div className="chart-container">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={attendanceData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="assessment" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="total" fill="#E4D5F8" name="Total Students" />
-                <Bar dataKey="attended" fill="#9768E1" name="Attended" />
-                <Bar dataKey="completion" fill="#A4878D" name="Completion %" />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="pto-skeleton" style={{ width: '100%', height: '300px', borderRadius: '8px' }}></div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={attendanceData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="assessment" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="total" fill="#E4D5F8" name="Total Students" />
+                  <Bar dataKey="attended" fill="#9768E1" name="Attended" />
+                  <Bar dataKey="completion" fill="#A4878D" name="Completion %" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
           <div className="attendance-table">
             <div className="table-container">
@@ -441,22 +489,33 @@ const ReportsAnalytics: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {attendanceData.map((item, idx) => (
-                    <tr key={idx}>
-                      <td>{item.assessment}</td>
-                      <td>{item.total}</td>
-                      <td>{item.attended}</td>
-                      <td>
-                        <div className="completion-bar">
-                          <div 
-                            className="completion-fill" 
-                            style={{ width: `${item.completion}%` }}
-                          ></div>
-                          <span className="completion-text">{item.completion}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={`skeleton-${idx}`}>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '180px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '80px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-text" style={{ width: '60px' }}></div></td>
+                        <td><div className="pto-skeleton pto-skeleton-button" style={{ width: '100%', height: '24px' }}></div></td>
+                      </tr>
+                    ))
+                  ) : (
+                    attendanceData.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.assessment}</td>
+                        <td>{item.total}</td>
+                        <td>{item.attended}</td>
+                        <td>
+                          <div className="completion-bar">
+                            <div
+                              className="completion-fill"
+                              style={{ width: `${item.completion}%` }}
+                            ></div>
+                            <span className="completion-text">{item.completion}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

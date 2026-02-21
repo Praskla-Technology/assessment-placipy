@@ -146,6 +146,7 @@ const PTODashboard: React.FC = () => {
                     closeSidebar();
                   }}
                 >
+                  {Icon && <Icon className="pto-sidebar-icon" />}
                   <span className="sidebar-label">{item.label}</span>
                 </Link>
               </li>
