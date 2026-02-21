@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { FaUser, FaEdit, FaLock, FaBell, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { User, Camera } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import PTOService from '../../services/pto.service';
 import ProfileService from '../../services/profile.service';
 
 const Profile: React.FC = () => {
   const { user, refreshUser } = useUser();
-  const [activeTab, setActiveTab] = useState('details');
-  const [editing, setEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'personal'>('personal');
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [profilePicture, setProfilePicture] = useState<string>(
@@ -77,40 +78,13 @@ const Profile: React.FC = () => {
     loadDepartments();
   }, [user]);
 
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [showPwd, setShowPwd] = useState({ current: false, next: false, confirm: false });
 
-  const [notifications, setNotifications] = useState({
-    emailNotifications: true,
-    assessmentReminders: true,
-    reportAlerts: true,
-    studentMessages: true,
-  });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setProfileData(prev => ({
       ...prev,
       [name]: value
-    }));
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setPasswordData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleNotificationChange = (key: keyof typeof notifications) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key]
     }));
   };
 
@@ -141,7 +115,8 @@ const Profile: React.FC = () => {
       };
       await PTOService.updateProfile(payload);
       setSuccess('Profile updated successfully');
-      setEditing(false);
+      setIsEditing(false);
+      setIsSaving(false);
       await refreshUser();
       const updated = await PTOService.getProfile();
       const parts = String(updated.name || `${firstName} ${lastName}`).trim().split(' ');
@@ -159,352 +134,198 @@ const Profile: React.FC = () => {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update profile';
       setError(msg);
+      setIsSaving(false);
     }
   };
 
-  const allowedImages = [
-    'https://images.unsplash.com/photo-1494790108755-2616b612b977?w=150&h=150&fit=crop&crop=face',
-    'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
-  ];
-
-  const handleImageSelect = async (url: string) => {
+  const toggleEdit = () => {
+    setIsEditing(!isEditing);
     setError('');
-    setSuccess('');
-    try {
-      await ProfileService.updateProfilePicture(url);
-      setProfilePicture(url);
-      localStorage.setItem('ptoProfilePictureUrl', url);
-      setShowImageSelector(false);
-      setSuccess('Profile picture updated successfully');
-      setTimeout(() => setSuccess(''), 2500);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to update profile picture';
-      setError(msg);
-    }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-    try {
-      await PTOService.updateStaffPassword(profileData.email, passwordData.newPassword);
-      setSuccess('Password updated successfully');
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setTimeout(() => setSuccess(''), 2500);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to change password';
-      setError(msg);
-    }
-  };
-
-  const handleSaveNotifications = () => {
-    alert('Notification preferences saved successfully!');
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setError('');
   };
 
   return (
-    <div className="pto-component-page">
-      <div className="profile-page">
-        {success && (<div className="success-message">{success}</div>)}
-        {error && (<div className="error-message">{error}</div>)}
-        <div className="tabs">
-          <button 
-            className={`tab-btn ${activeTab === 'details' ? 'active' : ''}`}
-            onClick={() => setActiveTab('details')}
-          >
-            <FaUser /> Personal Details
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'password' ? 'active' : ''}`}
-            onClick={() => setActiveTab('password')}
-          >
-            <FaLock /> Change Password
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
-            onClick={() => setActiveTab('notifications')}
-          >
-            <FaBell /> Notifications
-          </button>
-        </div>
-
-        <div className="tab-content">
-          {/* Personal Details Tab */}
-          {activeTab === 'details' && (
-            <div className="details-tab">
-              <div className="profile-details">
-                {editing ? (
-                <div className="edit-form">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                    <img
-                      src={profilePicture}
-                      alt="Profile"
-                      style={{ width: 50, height: 50, borderRadius: '50%', border: '2px solid #9768E1' }}
-                    />
-                    <button
-                      className="secondary-btn"
-                      onClick={() => setShowImageSelector(!showImageSelector)}
-                    >
-                      Change Picture
-                    </button>
-                  </div>
-                  {showImageSelector && (
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-                      {allowedImages.map((img) => (
-                        <button
-                          key={img}
-                          onClick={() => handleImageSelect(img)}
-                          style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', border: profilePicture === img ? '3px solid #9768E1' : '2px solid #D0BFE7' }}
-                        >
-                          <img src={img} alt="option" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>First Name *</label>
-                      <input
-                        type="text"
-                        name="firstName"
-                        value={profileData.firstName}
-                        onChange={handleInputChange}
-                        placeholder="Enter first name"
-                        required
-                      />
-                      <div className="helper-text">Required</div>
-                    </div>
-                    <div className="form-group">
-                      <label>Last Name *</label>
-                      <input
-                        type="text"
-                        name="lastName"
-                        value={profileData.lastName}
-                        onChange={handleInputChange}
-                        placeholder="Enter last name"
-                        required
-                      />
-                      <div className="helper-text">Required</div>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Designation *</label>
-                    <select
-                      name="designation"
-                      value={profileData.designation}
-                      onChange={handleInputChange}
-                      required
-                    >
-                      <option value="Placement Training Officer">Placement Training Officer</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Department *</label>
-                    <select
-                      name="department"
-                      value={profileData.department}
-                      onChange={handleInputChange}
-                      required
-                    >
-                      <option value="">Select Department</option>
-                      {deptOptions.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                    <div className="helper-text">Required</div>
-                  </div>
-                  <div className="form-group">
-                    <label>Email *</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={profileData.email}
-                      onChange={handleInputChange}
-                      placeholder={`username@${(user?.email || '').split('@')[1] || 'collegedomain'}`}
-                      required
-                    />
-                    <div className="helper-text">Must end with @{(user?.email || '').split('@')[1] || 'collegedomain'}</div>
-                  </div>
-                  <div className="form-group">
-                    <label>Phone *</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={profileData.phone}
-                      onChange={handleInputChange}
-                      placeholder="Enter your phone number"
-                      required
-                    />
-                    <div className="helper-text">Required</div>
-                  </div>
-                  
-                    <div className="form-actions">
-                      <button className="primary-btn" onClick={handleSaveDetails}>
-                        Save Changes
-                      </button>
-                      <button className="secondary-btn" onClick={() => setEditing(false)}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="view-details">
-                    <div className="detail-row">
-                      <span className="label">Name:</span>
-                      <span className="value">{`${profileData.firstName} ${profileData.lastName}`.trim()}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Designation:</span>
-                      <span className="value">{profileData.designation}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Email:</span>
-                      <span className="value">{profileData.email}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Phone:</span>
-                      <span className="value">{profileData.phone}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Department:</span>
-                      <span className="value">{profileData.department}</span>
-                    </div>
-                    <button className="primary-btn" onClick={() => setEditing(true)}>
-                      <FaEdit /> Edit Profile
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Change Password Tab */}
-          {activeTab === 'password' && (
-            <div className="password-tab">
-              <h3>Change Password</h3>
-              <form className="password-form" onSubmit={handleChangePassword}>
-                <div className="form-group" style={{ position: 'relative' }}>
-                  <label>Current Password</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type={showPwd.current ? 'text' : 'password'}
-                      name="currentPassword"
-                      value={passwordData.currentPassword}
-                      onChange={handlePasswordChange}
-                      placeholder="Enter current password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      aria-label="Toggle current password visibility"
-                      onClick={() => setShowPwd(prev => ({ ...prev, current: !prev.current }))}
-                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9768E1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, lineHeight: 0, padding: 0, fontSize: 18, opacity: 0.95 }}
-                    >
-                      {showPwd.current ? <FaEyeSlash /> : <FaEye />}
-                    </button>
-                  </div>
-                </div>
-                <div className="form-group" style={{ position: 'relative' }}>
-                  <label>New Password</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type={showPwd.next ? 'text' : 'password'}
-                      name="newPassword"
-                      value={passwordData.newPassword}
-                      onChange={handlePasswordChange}
-                      placeholder="Enter new password"
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      aria-label="Toggle new password visibility"
-                      onClick={() => setShowPwd(prev => ({ ...prev, next: !prev.next }))}
-                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9768E1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, lineHeight: 0, padding: 0, fontSize: 18, opacity: 0.95 }}
-                    >
-                      {showPwd.next ? <FaEyeSlash /> : <FaEye />}
-                    </button>
-                  </div>
-                </div>
-                <div className="form-group" style={{ position: 'relative' }}>
-                  <label>Confirm New Password</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type={showPwd.confirm ? 'text' : 'password'}
-                      name="confirmPassword"
-                      value={passwordData.confirmPassword}
-                      onChange={handlePasswordChange}
-                      placeholder="Confirm new password"
-                      required
-                      minLength={6}
-                    />
-                    <button
-                      type="button"
-                      aria-label="Toggle confirm password visibility"
-                      onClick={() => setShowPwd(prev => ({ ...prev, confirm: !prev.confirm }))}
-                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: '#9768E1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, lineHeight: 0, padding: 0, fontSize: 18, opacity: 0.95 }}
-                    >
-                      {showPwd.confirm ? <FaEyeSlash /> : <FaEye />}
-                    </button>
-                  </div>
-                </div>
-                <button type="submit" className="primary-btn">
-                  Change Password
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Notifications Tab */}
-          {activeTab === 'notifications' && (
-            <div className="notifications-tab">
-              <h3>Notification Preferences</h3>
-              <div className="notifications-list">
-                <label className="notification-item">
-                  <input
-                    type="checkbox"
-                    checked={notifications.emailNotifications}
-                    onChange={() => handleNotificationChange('emailNotifications')}
-                  />
-                  <span>Email Notifications</span>
-                </label>
-                <label className="notification-item">
-                  <input
-                    type="checkbox"
-                    checked={notifications.assessmentReminders}
-                    onChange={() => handleNotificationChange('assessmentReminders')}
-                  />
-                  <span>Assessment Reminders</span>
-                </label>
-                <label className="notification-item">
-                  <input
-                    type="checkbox"
-                    checked={notifications.reportAlerts}
-                    onChange={() => handleNotificationChange('reportAlerts')}
-                  />
-                  <span>Report Alerts</span>
-                </label>
-                <label className="notification-item">
-                  <input
-                    type="checkbox"
-                    checked={notifications.studentMessages}
-                    onChange={() => handleNotificationChange('studentMessages')}
-                  />
-                  <span>Student Messages</span>
-                </label>
-              </div>
-              <button className="primary-btn" onClick={handleSaveNotifications}>
-                Save Preferences
+    <div className="pts-fade-in">
+      {success && (<div className="pts-success">{success}</div>)}
+      {error && (<div className="pts-error">{error}</div>)}
+      
+      <div className="pts-form-container">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px" }}>
+          <h3 className="pts-form-title">Personal Information</h3>
+          {!isEditing ? (
+            <button
+              className="pts-btn-primary"
+              onClick={toggleEdit}
+            >
+              Edit Profile
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="pts-btn-secondary"
+                onClick={cancelEdit}
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="pts-btn-primary"
+                onClick={handleSaveDetails}
+                disabled={isSaving}
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           )}
+        </div>
+
+        {/* Profile Picture Section */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: "30px", padding: "20px", background: "#f8f9fa", borderRadius: "12px" }}>
+          <div style={{ position: "relative", marginRight: "20px" }}>
+            <div
+              style={{
+                width: "100px",
+                height: "100px",
+                borderRadius: "50%",
+                border: "4px solid #9768E1",
+                background: "linear-gradient(135deg, #9768E1 0%, #7B4FC4 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "40px",
+                fontWeight: "bold",
+                color: "white",
+                textTransform: "uppercase"
+              }}
+            >
+              {profileData.firstName ? profileData.firstName.charAt(0) : "U"}
+            </div>
+            {isEditing && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "0",
+                  right: "0",
+                  background: "#9768E1",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "30px",
+                  height: "30px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "14px"
+                }}
+                title="Profile Picture"
+              >
+                <Camera size={14} />
+              </div>
+            )}
+          </div>
+          <div>
+            <h4 style={{ margin: "0 0 5px 0", color: "#523C48" }}>
+              {profileData.firstName} {profileData.lastName}
+            </h4>
+            <p style={{ margin: "0", color: "#A4878D" }}>
+              {profileData.designation} • {profileData.department}
+            </p>
+            <p style={{ margin: "5px 0 0 0", color: "#A4878D", fontSize: "0.9rem" }}>
+              Employee ID: {profileData.employeeId}
+            </p>
+          </div>
+        </div>
+
+        {/* Personal Information Form */}
+        <div className="pts-form-grid">
+          <div className="pts-form-group">
+            <label className="pts-form-label">First Name *</label>
+            {isEditing ? (
+              <input
+                type="text"
+                className="pts-form-input"
+                name="firstName"
+                value={profileData.firstName}
+                onChange={handleInputChange}
+                placeholder="Enter first name"
+              />
+            ) : (
+              <div className="pts-form-display">{profileData.firstName}</div>
+            )}
+          </div>
+
+          <div className="pts-form-group">
+            <label className="pts-form-label">Last Name *</label>
+            {isEditing ? (
+              <input
+                type="text"
+                className="pts-form-input"
+                name="lastName"
+                value={profileData.lastName}
+                onChange={handleInputChange}
+                placeholder="Enter last name"
+              />
+            ) : (
+              <div className="pts-form-display">{profileData.lastName}</div>
+            )}
+          </div>
+
+          <div className="pts-form-group">
+            <label className="pts-form-label">Email Address *</label>
+            {isEditing ? (
+              <input
+                type="email"
+                className="pts-form-input"
+                name="email"
+                value={profileData.email}
+                onChange={handleInputChange}
+                placeholder="Enter email"
+              />
+            ) : (
+              <div className="pts-form-display">{profileData.email}</div>
+            )}
+          </div>
+
+          <div className="pts-form-group">
+            <label className="pts-form-label">Phone Number</label>
+            {isEditing ? (
+              <input
+                type="tel"
+                className="pts-form-input"
+                name="phone"
+                value={profileData.phone}
+                onChange={handleInputChange}
+                placeholder="Enter phone number"
+              />
+            ) : (
+              <div className="pts-form-display">{profileData.phone || 'Not specified'}</div>
+            )}
+          </div>
+
+          <div className="pts-form-group">
+            <label className="pts-form-label">Department</label>
+            <div className="pts-form-display" style={{ backgroundColor: '#f5f5f5' }}>
+              {profileData.department}
+            </div>
+          </div>
+
+          <div className="pts-form-group">
+            <label className="pts-form-label">Designation</label>
+            <div className="pts-form-display" style={{ backgroundColor: '#f5f5f5' }}>
+              {profileData.designation}
+            </div>
+          </div>
+
+          <div className="pts-form-group">
+            <label className="pts-form-label">Employee ID</label>
+            <div className="pts-form-display" style={{ backgroundColor: '#f5f5f5' }}>
+              {profileData.employeeId}
+            </div>
+          </div>
         </div>
       </div>
     </div>
