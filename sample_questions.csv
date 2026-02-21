@@ -1,6 +1,0 @@
-id,text,optionA,optionB,optionC,optionD,correctAnswer,marks
-Q1,What is the capital of France?,London,Berlin,Paris,Madrid,Paris,1
-Q2,What is 2 + 2?,3,4,5,6,4,1
-Q3,Which language is used for web development?,Java,Python,JavaScript,C++,JavaScript,2
-Q4,What does HTML stand for?,Hyper Text Markup Language,High Tech Modern Language,Home Tool Markup Language,Hyperlink and Text Markup Language,Hyper Text Markup Language,1
-Q5,Which is not a programming language?,Python,React,Ruby,Java,React,1
