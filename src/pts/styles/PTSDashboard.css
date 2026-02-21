@@ -1818,3 +1818,36 @@ input:checked+.pts-toggle-slider:before {
     color: #333 !important;
   }
 }
+
+/* Bulk Import Button Styles */
+.pts-btn-tertiary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: 2px solid transparent;
+  padding: 14px 28px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  font-size: 1rem;
+  letter-spacing: 0.2px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pts-btn-tertiary:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.3);
+  transform: translateY(-2px);
+}
+
+.pts-btn-tertiary svg {
+  margin-right: 8px;
+  flex-shrink: 0;
+  align-self: center;
+}

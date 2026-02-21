@@ -3,6 +3,7 @@ import AssessmentService from "../services/assessment.service";
 import { useUser } from '../contexts/UserContext';
 import { FileText, Plus, Upload, Download, Trash2, List, Code, Terminal, X } from 'lucide-react';
 import ResultsService from '../services/results.service';
+import './styles/BulkQuestionImport.css';
 
 interface TestCase {
   id: string;
@@ -13,7 +14,7 @@ interface TestCase {
 
 interface Question {
   id: number;
-  text: string;
+  question: string;
   options: string[];
   correctAnswer: number | string | string[]; // Updated to support array format
   marks: number;
@@ -124,7 +125,7 @@ const AssessmentCreation: React.FC = () => {
 
   const [currentQuestion, setCurrentQuestion] = useState<Question>({
     id: 0,
-    text: "",
+    question: "",
     options: ["", "", "", ""],
     correctAnswer: [], // Initialize as empty array
     marks: 1,
@@ -159,6 +160,8 @@ const AssessmentCreation: React.FC = () => {
   const [showReferenceMaterialForm, setShowReferenceMaterialForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [needsSubmission, setNeedsSubmission] = useState(false);
 
   // Assessment toggle state
   const [showAssessments, setShowAssessments] = useState(true);
@@ -614,6 +617,17 @@ const AssessmentCreation: React.FC = () => {
   };
 
   // Handle CSV file import
+  // Handle bulk question import
+  const handleBulkImport = (importedQuestions: any[]) => {
+    setAssessmentData(prev => ({
+      ...prev,
+      questions: [...prev.questions, ...importedQuestions]
+    }));
+    setShowBulkImportModal(false);
+    setSuccessMessage(`${importedQuestions.length} questions imported successfully!`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
   const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -657,7 +671,8 @@ const AssessmentCreation: React.FC = () => {
       }));
 
       setImportResults({ success: 1, failed: 0, errors: [] });
-      alert('Assessment imported successfully!');
+      setNeedsSubmission(true);
+      alert('Assessment data imported successfully! The form has been populated with the data from your CSV file. Please review the information and click the "Create Assessment" button at the bottom of the form to save it to the database.');
     } catch (err: any) {
       console.error('Error importing CSV file:', err);
       setImportResults({ success: 0, failed: 1, errors: [err.message || 'Unknown error'] });
@@ -775,7 +790,7 @@ const AssessmentCreation: React.FC = () => {
   };
 
   const addQuestion = () => {
-    if (!currentQuestion.text.trim()) {
+    if (!currentQuestion.question.trim()) {
       alert("Please enter a question text");
       return;
     }
@@ -819,7 +834,7 @@ const AssessmentCreation: React.FC = () => {
       // Reset form
       setCurrentQuestion({
         id: 0,
-        text: "",
+        question: "",
         options: ["", "", "", ""],
         correctAnswer: [], // Reset to empty array
         marks: 1,
@@ -861,7 +876,7 @@ const AssessmentCreation: React.FC = () => {
       // Reset form
       setCurrentQuestion({
         id: 0,
-        text: "",
+        question: "",
         options: ["", "", "", ""],
         correctAnswer: [], // Reset to empty array
         marks: 1,
@@ -980,6 +995,33 @@ const AssessmentCreation: React.FC = () => {
       console.log('=== Submitting Assessment ===');
       console.log('Current assessmentData:', JSON.stringify(assessmentData, null, 2));
       console.log('Current scheduling data:', assessmentData.scheduling);
+      console.log('Number of questions:', assessmentData.questions.length);
+      
+      // Log first few questions for debugging
+      if (assessmentData.questions.length > 0) {
+        console.log('First question sample:', JSON.stringify(assessmentData.questions[0], null, 2));
+      }
+      
+      // Check for any undefined or null questions
+      const invalidQuestions = assessmentData.questions.filter(q => !q || typeof q !== 'object');
+      if (invalidQuestions.length > 0) {
+        console.error('Found invalid questions:', invalidQuestions);
+        alert(`Found ${invalidQuestions.length} invalid questions. Please check your import.`);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Check for questions with missing required fields
+      const questionsWithMissingFields = assessmentData.questions.filter(q => {
+        return !q.question || !q.question.trim() || !q.subcategory;
+      });
+      
+      if (questionsWithMissingFields.length > 0) {
+        console.error('Questions with missing fields:', questionsWithMissingFields);
+        alert(`Found ${questionsWithMissingFields.length} questions with missing required fields. Check console for details.`);
+        setIsSubmitting(false);
+        return;
+      }
 
       // Validate required fields
       if (!assessmentData.title.trim()) {
@@ -1001,9 +1043,12 @@ const AssessmentCreation: React.FC = () => {
       }
 
       // Validate all questions
-      for (const question of assessmentData.questions) {
-        if (!question.text.trim()) {
-          alert("Please enter text for all questions");
+      for (let i = 0; i < assessmentData.questions.length; i++) {
+        const question = assessmentData.questions[i];
+        console.log(`Validating question ${i + 1}:`, question);
+        
+        if (!question.question || !question.question.trim()) {
+          alert(`Please enter question text for question ${i + 1}`);
           setIsSubmitting(false);
           return;
         }
@@ -1012,12 +1057,12 @@ const AssessmentCreation: React.FC = () => {
         if (question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "")) {
           // This is an MCQ question with actual options
           if (question.options.some(opt => !opt.trim())) {
-            alert("Please fill all options for MCQ questions");
+            alert(`Please fill all options for MCQ question ${i + 1}`);
             setIsSubmitting(false);
             return;
           }
           if (!question.subcategory) {
-            alert("Please select a subcategory for all MCQ questions");
+            alert(`Please select a subcategory for MCQ question ${i + 1}`);
             setIsSubmitting(false);
             return;
           }
@@ -1123,7 +1168,8 @@ const AssessmentCreation: React.FC = () => {
       console.log('Assessment created successfully:', response);
       setSuccessMessage("Assessment created successfully!");
 
-      // Reset form
+      // Reset form and submission state
+      setNeedsSubmission(false);
       setAssessmentData({
         title: "",
         duration: 60,
@@ -1312,7 +1358,7 @@ const AssessmentCreation: React.FC = () => {
               // Reset current question
               setCurrentQuestion({
                 id: 0,
-                text: "",
+                question: "",
                 options: ["", "", "", ""],
                 correctAnswer: [],
                 marks: 1,
@@ -1881,6 +1927,14 @@ const AssessmentCreation: React.FC = () => {
                         Add Programming Question
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="pts-btn-tertiary"
+                      onClick={() => setShowBulkImportModal(true)}
+                    >
+                      <Upload size={18} style={{ marginRight: '8px' }} />
+                      Bulk Import Questions
+                    </button>
                     {!assessmentData.category.includes("MCQ") && !assessmentData.category.includes("Coding") && (
                       <div className="pts-empty-state">
                         <div className="pts-empty-state-icon">📝</div>
@@ -1907,7 +1961,7 @@ const AssessmentCreation: React.FC = () => {
                               {question.subcategory && ` - ${question.subcategory}`}
                               {question.language && ` (${question.language})`}
                             </h4>
-                            <p style={{ color: "#523C48", margin: "0 0 15px 0" }}>{question.text}</p>
+                            <p style={{ color: "#523C48", margin: "0 0 15px 0" }}>{question.question}</p>
 
                             {/* Show options only for MCQ questions */}
                             {question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "") && (
@@ -2084,8 +2138,8 @@ const AssessmentCreation: React.FC = () => {
                       <textarea
                         className="pts-form-textarea"
                         placeholder="Enter your question here"
-                        value={currentQuestion.text}
-                        onChange={(e) => handleQuestionChange("text", e.target.value)}
+                        value={currentQuestion.question}
+                        onChange={(e) => handleQuestionChange("question", e.target.value)}
                         rows={3}
                         required
                       />
@@ -2207,8 +2261,8 @@ const AssessmentCreation: React.FC = () => {
                       <textarea
                         className="pts-form-textarea"
                         placeholder="Enter your question here"
-                        value={currentQuestion.text}
-                        onChange={(e) => handleQuestionChange("text", e.target.value)}
+                        value={currentQuestion.question}
+                        onChange={(e) => handleQuestionChange("question", e.target.value)}
                         rows={3}
                         required
                       />
@@ -2407,7 +2461,7 @@ const AssessmentCreation: React.FC = () => {
                     // Reset current question
                     setCurrentQuestion({
                       id: 0,
-                      text: "",
+                      question: "",
                       options: ["", "", "", ""],
                       correctAnswer: [],
                       marks: 1,
@@ -2420,6 +2474,22 @@ const AssessmentCreation: React.FC = () => {
                 >
                   Reset
                 </button>
+                {needsSubmission && (
+                  <div style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    backgroundColor: "#fff3cd", 
+                    color: "#856404", 
+                    padding: "8px 12px", 
+                    borderRadius: "4px", 
+                    border: "1px solid #ffeaa7",
+                    fontSize: "14px",
+                    marginRight: "10px"
+                  }}>
+                    <span style={{ marginRight: "8px" }}>⚠️</span>
+                    Data imported - click to save
+                  </div>
+                )}
                 <button
                   type="submit"
                   className="pts-btn-primary"
@@ -2431,6 +2501,7 @@ const AssessmentCreation: React.FC = () => {
             </form>
           </div>
         )}
+        
       </div>
     </div>
   );

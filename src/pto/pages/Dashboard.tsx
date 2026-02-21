@@ -98,21 +98,6 @@ const PTODashboard: React.FC = () => {
 
   const displayName = useMemo(() => {
     if (loading) return 'Loading...';
-    const token = AuthService.getAccessToken();
-    if (token && typeof token === 'string') {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        try {
-          const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-          const json = JSON.parse(atob(base64));
-          const given = String(json.given_name || '').trim();
-          const family = String(json.family_name || '').trim();
-          const fullFromParts = [given, family].filter(Boolean).join(' ').trim();
-          const name = String(json.name || fullFromParts || '').trim();
-          if (name) return name;
-        } catch (e) { void e; }
-      }
-    }
     return user?.name || 'PTO Administrator';
   }, [loading, user]);
 
